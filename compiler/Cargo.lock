@@ -519,6 +519,7 @@ name = "kdhelp-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "clap",
  "kdhelp-core",
 ]
 

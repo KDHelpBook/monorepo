@@ -14,3 +14,4 @@ path = "src/main.rs"
 [dependencies]
 kdhelp-core = { path = "../core" }
 anyhow.workspace = true
+clap = { version = "4", features = ["derive"] }

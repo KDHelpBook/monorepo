@@ -1,0 +1,13 @@
+- page: getting-started
+  children:
+    - page: what-is-khb
+- page: authoring
+  children:
+    - page: writing-pages
+    - page: table-of-contents
+    - page: keywords-and-index
+    - page: categories
+- page: distribution
+  children:
+    - page: packaging
+    - page: offline-tauri
