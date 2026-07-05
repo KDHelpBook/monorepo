@@ -13,6 +13,20 @@
       "title": "kdhelp — Tips & FAQ",
       "language": "en",
       "mode": "khb"
+    },
+    {
+      "file": "docsets/examples.pl.khb",
+      "id": "kdhelp-docs-pl",
+      "title": "kdhelp — Dokumentacja",
+      "language": "pl",
+      "mode": "khb"
+    },
+    {
+      "file": "docsets/examples.extras-pl.khb",
+      "id": "kdhelp-extras-pl",
+      "title": "kdhelp — Porady i FAQ",
+      "language": "pl",
+      "mode": "khb"
     }
   ]
 }
