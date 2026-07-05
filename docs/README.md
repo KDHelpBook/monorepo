@@ -2,8 +2,8 @@
 
 Reference for the kdhelp format and tooling.
 
-- **[format.md](format.md)** — the `.khb` / `.khbc` / `.khbb` / `.khba` file formats,
-  the SQLite schema, and asset attachments.
+- **[format.md](format.md)** — the `.khb` / `.khbb` / `.khba` file formats (and the
+  `.gz` compression suffix), the SQLite schema, and asset attachments.
 - **[compiler.md](compiler.md)** — the `kdhelp` CLI: authoring sources and the
   `compile` / `convert` / `pack` / `patch` commands.
 - **[collections.md](collections.md)** — how the viewer merges multiple docsets,

@@ -4,14 +4,20 @@ A **`.khb`** ("Help Book") is an ordinary **SQLite** database. Everything the
 viewer needs is precomputed at build time, so search is instant and works offline.
 Because it is plain SQLite, anything that reads SQLite can open it.
 
-Two smaller delivery variants and one attachments sidecar exist:
+The family:
 
 | Extension | What it is | Read by |
 |-----------|------------|---------|
 | `.khb`  | the SQLite docset (the canonical, queried form) | native SQLite / sql.js |
-| `.khbc` | gzip of a `.khb` (smaller download) | decompressed in-browser, then as `.khb` |
 | `.khbb` | a minimal binary (no indexes) | rebuilt into a `.khb` before use |
 | `.khba` | a sidecar SQLite file of attachments (images, downloads) | opened beside its `.khb` |
+
+**Compression** is an orthogonal `.gz` suffix, not a distinct format: any of the
+files above may be shipped gzip-compressed as `<name>.gz` (`foo.khb.gz`,
+`foo.khba.gz`, …) and decompressed after fetch. The viewer decides by the gzip magic
+bytes (`1f 8b`), not the name — so a host that auto-applies `Content-Encoding: gzip`
+for `.gz` files (and thus pre-decompresses) works just as well as one that serves the
+bytes verbatim.
 
 The format is **independent of the source format**: a `.khb` stores rendered HTML,
 never Markdown. The bundled compiler happens to take Markdown, but any front end

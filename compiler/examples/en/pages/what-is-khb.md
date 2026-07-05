@@ -1,6 +1,6 @@
 ---
 title: What is a .khb docset?
-keywords: [.khb, docset, SQLite, FTS5, format, .khbc, .khbb, .khba, assets, attachments]
+keywords: [.khb, docset, SQLite, FTS5, format, .gz, .khbb, .khba, assets, attachments]
 categories: [basics, reference]
 ---
 # What is a .khb docset?
@@ -23,9 +23,10 @@ Because the index is prebuilt, search is instant and works offline.
 
 ## Transport variants
 
-Two smaller variants exist for delivery:
+For delivery:
 
-- **`.khbc`** — a gzip-compressed `.khb`, decompressed in the browser.
+- **`.gz` suffix** — any file (`.khb`, `.khba`, …) can be gzip-compressed as
+  `<name>.gz` and is decompressed in the browser.
 - **`.khbb`** — a minimal binary with no indexes; the viewer rebuilds it into a
   `.khb` in the browser (via WebAssembly) and caches the result.
 

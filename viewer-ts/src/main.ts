@@ -25,11 +25,11 @@ const esc = (s: string): string =>
 // Manifest loading (single docset for now; collections come later)
 // ---------------------------------------------------------------------------
 interface ManifestEntry {
+  /** Path under the dist root; a trailing `.gz` marks a gzip-compressed file. */
   file: string;
   id: string;
   title: string;
   language: string;
-  mode: string;
   /** Sidecar `.khba` attachment packs (paths relative to the dist root). */
   attachments?: string[];
 }
@@ -86,8 +86,7 @@ async function bootstrap(): Promise<void> {
     .filter((d) => d.language === lang)
     .map((d) => ({
       file: d.file,
-      mode: d.mode,
-      // Attachment packs are copied verbatim by `pack` (never gzipped).
+      // A `.gz` suffix (on the docset or a pack) triggers decompression on fetch.
       attachments: (d.attachments ?? []).map((file) => ({ file })),
     }));
   const uploaded: DocsetSource[] = uploadedAll
@@ -686,12 +685,15 @@ function start(
   // Resolve `asset:<path>` references in the loaded page against the docset's
   // attachment store (embedded table or sidecar `.khba`). Images render inline;
   // other files become download links. Object URLs are tracked for revocation.
-  function resolveAssets(pageId: string): void {
+  // `root` is a *detached* container so an `asset:` src never triggers a (failing)
+  // network fetch — we rewrite it to a blob URL before the nodes are connected.
+  function resolveAssets(root: ParentNode, pageId: string): void {
     const rewrite = (el: Element, attr: "src" | "href"): void => {
       const raw = el.getAttribute(attr);
       if (!raw || !raw.startsWith("asset:")) return;
       const blob = collection.asset(pageId, raw.slice("asset:".length));
       if (!blob) {
+        el.removeAttribute(attr); // avoid an ERR_UNKNOWN_URL_SCHEME fetch
         el.setAttribute("data-asset-missing", "");
         return;
       }
@@ -705,16 +707,16 @@ function start(
         (el as HTMLAnchorElement).download = name;
       }
     };
-    content.querySelectorAll("img[src^='asset:']").forEach((el) => rewrite(el, "src"));
-    content.querySelectorAll("a[href^='asset:']").forEach((el) => rewrite(el, "href"));
+    root.querySelectorAll("img[src^='asset:']").forEach((el) => rewrite(el, "src"));
+    root.querySelectorAll("a[href^='asset:']").forEach((el) => rewrite(el, "href"));
   }
 
   // Wrap every occurrence of the active search terms in the content in <mark>,
   // skipping script/style and our keyword footer. Runs after each page load.
-  function applyHighlight(): void {
+  function applyHighlight(root: Node): void {
     if (!highlightTerms.length) return;
     const re = new RegExp(`(${highlightTerms.map(escapeRe).join("|")})`, "giu");
-    const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT, {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
       acceptNode: (node) =>
         (node as Text).parentElement?.closest("script,style,mark,.kw")
           ? NodeFilter.FILTER_REJECT
@@ -806,11 +808,15 @@ function start(
     const info = pages.get(id);
     const page = collection.page(id);
     const title = page?.title ?? info?.title ?? id;
-    content.innerHTML = page
+    // Build the page in a detached container, resolve assets to blob URLs and apply
+    // highlights there, then connect it — so the DOM never holds an `asset:` URL.
+    const holder = document.createElement("div");
+    holder.innerHTML = page
       ? decorate(page.bodyHtml, id)
       : `<h1>${esc(s.notFoundTitle)}</h1><p>${s.notFoundBody(esc(id))}</p>`;
-    resolveAssets(id);
-    applyHighlight();
+    resolveAssets(holder, id);
+    applyHighlight(holder);
+    content.replaceChildren(...holder.childNodes);
     const firstHit = content.querySelector<HTMLElement>("mark.hl");
     if (firstHit) firstHit.scrollIntoView({ block: "center", inline: "nearest" });
     else contentWrap.scrollTop = 0;

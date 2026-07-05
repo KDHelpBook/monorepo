@@ -114,7 +114,7 @@ kdhelp pack --viewer viewer-ts/dist \
 |------|---------|
 | `--viewer <dir>` | the built viewer to copy |
 | `--docset <path>` | a docset to bundle (repeatable) |
-| `--mode khb\|compact` | `compact` gzips each docset to `.khbc` |
+| `--mode khb\|compact` | `compact` gzips every shipped file (docset **and** its `.khba` packs) to `<name>.gz` |
 | `--profile reader\|bundled` | sets external-sources / PWA defaults |
 | `--lock` | disable opening/uploading other docsets |
 | `--pwa` / `--no-pwa` | force the service worker on/off |

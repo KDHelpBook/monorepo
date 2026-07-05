@@ -17,9 +17,10 @@
 
 # Generated demo docsets copied into the viewer (source lives in compiler/examples)
 /viewer-ts/public/docsets/*.khb
-/viewer-ts/public/docsets/*.khbc
 /viewer-ts/public/docsets/*.khbb
 /viewer-ts/public/docsets/*.khba
+/viewer-ts/public/docsets/*.khbp
+/viewer-ts/public/docsets/*.gz
 
 # Misc
 .DS_Store

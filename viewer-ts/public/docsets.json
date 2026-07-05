@@ -4,30 +4,26 @@
       "file": "docsets/examples.en.khb",
       "id": "kdhelp-docs-en",
       "title": "kdhelp — Documentation",
-      "language": "en",
-      "mode": "khb"
+      "language": "en"
     },
     {
       "file": "docsets/examples.extras-en.khb",
       "id": "kdhelp-extras-en",
       "title": "kdhelp — Tips & FAQ",
-      "language": "en",
-      "mode": "khb"
+      "language": "en"
     },
     {
       "file": "docsets/examples.pl.khb",
       "id": "kdhelp-docs-pl",
       "title": "kdhelp — Dokumentacja",
       "language": "pl",
-      "mode": "khb",
       "attachments": ["docsets/examples.pl.khba"]
     },
     {
       "file": "docsets/examples.extras-pl.khb",
       "id": "kdhelp-extras-pl",
       "title": "kdhelp — Porady i FAQ",
-      "language": "pl",
-      "mode": "khb"
+      "language": "pl"
     }
   ]
 }

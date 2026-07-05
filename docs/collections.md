@@ -29,16 +29,17 @@ The viewer loads, per language:
 ```json
 {
   "docsets": [
-    { "file": "docsets/docs.khb", "id": "my-docs", "title": "My Docs",
-      "language": "en", "mode": "khb" }
+    { "file": "docsets/docs.khb.gz", "id": "my-docs", "title": "My Docs",
+      "language": "en", "attachments": ["docsets/docs.khba.gz"] }
   ]
 }
 ```
 
-`mode` is `khb` (plain) or `compact` (a gzip'd `.khbc`, decompressed in-browser). An
-optional `attachments` array lists a docset's sidecar `.khba` packs (see
+A `file` (or an `attachments` entry) ending in `.gz` is gzip-compressed and gets
+decompressed after fetch — so any file can be compressed independently. An optional
+`attachments` array lists a docset's sidecar `.khba` packs (see
 [the format spec](format.md#attachments-assets--khba)); the viewer opens them beside
-the docset and resolves assets in order.
+the docset and routes assets through the `.khb`'s index.
 
 ## Languages
 

@@ -36,7 +36,9 @@ that the TypeScript viewer reached parity; it lives in git history (commit
 
 ## Formats
 - `.khb` — SQLite docset; the form queried at runtime.
-- `.khbc` — gzip-compressed `.khb` (transfer; `DecompressionStream('gzip')`).
+- **`.gz` suffix** — any file (`.khb`/`.khba`/`.khbp`) gzip-compressed for transfer
+  (`foo.khb.gz`); the viewer decompresses by gzip magic, not the name
+  (`DecompressionStream('gzip')`). Replaced the former `.khbc` extension.
 - `.khbb` — minimal binary (no indexes); rebuilt into `.khb` in-browser by wasm,
   cached in IndexedDB.
 - `.khba` — sidecar SQLite file of attachments (images/downloads) for a `.khb`.

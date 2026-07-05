@@ -10,24 +10,37 @@ import {
 
 const SEP = ":";
 
-/** A sidecar `.khba` attachment pack: in-memory bytes or a URL (always plain). */
+/** A sidecar `.khba` attachment pack: in-memory bytes or a URL (`.gz` = gzip'd). */
 export type AttachmentSource = { bytes: Uint8Array } | { file: string };
 
 /**
- * A docset to load: either already-in-memory bytes or a URL (optionally gzip'd),
- * with zero or more `.khba` attachment packs.
+ * A docset to load: either already-in-memory bytes or a URL, with zero or more
+ * `.khba` attachment packs. A URL ending in `.gz` is gzip-compressed and gets
+ * decompressed after fetch (applies to `.khb`/`.khba`/`.khbp` alike).
  */
-export type DocsetSource = (
-  | { bytes: Uint8Array }
-  | { file: string; mode?: string }
-) & { attachments?: AttachmentSource[] };
+export type DocsetSource = ({ bytes: Uint8Array } | { file: string }) & {
+  attachments?: AttachmentSource[];
+};
 
-/** Decompress gzip bytes (a `.khbc` docset) via the native DecompressionStream. */
+/** Decompress gzip bytes via the native DecompressionStream. */
 async function gunzip(bytes: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
   const stream = new Blob([bytes as BlobPart])
     .stream()
     .pipeThrough(new DecompressionStream("gzip"));
   return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+/**
+ * Fetch a docset/pack URL and decompress it if the payload is gzip. We sniff the
+ * gzip magic (`1f 8b`) rather than trusting the `.gz` suffix: some static servers
+ * (Vite's dev server included) auto-apply `Content-Encoding: gzip` for `.gz` names,
+ * so the browser has already decompressed the body — while a plain host (e.g. GitHub
+ * Pages) serves the `.gz` bytes verbatim. The magic works in both cases.
+ */
+async function fetchMaybeGz(url: string): Promise<Uint8Array> {
+  const res = await fetch(url);
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  return bytes[0] === 0x1f && bytes[1] === 0x8b ? await gunzip(bytes) : bytes;
 }
 
 /**
@@ -51,18 +64,13 @@ export class Collection {
       if ("bytes" in src) {
         bytes = src.bytes;
       } else {
-        const res = await fetch(src.file);
-        bytes = new Uint8Array(await res.arrayBuffer());
-        if (src.mode === "compact") bytes = await gunzip(bytes); // .khbc
+        bytes = await fetchMaybeGz(src.file);
       }
       const attachmentBytes: Uint8Array[] = [];
       for (const a of src.attachments ?? []) {
-        if ("bytes" in a) {
-          attachmentBytes.push(a.bytes);
-        } else {
-          const res = await fetch(a.file);
-          attachmentBytes.push(new Uint8Array(await res.arrayBuffer()));
-        }
+        attachmentBytes.push(
+          "bytes" in a ? a.bytes : await fetchMaybeGz(a.file),
+        );
       }
       docsets.push(await Docset.open(bytes, attachmentBytes));
     }

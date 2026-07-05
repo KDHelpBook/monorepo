@@ -44,15 +44,16 @@ source kind**, not a rewrite:
 ```ts
 // viewer-ts/src/data/collection.ts — today:
 type DocsetSource =
-  | { bytes: Uint8Array }            // upload / IndexedDB
-  | { file: string; mode?: string }; // fetch (khb / compact)
+  | { bytes: Uint8Array }   // upload / IndexedDB
+  | { file: string };       // fetch (a `.gz` name is decompressed after fetch)
 // planned add:
   | { url: string; mode: "streaming" };   // opened via Range-VFS, pages on demand
 ```
 
 - `Collection` already merges N books into one TOC / index / search / category
-  facet regardless of source, and `docsets.json` already carries a per-docset `mode`
-  — so a `streaming` docset slots in beside `khb`/`compact` ones.
+  facet regardless of source — so a `streaming` docset slots in beside fetched and
+  uploaded ones. (Compression is orthogonal: a `.gz` file is decompressed on fetch;
+  a streamed docset is served uncompressed so `Range` requests address raw pages.)
 - `config.json` profiles (`reader` vs `bundled --lock`) already gate whether
   external/remote sources are allowed.
 - Attachment packs (`.khba`) can likewise be local files or remote URLs; `asset_index`
@@ -87,10 +88,11 @@ This is the symmetric extension of what already ships: `Docset.asset(path)` rout
 the same way, and `Collection` merges packs as it already merges books.
 
 **Naming.** A content pack is just a `.khb`-shaped SQLite file carrying a *subset* of
-tables — a `.khba` is the degenerate "assets-only" case. Do **not** reuse `.khbc`
-(that already means a gzip'd `.khb`). Proposed: **`.khbp`** ("pack") for a general
-content pack, with `.khba` kept (or folded in) as the assets-only shorthand. The
-master `.khb`'s `page_index`/`asset_index` name the owning pack by its `meta.pack`.
+tables — a `.khba` is the degenerate "assets-only" case. Proposed: **`.khbp`**
+("pack") for a general content pack, with `.khba` kept (or folded in) as the
+assets-only shorthand. Like every file, a pack can be shipped compressed with a
+`.gz` suffix (`foo.khbp.gz`). The master `.khb`'s `page_index`/`asset_index` name the
+owning pack by its `meta.pack`.
 
 **When to use which.** For purely **offline** modularity — a base product plus
 optional expansion books — you don't need any of this: ship several complete `.khb`

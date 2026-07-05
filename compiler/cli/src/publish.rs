@@ -14,13 +14,14 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
 struct ManifestEntry {
+    /// Path under the dist root. A trailing `.gz` means the file is gzip-compressed
+    /// and the viewer decompresses it after fetch (works for `.khb`/`.khba`/`.khbp`).
     file: String,
     id: String,
     title: String,
     language: String,
-    mode: String,
-    /// Sidecar `.khba` attachment packs backing this docset (zero or more). The
-    /// viewer opens them alongside the docset and resolves assets in order.
+    /// Sidecar `.khba` attachment packs backing this docset (zero or more), each an
+    /// optionally-`.gz` path. The viewer opens them alongside the docset.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     attachments: Vec<String>,
 }
@@ -129,24 +130,24 @@ fn add_docset(khb: &Path, docsets_dir: &Path, compact: bool) -> Result<ManifestE
 
     // Copy the .khb into the dist (plain), gather its attachment packs, and rewrite
     // its routing index so it covers the full set of packs we are bundling — then
-    // materialize the shipped form (optionally gzip'd).
+    // materialize the shipped form, gzip'd to `<name>.gz` when compact.
     let dest_khb = docsets_dir.join(&name);
     fs::copy(khb, &dest_khb)?;
-    let (attachments, mut entries) = collect_attachments(khb, docsets_dir)?;
+    let (attachments, mut entries) = collect_attachments(khb, docsets_dir, compact)?;
     entries.insert(0, (String::new(), ds.asset_paths()?)); // embedded store, first
     if entries.iter().any(|(_, paths)| !paths.is_empty()) {
         build::rebuild_asset_index(&dest_khb, &entries)
             .with_context(|| format!("indexing assets in {}", dest_khb.display()))?;
     }
 
-    let (file, mode) = if compact {
+    let file = if compact {
         let gz = gzip(&fs::read(&dest_khb)?)?;
-        let compact_name = format!("{name}c"); // foo.khb -> foo.khbc
-        fs::write(docsets_dir.join(&compact_name), gz)?;
+        let gz_name = format!("{name}.gz"); // foo.khb -> foo.khb.gz
+        fs::write(docsets_dir.join(&gz_name), gz)?;
         fs::remove_file(&dest_khb)?;
-        (format!("docsets/{compact_name}"), "compact")
+        format!("docsets/{gz_name}")
     } else {
-        (format!("docsets/{name}"), "khb")
+        format!("docsets/{name}")
     };
 
     Ok(ManifestEntry {
@@ -154,17 +155,20 @@ fn add_docset(khb: &Path, docsets_dir: &Path, compact: bool) -> Result<ManifestE
         id,
         title,
         language,
-        mode: mode.to_string(),
         attachments,
     })
 }
 
-/// Copy every sidecar `.khba` attachment pack that belongs to `khb` into `docsets/`.
-/// A docset `foo.khb` owns `foo.khba` **and** any `foo.<tag>.khba` (so several packs
-/// can back one docset). Returns their manifest paths and, per pack, its stable id
-/// (`meta.pack`) with the asset paths it holds — the routing the `.khb` index needs.
-/// Attachments are copied verbatim regardless of compact mode (already binary).
-fn collect_attachments(khb: &Path, docsets_dir: &Path) -> Result<(Vec<String>, PackRouting)> {
+/// Copy every sidecar `.khba` attachment pack that belongs to `khb` into `docsets/`
+/// (gzip'd to `<name>.gz` when compact). A docset `foo.khb` owns `foo.khba` **and**
+/// any `foo.<tag>.khba` (so several packs can back one docset). Returns their manifest
+/// paths and, per pack, its stable id (`meta.pack`) with the asset paths it holds —
+/// the routing the `.khb` index needs (read from the uncompressed source).
+fn collect_attachments(
+    khb: &Path,
+    docsets_dir: &Path,
+    compact: bool,
+) -> Result<(Vec<String>, PackRouting)> {
     let parent = match khb.parent() {
         Some(p) if !p.as_os_str().is_empty() => p.to_path_buf(),
         _ => PathBuf::from("."),
@@ -194,12 +198,22 @@ fn collect_attachments(khb: &Path, docsets_dir: &Path) -> Result<(Vec<String>, P
             .file_name()
             .and_then(|n| n.to_str())
             .expect("filtered filename is valid utf-8");
-        fs::copy(&path, docsets_dir.join(name))?;
-        manifest.push(format!("docsets/{name}"));
+        // Routing metadata comes from the uncompressed source pack.
         let att =
             Attachments::open(&path).with_context(|| format!("opening {}", path.display()))?;
         let pack = att.pack_id()?.unwrap_or_else(|| name.to_string());
         entries.push((pack, att.asset_paths()?));
+
+        let dest_name = if compact {
+            let gz = gzip(&fs::read(&path)?)?;
+            let gz_name = format!("{name}.gz");
+            fs::write(docsets_dir.join(&gz_name), gz)?;
+            gz_name
+        } else {
+            fs::copy(&path, docsets_dir.join(name))?;
+            name.to_string()
+        };
+        manifest.push(format!("docsets/{dest_name}"));
     }
     Ok((manifest, entries))
 }
