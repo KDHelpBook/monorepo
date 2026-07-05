@@ -823,13 +823,20 @@ function start(
   // inside the origin-isolated content frame where blob URLs would not). Images
   // render inline; other files become downloads.
   async function resolveAssets(root: ParentNode, pageId: string): Promise<void> {
-    const rewrite = async (el: Element, attr: "src" | "href"): Promise<void> => {
-      const raw = el.getAttribute(attr);
-      if (!raw || !raw.startsWith("asset:")) return;
+    // Assets arrive parked in `data-asset-src`/`data-asset-href` (see
+    // `parkAssetUrls`) so the browser never speculatively fetches the bare
+    // `asset:` URL. Resolve to a self-contained `data:` URL, then set the real attr.
+    const rewrite = async (
+      el: Element,
+      parked: string,
+      attr: "src" | "href",
+    ): Promise<void> => {
+      const raw = el.getAttribute(parked) ?? "";
+      el.removeAttribute(parked);
+      if (!raw.startsWith("asset:")) return;
       const path = raw.slice("asset:".length);
       const blob = await collection.asset(pageId, path);
       if (!blob) {
-        el.removeAttribute(attr);
         el.setAttribute("data-asset-missing", "");
         return;
       }
@@ -840,12 +847,22 @@ function start(
     };
     const jobs: Promise<void>[] = [];
     root
-      .querySelectorAll("img[src^='asset:']")
-      .forEach((el) => jobs.push(rewrite(el, "src")));
+      .querySelectorAll("img[data-asset-src]")
+      .forEach((el) => jobs.push(rewrite(el, "data-asset-src", "src")));
     root
-      .querySelectorAll("a[href^='asset:']")
-      .forEach((el) => jobs.push(rewrite(el, "href")));
+      .querySelectorAll("[data-asset-href]")
+      .forEach((el) => jobs.push(rewrite(el, "data-asset-href", "href")));
     await Promise.all(jobs);
+  }
+
+  // Park `asset:` URLs in a data-attribute *before* the markup is ever parsed into
+  // DOM, so the browser can't speculatively fetch the (invalid) `asset:` URL while
+  // it sits in a detached node awaiting resolution. `resolveAssets` reads these.
+  function parkAssetUrls(html: string): string {
+    return html.replace(
+      /\s(src|href)=("|')asset:([^"']*)\2/gi,
+      ' data-asset-$1=$2asset:$3$2',
+    );
   }
 
   // Base64-encode bytes (chunked to avoid call-stack limits on big attachments).
@@ -1013,9 +1030,9 @@ function start(
       // the serialized HTML to the sandboxed frame, which isolates the untrusted
       // docset markup from the app's origin.
       const holder = document.createElement("div");
-      holder.innerHTML = decorate(page.bodyHtml, id);
+      holder.innerHTML = decorate(parkAssetUrls(page.bodyHtml), id);
       stripDangerous(holder);
-      await resolveAssets(holder, id); // asset: → data: (may stream)
+      await resolveAssets(holder, id); // parked asset: → data: (may stream)
       if (token !== loadSeq) return;
       applyHighlight(holder);
       rewriteFrameLinks(holder, id);
