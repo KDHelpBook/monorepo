@@ -374,10 +374,37 @@ function start(
         e.stopPropagation();
         toggle();
       });
-      // A family folder has no page — clicking its row just expands/collapses.
-      if (n.group) row.addEventListener("click", toggle);
+      if (n.group) {
+        // A family folder has no page — clicking its row just expands/collapses.
+        row.addEventListener("click", toggle);
+      } else {
+        // A folder that is *also* a page (a chapter): single-click expands/collapses
+        // it, double-click opens its page (MS Help style). A modifier or middle
+        // click opens straight in a new tab. The timer disambiguates single vs
+        // double so a double-click doesn't also toggle.
+        let clickTimer: number | undefined;
+        row.addEventListener("click", (e) => {
+          if (wantNew(e)) {
+            openPage(n.pageId, true);
+            return;
+          }
+          window.clearTimeout(clickTimer);
+          clickTimer = window.setTimeout(toggle, 220);
+        });
+        row.addEventListener("dblclick", () => {
+          window.clearTimeout(clickTimer);
+          openPage(n.pageId);
+        });
+        row.addEventListener("auxclick", (e) => {
+          if (e.button === 1) {
+            e.preventDefault();
+            openPage(n.pageId, true);
+          }
+        });
+      }
+    } else if (!n.group) {
+      linkOpen(row, n.pageId); // a leaf page opens on a single click
     }
-    if (!n.group) linkOpen(row, n.pageId);
     return li;
   }
 
