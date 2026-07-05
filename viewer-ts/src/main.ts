@@ -324,47 +324,33 @@ function start(docset: Docset): void {
       setTimeout(() => searchInput.focus(), 0);
     } else renderFavorites();
   }
-  // ---- Panel state machine (Visual Studio dock / auto-hide / close) ----
-  // Desktop states, driven by classes on `.window`:
+  // ---- Panel state machine (Visual Studio dock / auto-hide) ----
+  // Desktop states, driven by classes on `.window`, toggled by the pushpin:
   //   docked   (default) — panel in flow, bottom tabs, no side strip.
-  //   autohide           — side strip is the switcher; the panel flies out OVER
-  //                        the content and retracts on mouse-leave / document click.
-  //   closed             — panel + strip hidden; reopen from the toolbar or menu.
+  //   autohide           — side strip is the switcher; hovering a strip tab flies
+  //                        its panel out OVER the content, beside the strip, and it
+  //                        retracts on mouse-leave / document click.
   // Narrow (<=640px): the panel is always a drawer overlay toggled by ☰ (`flyout`).
   const win = $("#window");
   const pinBtn = $("#left-pin");
   const narrow = (): boolean => window.matchMedia("(max-width: 640px)").matches;
 
-  let pinned = true; // docked
-  let closed = false;
+  let pinned = true; // docked vs auto-hide
 
   const renderPanel = (): void => {
-    win.classList.toggle("autohide", !pinned && !closed);
-    win.classList.toggle("closed", closed);
-    if (pinned || closed) win.classList.remove("flyout");
+    win.classList.toggle("autohide", !pinned);
+    if (pinned) win.classList.remove("flyout");
     pinBtn.classList.toggle("unpinned", !pinned);
     pinBtn.title = pinned ? "Auto-hide (unpin)" : "Dock (pin)";
   };
   // Reveal the fly-out panel (auto-hide on desktop, drawer on mobile).
   const flyout = (): void => {
-    if (narrow()) {
-      closed = false; // the mobile drawer ignores the desktop "closed" state
-      win.classList.add("flyout");
-    } else if (!pinned && !closed) {
-      win.classList.add("flyout");
-    }
+    if (narrow() || !pinned) win.classList.add("flyout");
   };
   const retract = (): void => win.classList.remove("flyout");
 
   const showMode = (m: Mode): void => {
-    if (closed) {
-      // Reopening from a toolbar/menu button re-docks the panel.
-      closed = false;
-      pinned = true;
-      renderPanel();
-    } else {
-      flyout();
-    }
+    flyout();
     setMode(m);
   };
 
@@ -423,7 +409,7 @@ function start(docset: Docset): void {
   function openPage(id: string): void {
     loadContent(id);
     // Close the drawer (mobile) or retract the auto-hide fly-out after a pick.
-    if (narrow() || (!pinned && !closed)) retract();
+    if (narrow() || !pinned) retract();
   }
 
   // ---- Actions (menu / toolbar / tabs) ----
@@ -605,31 +591,30 @@ function start(docset: Docset): void {
     pinned = !pinned;
     renderPanel();
   });
-  // × closes the panel: on mobile just close the drawer; on desktop fully close
-  // (reopen from the toolbar/menu).
-  $("#left-close").addEventListener("click", () => {
-    if (narrow()) {
-      retract();
-      return;
-    }
-    closed = true;
-    renderPanel();
-  });
   $("#scrim").addEventListener("click", retract);
   // Strip » re-docks (pins) the panel.
   $("#strip-exp").addEventListener("click", () => {
     pinned = true;
-    closed = false;
     renderPanel();
   });
 
-  // Auto-hide fly-out: reveal on strip hover, retract on mouse-leave / doc click.
-  $("#left-strip").addEventListener("mouseenter", flyout);
-  $("#left-pane").addEventListener("mouseleave", () => {
-    if (!narrow()) retract();
+  // Auto-hide: hovering a specific side tab flies out *that* mode next to the strip.
+  const strip = $("#left-strip");
+  strip
+    .querySelectorAll<HTMLElement>('button[data-action^="mode-"]')
+    .forEach((btn) => {
+      btn.addEventListener("mouseenter", () => runAction(btn.dataset.action!));
+    });
+  // Retract when the mouse leaves the panel (unless it moved onto the strip) or a
+  // click lands in the document.
+  $("#left-pane").addEventListener("mouseleave", (e) => {
+    if (narrow()) return;
+    const to = e.relatedTarget;
+    if (to instanceof Node && strip.contains(to)) return;
+    retract();
   });
   contentWrap.addEventListener("mousedown", () => {
-    if (!pinned && !closed) retract();
+    if (!pinned) retract();
   });
   renderPanel();
 

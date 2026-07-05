@@ -779,22 +779,17 @@ body {
 .autohide #left-pane {
   position: absolute;
   z-index: 30;
-  top: 0;
-  bottom: 0;
-  left: 0;
+  top: 5px;
+  bottom: 5px;
+  left: 35px; /* body padding (5) + strip width (30): sits right of the strip */
   box-shadow: 4px 0 26px rgba(0, 0, 0, 0.35);
-  transform: translateX(-102%);
+  transform: translateX(
+    calc(-100% - 40px)
+  ); /* fully off-screen when retracted */
   transition: transform 0.18s ease;
 }
 .autohide.flyout #left-pane {
   transform: translateX(0);
-}
-
-/* Closed: panel, splitter and strip all hidden (reopen from toolbar/menu). */
-.closed #left-pane,
-.closed #splitter,
-.closed #left-strip {
-  display: none;
 }
 
 /* Scrim behind the mobile drawer */
@@ -865,6 +860,12 @@ body {
   /* The mobile drawer keeps its bottom tabs even if `autohide` got set. */
   .autohide .left-tabs {
     display: flex;
+  }
+  /* Desktop auto-hide geometry must not leak into the mobile drawer. */
+  .autohide #left-pane {
+    top: 0;
+    bottom: 0;
+    left: 0;
   }
   .content {
     padding: 16px 16px 50px;
