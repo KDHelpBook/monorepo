@@ -46,6 +46,13 @@ export interface Strings {
   aboutTagline: string;
   aboutLanguage: string;
   languageLabel: string;
+  // library
+  manageDocsets: string;
+  uploadedTitle: string;
+  noUploaded: string;
+  remove: string;
+  uploadError: string;
+  bundledBadge: string;
 }
 
 const en: Strings = {
@@ -87,6 +94,12 @@ const en: Strings = {
     "A documentation reader in the spirit of Microsoft Document Explorer.",
   aboutLanguage: "Language:",
   languageLabel: "Language",
+  manageDocsets: "Manage docsets…",
+  uploadedTitle: "Uploaded docsets",
+  noUploaded: "No uploaded docsets yet. Use File → Open docset… to add a .khb.",
+  remove: "Remove",
+  uploadError: "Could not read that file as a docset.",
+  bundledBadge: "bundled",
 };
 
 const pl: Strings = {
@@ -128,6 +141,13 @@ const pl: Strings = {
     "Przeglądarka dokumentacji w duchu Microsoft Document Explorer.",
   aboutLanguage: "Język:",
   languageLabel: "Język",
+  manageDocsets: "Zarządzaj docsetami…",
+  uploadedTitle: "Wgrane docsety",
+  noUploaded:
+    "Brak wgranych docsetów. Użyj Plik → Otwórz docset…, aby dodać plik .khb.",
+  remove: "Usuń",
+  uploadError: "Nie udało się odczytać tego pliku jako docsetu.",
+  bundledBadge: "wbudowany",
 };
 
 const TABLES: Record<Lang, Strings> = { en, pl };

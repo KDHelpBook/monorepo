@@ -9,6 +9,10 @@ import {
 
 const SEP = ":";
 
+/** A docset to load: either already-in-memory bytes or a URL (optionally gzip'd). */
+export type DocsetSource =
+  { bytes: Uint8Array } | { file: string; mode?: string };
+
 /** Decompress gzip bytes (a `.khbc` docset) via the native DecompressionStream. */
 async function gunzip(bytes: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
   const stream = new Blob([bytes as BlobPart])
@@ -29,14 +33,19 @@ export class Collection {
   ) {}
 
   static async load(
-    entries: { file: string; mode?: string }[],
+    sources: DocsetSource[],
     language: string,
   ): Promise<Collection> {
     const docsets: Docset[] = [];
-    for (const entry of entries) {
-      const res = await fetch(entry.file);
-      let bytes = new Uint8Array(await res.arrayBuffer());
-      if (entry.mode === "compact") bytes = await gunzip(bytes); // .khbc
+    for (const src of sources) {
+      let bytes: Uint8Array;
+      if ("bytes" in src) {
+        bytes = src.bytes;
+      } else {
+        const res = await fetch(src.file);
+        bytes = new Uint8Array(await res.arrayBuffer());
+        if (src.mode === "compact") bytes = await gunzip(bytes); // .khbc
+      }
       docsets.push(await Docset.open(bytes));
     }
     return new Collection(language, docsets);

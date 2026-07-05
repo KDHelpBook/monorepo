@@ -1,7 +1,13 @@
 import "./styles/main.css";
-import { Collection } from "./data/collection";
-import type { TocNode } from "./data/docset";
+import { Collection, type DocsetSource } from "./data/collection";
+import { Docset, type TocNode } from "./data/docset";
+import { allDocsets, deleteDocset, putDocset } from "./data/library";
 import { applyStatic, strings, type Strings } from "./i18n";
+
+interface Config {
+  externalSources: boolean;
+  pwa: boolean;
+}
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -47,16 +53,55 @@ function chooseLang(available: string[]): string {
   return available.includes("en") ? "en" : (available[0] ?? "en");
 }
 
+async function loadConfig(): Promise<Config> {
+  try {
+    const res = await fetch("config.json");
+    if (res.ok) return (await res.json()) as Config;
+  } catch {
+    /* no config.json → defaults */
+  }
+  return { externalSources: true, pwa: true };
+}
+
 async function bootstrap(): Promise<void> {
   const manifestRes = await fetch("docsets.json");
   const manifest = (await manifestRes.json()) as Manifest;
-  const available = [...new Set(manifest.docsets.map((d) => d.language))];
+  const config = await loadConfig();
+
+  // Uploaded docsets extend both the available languages and the current collection.
+  const uploadedAll = config.externalSources ? await allDocsets() : [];
+  const available = [
+    ...new Set([
+      ...manifest.docsets.map((d) => d.language),
+      ...uploadedAll.map((d) => d.language),
+    ]),
+  ];
   const lang = chooseLang(available);
   document.documentElement.lang = lang;
   applyStatic(lang);
-  const entries = manifest.docsets.filter((d) => d.language === lang);
-  if (!entries.length) throw new Error(`no docsets for language "${lang}"`);
-  start(await Collection.load(entries, lang), lang, available);
+
+  const bundled: DocsetSource[] = manifest.docsets
+    .filter((d) => d.language === lang)
+    .map((d) => ({ file: d.file, mode: d.mode }));
+  const uploaded: DocsetSource[] = uploadedAll
+    .filter((d) => d.language === lang)
+    .map((d) => ({ bytes: d.bytes }));
+  const sources = [...bundled, ...uploaded];
+  if (!sources.length) throw new Error(`no docsets for language "${lang}"`);
+
+  if (config.pwa) registerServiceWorker();
+  start(await Collection.load(sources, lang), lang, available, config);
+}
+
+function registerServiceWorker(): void {
+  if (import.meta.env.DEV) return; // no SW in dev — it would fight HMR
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("sw.js").catch(() => {
+        /* offline support is best-effort */
+      });
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -74,8 +119,17 @@ function start(
   collection: Collection,
   lang: string,
   available: string[],
+  config: Config,
 ): void {
   const s: Strings = strings(lang);
+  // Locked (bundled) builds hide the "open other docsets" affordances.
+  if (!config.externalSources) {
+    document
+      .querySelectorAll<HTMLElement>(
+        '[data-action="open-docset"], [data-action="manage-docsets"]',
+      )
+      .forEach((el) => (el.style.display = "none"));
+  }
   const leftBody = $("#left-body");
   const leftTitle = $("#left-title");
   const content = $("#content");
@@ -479,7 +533,10 @@ function start(
         status.textContent = "Use your browser Find (Ctrl/⌘-F).";
         break;
       case "open-docset":
-        status.textContent = "Opening other docsets: coming soon.";
+        pickDocset();
+        break;
+      case "manage-docsets":
+        void showLibrary();
         break;
       case "about":
         showAbout();
@@ -534,6 +591,71 @@ function start(
     document.body.appendChild(bg);
   }
 
+  // ---- Library: open / manage user docsets ----
+  function pickDocset(): void {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".khb";
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      if (file) void uploadDocset(file);
+    });
+    input.click();
+  }
+
+  async function uploadDocset(file: File): Promise<void> {
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const ds = await Docset.open(bytes); // validates + reads meta
+      await putDocset({
+        id: ds.id,
+        language: ds.language,
+        title: ds.title,
+        bytes,
+      });
+      if (ds.language !== lang) {
+        try {
+          localStorage.setItem(LANG_KEY, ds.language);
+        } catch {
+          /* ignore */
+        }
+      }
+      location.reload();
+    } catch {
+      status.textContent = s.uploadError;
+    }
+  }
+
+  async function showLibrary(): Promise<void> {
+    const uploaded = await allDocsets();
+    const rows = uploaded.length
+      ? uploaded
+          .map(
+            (d) =>
+              `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--rule)"><span style="flex:1">${esc(d.title)} <span style="color:var(--muted)">(${esc(d.language)})</span></span><button data-remove="${esc(d.id)}" style="font-family:var(--font-ui);font-size:12px;padding:3px 10px;border:1px solid #b3462f;border-radius:2px;background:#fdeeea;color:#a33;cursor:pointer">${esc(s.remove)}</button></div>`,
+          )
+          .join("")
+      : `<div style="color:var(--muted);padding:6px 0">${esc(s.noUploaded)}</div>`;
+    const bg = document.createElement("div");
+    bg.style.cssText =
+      "position:fixed;inset:0;background:rgba(20,35,60,.35);display:grid;place-items:center;z-index:50";
+    bg.innerHTML =
+      '<div style="width:460px;max-width:92vw;background:var(--chrome-top);border:1px solid #17335c;border-radius:3px;box-shadow:0 12px 40px rgba(0,0,0,.5);overflow:hidden">' +
+      `<div style="background:linear-gradient(180deg,var(--title-top),var(--title-bot));color:#fff;font-weight:bold;padding:6px 10px">${esc(s.uploadedTitle)}</div>` +
+      `<div style="padding:14px 18px;line-height:1.5;max-height:50vh;overflow:auto">${rows}</div>` +
+      '<div style="padding:10px 16px;text-align:right;border-top:1px solid var(--chrome-border)"><button class="lib-ok" style="font-family:var(--font-ui);font-size:12px;padding:4px 16px;border:1px solid #16305a;border-radius:2px;background:linear-gradient(180deg,#eef4fd,#cbd9ec);cursor:pointer">OK</button></div></div>';
+    bg.addEventListener("click", (e) => {
+      const t = e.target as HTMLElement;
+      const rm = t.getAttribute("data-remove");
+      if (rm) {
+        void deleteDocset(rm).then(() => location.reload());
+      } else if (t === bg || t.classList.contains("lib-ok")) {
+        bg.remove();
+      }
+    });
+    document.body.appendChild(bg);
+  }
+
   // ---- Other wiring ----
   for (const c of collection.categories()) {
     const o = document.createElement("option");
@@ -548,10 +670,19 @@ function start(
 
   // Language switcher: persist + reload (the content docset changes with the UI).
   const langSel = $<HTMLSelectElement>("#lang-select");
-  langSel.value = lang;
+  const langNames: Record<string, string> = { en: "English", pl: "Polski" };
+  for (const l of available) {
+    if (![...langSel.options].some((o) => o.value === l)) {
+      const opt = document.createElement("option");
+      opt.value = l;
+      opt.textContent = langNames[l] ?? l;
+      langSel.appendChild(opt);
+    }
+  }
   for (const opt of Array.from(langSel.options)) {
     opt.disabled = !available.includes(opt.value);
   }
+  langSel.value = lang;
   langSel.addEventListener("change", () => {
     try {
       localStorage.setItem(LANG_KEY, langSel.value);
