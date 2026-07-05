@@ -187,6 +187,23 @@ async function sqliteApi(): Promise<{ module: any; sqlite3: any }> {
   return apiPromise;
 }
 
+// A single Asyncify runtime backs the whole wasm module, so only ONE async wasm
+// operation may be in flight module-wide: if a second `step()`/`open_v2()` starts
+// while another is suspended awaiting a `fetch`, the shared Asyncify stack is
+// re-entered and the connection corrupts ("database disk image is malformed").
+// Every db operation (across all StreamingDb instances) is chained through this
+// one queue so they run strictly one at a time. Concurrency between callers
+// (e.g. `Promise.all` over a page's assets) is thus safe — it just serialises.
+let opQueue: Promise<unknown> = Promise.resolve();
+function serialize<T>(task: () => Promise<T>): Promise<T> {
+  const run = opQueue.then(task, task);
+  opQueue = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
 type SqlParams = (string | number | null)[];
 
 /**
@@ -208,12 +225,11 @@ export class StreamingDb {
     const { module, sqlite3 } = await sqliteApi();
     const vfsName = `kdhelp-range-${vfsSeq++}`;
     const vfs = await RangeVFS.create(vfsName, module, url, blockSize);
-    sqlite3.vfs_register(vfs, false);
-    const db = await sqlite3.open_v2(
-      url,
-      SQLite.SQLITE_OPEN_READONLY,
-      vfsName,
-    );
+    // Register + open touch the shared wasm runtime, so run them on the queue too.
+    const db = await serialize(async () => {
+      sqlite3.vfs_register(vfs, false);
+      return sqlite3.open_v2(url, SQLite.SQLITE_OPEN_READONLY, vfsName);
+    });
     return new StreamingDb(sqlite3, db, vfs);
   }
 
@@ -225,22 +241,26 @@ export class StreamingDb {
   }
 
   /** Run `sql` (optionally bound) and return every row as a `{col: value}`. */
-  async all(
+  all(
     sql: string,
     params: SqlParams = [],
   ): Promise<Record<string, unknown>[]> {
-    const out: Record<string, unknown>[] = [];
-    for await (const stmt of this.sqlite3.statements(this.db, sql)) {
-      if (params.length) this.sqlite3.bind_collection(stmt, params);
-      const cols: string[] = this.sqlite3.column_names(stmt);
-      while ((await this.sqlite3.step(stmt)) === SQLite.SQLITE_ROW) {
-        const values: unknown[] = this.sqlite3.row(stmt);
-        const row: Record<string, unknown> = {};
-        cols.forEach((c, i) => (row[c] = values[i]));
-        out.push(row);
+    // Serialised module-wide: concurrent callers queue instead of corrupting the
+    // shared Asyncify runtime (see `serialize`).
+    return serialize(async () => {
+      const out: Record<string, unknown>[] = [];
+      for await (const stmt of this.sqlite3.statements(this.db, sql)) {
+        if (params.length) this.sqlite3.bind_collection(stmt, params);
+        const cols: string[] = this.sqlite3.column_names(stmt);
+        while ((await this.sqlite3.step(stmt)) === SQLite.SQLITE_ROW) {
+          const values: unknown[] = this.sqlite3.row(stmt);
+          const row: Record<string, unknown> = {};
+          cols.forEach((c, i) => (row[c] = values[i]));
+          out.push(row);
+        }
       }
-    }
-    return out;
+      return out;
+    });
   }
 
   /** First column of the first row (or null). */
