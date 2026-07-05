@@ -1,16 +1,20 @@
 //! `kdhelp` — the command-line tool.
 //!
 //! Subcommands: `compile` (source → `.khb`/`.khbb`), `convert` (`.khb` ⇄ `.khbb`),
-//! `pack` (assemble a publishable distribution) and `patch` (update one in place).
+//! `pack` (assemble a publishable distribution), `patch` (update one in place) and
+//! `inspect` (print metadata for a local or HTTP-streamed docset).
 
+mod http;
 mod publish;
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
-use kdhelp_core::{binary, build, render, source, Docset};
+use kdhelp_core::{binary, build, render, source, Docset, RangeReader};
 
+use crate::http::HttpRangeReader;
 use crate::publish::{pack, patch, PackOptions};
 
 #[derive(Parser)]
@@ -110,6 +114,9 @@ enum Command {
         #[arg(long, value_enum, default_value = "khb")]
         mode: PackMode,
     },
+    /// Print a docset's metadata. `src` is a local `.khb` path or an `http(s)://`
+    /// URL — a remote docset is **streamed** over `Range` (only the pages read).
+    Inspect { src: String },
 }
 
 fn main() -> Result<()> {
@@ -156,7 +163,54 @@ fn main() -> Result<()> {
             docsets,
             mode,
         } => patch(&dist, &docsets, mode == PackMode::Compact),
+        Command::Inspect { src } => inspect(&src),
     }
+}
+
+fn inspect(src: &str) -> Result<()> {
+    let is_url = src.starts_with("http://") || src.starts_with("https://");
+    let reader = if is_url {
+        Some(Arc::new(HttpRangeReader::open(src)?))
+    } else {
+        None
+    };
+    let ds = match &reader {
+        Some(r) => Docset::open_reader(r.clone())?,
+        None => Docset::open(Path::new(src))?,
+    };
+
+    println!("id:         {}", ds.id()?);
+    println!("title:      {}", ds.meta("title")?.unwrap_or_default());
+    println!("version:    {}", ds.meta("version")?.unwrap_or_default());
+    println!("language:   {}", ds.language()?);
+    println!(
+        "collection: {} ({})",
+        ds.collection()?,
+        ds.collection_title()?
+    );
+    let toc = ds.toc_tree()?;
+    println!(
+        "toc:        {} entries ({} top-level)",
+        ds.toc()?.len(),
+        toc.len()
+    );
+    println!("categories: {}", ds.categories()?.len());
+    println!("keywords:   {}", ds.keywords()?.len());
+    for node in toc.iter().take(8) {
+        println!("  - {}", node.title);
+    }
+    if toc.len() > 8 {
+        println!("  … ({} top-level)", toc.len());
+    }
+    if let Some(r) = reader {
+        println!(
+            "streamed {} of {} bytes over HTTP ({}%)",
+            r.bytes_read(),
+            r.size(),
+            r.bytes_read() * 100 / r.size().max(1)
+        );
+    }
+    Ok(())
 }
 
 fn compile(src: &Path, out: &Path, format: Format, assets: AssetsMode) -> Result<()> {

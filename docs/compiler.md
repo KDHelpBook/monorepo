@@ -137,3 +137,15 @@ kdhelp pack --viewer viewer-ts/dist \
 ```bash
 kdhelp patch publish/ --docset new.khb    # add or replace, updating docsets.json
 ```
+
+### `inspect` — print a docset's metadata
+
+`src` is a local `.khb` path **or** an `http(s)://` URL. A remote docset is
+**streamed** over HTTP `Range` (via the native Range-VFS — see
+[streaming.md](streaming.md)), so only the pages read are fetched; the command
+reports how little it downloaded.
+
+```bash
+kdhelp inspect out.khb
+kdhelp inspect https://example.com/docs/en.khb    # streamed; needs a Range-capable host
+```

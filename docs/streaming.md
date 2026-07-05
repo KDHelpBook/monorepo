@@ -41,10 +41,13 @@ Streaming needs a **SQLite VFS over byte ranges**:
   Docset::open_reader(reader: Arc<dyn RangeReader>) -> Docset  // queries stream
   ```
 
-  A `FileRangeReader` ships for local/streaming use and tests. An **HTTP reader** is
-  then a ~20-line trait impl (`read_at` → `GET` with a `Range:` header; `size` from
-  `Content-Range`/`HEAD`) — deliberately kept out of `core`'s dependencies so a
-  consumer (CLI/Tauri) plugs in its own client (`ureq`, `reqwest`, …).
+  A `FileRangeReader` ships for local/streaming use and tests. The **HTTP reader**
+  lives in the CLI (`kdhelp-cli`'s `HttpRangeReader`, a ~30-line `ureq` impl:
+  `read_at` → `GET` with a `Range:` header; `size` from `Content-Range`) — kept out
+  of `core`'s dependencies so each consumer picks its own client.
+  **`kdhelp inspect <url>`** opens a remote `.khb` this way; e.g. it reads a docset's
+  full metadata by fetching ~1×64 KiB block, and a 2 MB docset streams ~15 % for
+  open + TOC + one page + one search.
 - **Browser — still design.** An FTS5-capable, VFS-enabled SQLite-WASM build (the
   official `sqlite-wasm`, or `sql.js-httpvfs`) opens a URL as a database, fetching
   pages via `Range`. This would also restore *real* FTS5 in the browser (today the
@@ -143,9 +146,10 @@ small fully-fetched index for a remote book).
 
 ## Summary of what to build, in order
 
-1. A Range-VFS SQLite loader. **Native done** (`core/src/vfs.rs` +
-   `Docset::open_reader`); next is an HTTP `RangeReader` and then an FTS5+VFS
-   SQLite-WASM in the browser. Fallback already documented: `sql.js-httpvfs`.
+1. A Range-VFS SQLite loader. **Native + HTTP done** (`core/src/vfs.rs` +
+   `Docset::open_reader`; the CLI's `HttpRangeReader` + `kdhelp inspect <url>`); next
+   is an FTS5+VFS SQLite-WASM in the browser. Fallback already documented:
+   `sql.js-httpvfs`.
 2. A `{ url, mode: "streaming" }` `DocsetSource` + `streaming` in `docsets.json`;
    attachment packs likewise addressable by URL.
 3. Tauri `khb-asset://` protocol with `Range` support for streamed media.
