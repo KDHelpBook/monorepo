@@ -27,20 +27,22 @@ and Tauri** (native). Consequence: two query implementations (Rust native +
 sql.js in the browser) — keep the SQL in sync with `compiler/core/src/docset.rs`.
 
 Also: sql.js's default wasm build has **no FTS5**, so the prebuilt `pages_fts`
-index is unusable in the browser. The viewer searches the stored `plain` column
-in JS instead (`viewer-ts/src/data/docset.ts` `search()`); native/Tauri keep real
-FTS5 (bm25 + stemming). An FTS5-enabled SQLite-wasm would restore it — but the
-off-the-shelf `wa-sqlite` binary also ships without FTS5, so that still needs a
-custom Emscripten build.
+index is unusable in the browser build's default engine. The sql.js path searches
+the stored `plain` column in JS instead (`viewer-ts/src/data/docset.ts`
+`search()`); native/Tauri keep real FTS5 (bm25 + stemming).
 
 Streaming engine (browser): `viewer-ts/src/data/streaming.ts` is a **proven,
-self-contained async Range VFS on `wa-sqlite`** — it opens a remote `.khb` over
-HTTP `Range` and reads only touched pages (~18 % of a 139 KB file to open + read
-one page). It is deliberately **not** wired into the sync `sql.js` `Collection`
-yet: doing so means an async cascade through the whole data layer for a benefit
-only large *remote* docsets get, and the prebuilt engine can't add FTS5 anyway.
-See [docs/streaming.md](docs/streaming.md). Native/Tauri already stream via
-`compiler/core/src/vfs.rs`.
+self-contained async Range VFS** on a **custom FTS5-enabled `wa-sqlite`** (SQLite
+3.53 `-DSQLITE_ENABLE_FTS5`), vendored under `viewer-ts/vendor/wa-sqlite/` with a
+reproducible Docker build recipe (the *prebuilt* `wa-sqlite` ships without FTS5).
+It opens a remote `.khb` over HTTP `Range`, reads only touched pages (~21 % of a
+618 KB file to open + read a page; ~32 % to also run a real bm25 FTS5 `MATCH`), so
+a streamed docset gets genuine full-text search. It is deliberately **not** wired
+into the sync `sql.js` `Collection` yet: doing so means an async cascade through
+the whole data layer, worthwhile only for large *remote* docsets. `wa-sqlite` 1.1
+authors a VFS by extending `FacadeVFS` (`jOpen`/`jRead`/…; `async` methods run via
+Asyncify). See [docs/streaming.md](docs/streaming.md). Native/Tauri already stream
+via `compiler/core/src/vfs.rs`.
 - `docs/` — `.khb` format spec + compiler manual.
 
 The original single-file prototype (`help-viewer.html`) has been **removed** now
