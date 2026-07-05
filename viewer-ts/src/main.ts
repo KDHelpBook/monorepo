@@ -1,5 +1,6 @@
 import "./styles/main.css";
-import { Docset, type TocNode } from "./data/docset";
+import { Collection } from "./data/collection";
+import type { TocNode } from "./data/docset";
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -27,14 +28,12 @@ interface Manifest {
   docsets: ManifestEntry[];
 }
 
-async function loadFirstDocset(): Promise<Docset> {
+async function loadCollection(language: string): Promise<Collection> {
   const manifestRes = await fetch("docsets.json");
   const manifest = (await manifestRes.json()) as Manifest;
-  const entry = manifest.docsets[0];
-  if (!entry) throw new Error("no docsets listed in docsets.json");
-  const res = await fetch(entry.file);
-  const buffer: ArrayBuffer = await res.arrayBuffer();
-  return Docset.open(new Uint8Array(buffer));
+  const entries = manifest.docsets.filter((d) => d.language === language);
+  if (!entries.length) throw new Error(`no docsets for language "${language}"`);
+  return Collection.load(entries, language);
 }
 
 // ---------------------------------------------------------------------------
@@ -48,7 +47,7 @@ interface PageInfo {
   hasChildren: boolean;
 }
 
-function start(docset: Docset): void {
+function start(collection: Collection): void {
   const leftBody = $("#left-body");
   const leftTitle = $("#left-title");
   const content = $("#content");
@@ -71,7 +70,7 @@ function start(docset: Docset): void {
   let filterCategory = "";
   let fontSize = 13;
 
-  const toc = docset.tocTree();
+  const toc = collection.tocTree();
   (function buildPages(nodes: TocNode[], path: string[]) {
     for (const n of nodes) {
       pages.set(n.pageId, {
@@ -82,7 +81,7 @@ function start(docset: Docset): void {
       if (n.children.length) buildPages(n.children, [...path, n.pageId]);
     }
   })(toc, []);
-  for (const k of docset.keywords()) {
+  for (const k of collection.keywords()) {
     for (const pid of k.pageIds) {
       const list = pageKeywords.get(pid);
       if (list) list.push(k.term);
@@ -131,7 +130,7 @@ function start(docset: Docset): void {
   function renderTree(): void {
     leftBody.innerHTML = "";
     if (filterCategory) {
-      const ids = new Set(docset.pagesByCategory(filterCategory));
+      const ids = new Set(collection.pagesByCategory(filterCategory));
       const list = document.createElement("div");
       list.className = "index-list";
       for (const [id, info] of pages) {
@@ -184,8 +183,8 @@ function start(docset: Docset): void {
 
   // ---- Index ----
   function renderIndex(): void {
-    const locale = docset.language || "en";
-    const keys = docset
+    const locale = collection.language || "en";
+    const keys = collection
       .keywords()
       .sort((a, b) =>
         a.term.localeCompare(b.term, locale, { sensitivity: "base" }),
@@ -245,7 +244,7 @@ function start(docset: Docset): void {
       statusCount.textContent = "";
       return;
     }
-    const results = docset.search(q, 40);
+    const results = collection.search(q, 40);
     if (!results.length) {
       leftBody.innerHTML = `<div class="empty">No results for:<br><b>${esc(q)}</b></div>`;
       statusCount.textContent = "0 results";
@@ -391,14 +390,15 @@ function start(docset: Docset): void {
   function loadContent(id: string): void {
     currentId = id;
     const info = pages.get(id);
-    const page = docset.page(id);
+    const page = collection.page(id);
     const title = page?.title ?? info?.title ?? id;
     content.innerHTML = page
       ? decorate(page.bodyHtml, id)
       : `<h1>Topic not found</h1><p>No page with address <code>${esc(id)}</code>.</p>`;
     contentWrap.scrollTop = 0;
     document.title = `${title} — kdhelp`;
-    address.value = `ms-help://${docset.id}/${id}.htm`;
+    const { docsetId, localId } = collection.split(id);
+    address.value = `ms-help://${docsetId}/${localId}.htm`;
     renderTabs();
     updateFavBtn();
     if (mode === "contents") renderTree();
@@ -497,7 +497,7 @@ function start(docset: Docset): void {
       '<div style="background:linear-gradient(180deg,var(--title-top),var(--title-bot));color:#fff;font-weight:bold;padding:6px 10px">About kdhelp</div>' +
       '<div style="padding:16px 18px;line-height:1.6"><div style="font-size:15px;font-weight:bold;color:var(--content-h)">kdhelp</div>' +
       "<div>A documentation reader in the spirit of Microsoft Document Explorer.</div>" +
-      `<p style="color:#5b6675;margin:.8em 0 0">Docset: <b>${esc(docset.title)}</b> · language ${esc(docset.language)}</p></div>` +
+      `<p style="color:#5b6675;margin:.8em 0 0">Language: <b>${esc(collection.language)}</b></p></div>` +
       '<div style="padding:10px 16px;text-align:right;border-top:1px solid var(--chrome-border)"><button style="font-family:var(--font-ui);font-size:12px;padding:4px 16px;border:1px solid #16305a;border-radius:2px;background:linear-gradient(180deg,#eef4fd,#cbd9ec);cursor:pointer">OK</button></div></div>';
     const close = (): void => bg.remove();
     bg.addEventListener("click", (e) => {
@@ -508,7 +508,7 @@ function start(docset: Docset): void {
   }
 
   // ---- Other wiring ----
-  for (const c of docset.categories()) {
+  for (const c of collection.categories()) {
     const o = document.createElement("option");
     o.value = c.id;
     o.textContent = c.title;
@@ -526,10 +526,11 @@ function start(docset: Docset): void {
   });
 
   address.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      const m = address.value.trim().match(/([^/]+?)(?:\.htm)?$/);
-      openPage(m?.[1] ?? address.value.trim());
-    }
+    if (e.key !== "Enter") return;
+    const v = address.value.trim();
+    const m = v.match(/ms-help:\/\/([^/]+)\/([^/]+?)(?:\.htm)?$/);
+    if (m) openPage(`${m[1]}:${m[2]}`);
+    else openPage(v.includes(":") ? v : collection.resolveLink(currentId, v));
   });
 
   favToggle.addEventListener("click", () => {
@@ -549,7 +550,10 @@ function start(docset: Docset): void {
     );
     if (!a) return;
     e.preventDefault();
-    openPage(a.getAttribute("href")!.slice(1));
+    // In-content links are `#localId`, relative to the current page's book.
+    openPage(
+      collection.resolveLink(currentId, a.getAttribute("href")!.slice(1)),
+    );
   });
 
   window.addEventListener("hashchange", () => {
@@ -626,7 +630,7 @@ function start(docset: Docset): void {
 }
 
 // ---------------------------------------------------------------------------
-loadFirstDocset()
+loadCollection("en")
   .then(start)
   .catch((err: unknown) => {
     const content = document.querySelector("#content");

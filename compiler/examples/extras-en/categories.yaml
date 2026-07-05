@@ -1,0 +1,5 @@
+# Category ids are shared with the main docset so the facet merges across books.
+- id: basics
+  title: Getting started
+- id: reference
+  title: Reference

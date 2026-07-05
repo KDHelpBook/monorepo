@@ -6,6 +6,13 @@
       "title": "kdhelp — Documentation",
       "language": "en",
       "mode": "khb"
+    },
+    {
+      "file": "docsets/examples.extras-en.khb",
+      "id": "kdhelp-extras-en",
+      "title": "kdhelp — Tips & FAQ",
+      "language": "en",
+      "mode": "khb"
     }
   ]
 }
