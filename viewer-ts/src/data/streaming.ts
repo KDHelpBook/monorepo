@@ -168,15 +168,97 @@ export class RangeVFS extends FacadeVFS {
   }
 }
 
-let modulePromise: Promise<unknown> | null = null;
+let apiPromise: Promise<{ module: any; sqlite3: any }> | null = null;
 let vfsSeq = 0; // unique VFS name per open (wa-sqlite rejects duplicates)
 
-/** Build (once) the wa-sqlite async Emscripten module bound to the FTS5 wasm. */
-async function sqliteModule(): Promise<unknown> {
-  if (!modulePromise) {
-    modulePromise = SQLiteAsyncFactory({ locateFile: () => wasmUrl });
+/**
+ * Build (once) the wa-sqlite async Emscripten module + its high-level API. The
+ * module AND `SQLite.Factory(module)` must each be created exactly once — calling
+ * Factory twice on the same module corrupts the wasm heap — so both are cached
+ * and shared across every streamed docset (each opens its own VFS + connection).
+ */
+async function sqliteApi(): Promise<{ module: any; sqlite3: any }> {
+  if (!apiPromise) {
+    apiPromise = (async () => {
+      const module = await SQLiteAsyncFactory({ locateFile: () => wasmUrl });
+      return { module, sqlite3: SQLite.Factory(module) };
+    })();
   }
-  return modulePromise;
+  return apiPromise;
+}
+
+type SqlParams = (string | number | null)[];
+
+/**
+ * A remote `.khb` opened over the Range VFS: an async query surface (`all` /
+ * `one`) mirroring the sql.js helpers in `docset.ts`, so the same SQL runs on
+ * either engine. Only touched pages are fetched; `bytesRead` tracks the total.
+ */
+export class StreamingDb {
+  private constructor(
+    private readonly sqlite3: any,
+    private readonly db: number,
+    private readonly vfs: RangeVFS,
+  ) {}
+
+  static async open(
+    url: string,
+    blockSize = DEFAULT_BLOCK,
+  ): Promise<StreamingDb> {
+    const { module, sqlite3 } = await sqliteApi();
+    const vfsName = `kdhelp-range-${vfsSeq++}`;
+    const vfs = await RangeVFS.create(vfsName, module, url, blockSize);
+    sqlite3.vfs_register(vfs, false);
+    const db = await sqlite3.open_v2(
+      url,
+      SQLite.SQLITE_OPEN_READONLY,
+      vfsName,
+    );
+    return new StreamingDb(sqlite3, db, vfs);
+  }
+
+  get bytesRead(): number {
+    return this.vfs.bytesRead;
+  }
+  get fileSize(): number {
+    return this.vfs.fileSize;
+  }
+
+  /** Run `sql` (optionally bound) and return every row as a `{col: value}`. */
+  async all(
+    sql: string,
+    params: SqlParams = [],
+  ): Promise<Record<string, unknown>[]> {
+    const out: Record<string, unknown>[] = [];
+    for await (const stmt of this.sqlite3.statements(this.db, sql)) {
+      if (params.length) this.sqlite3.bind_collection(stmt, params);
+      const cols: string[] = this.sqlite3.column_names(stmt);
+      while ((await this.sqlite3.step(stmt)) === SQLite.SQLITE_ROW) {
+        const values: unknown[] = this.sqlite3.row(stmt);
+        const row: Record<string, unknown> = {};
+        cols.forEach((c, i) => (row[c] = values[i]));
+        out.push(row);
+      }
+    }
+    return out;
+  }
+
+  /** First column of the first row (or null). */
+  async one(sql: string, params: SqlParams = []): Promise<unknown> {
+    const rows = await this.all(sql, params);
+    if (!rows.length) return null;
+    const first = rows[0];
+    const key = Object.keys(first)[0];
+    return key === undefined ? null : first[key];
+  }
+
+  close(): void {
+    try {
+      this.sqlite3.close(this.db);
+    } catch {
+      /* already closed */
+    }
+  }
 }
 
 export interface StreamProbeResult {
@@ -207,77 +289,56 @@ export async function streamProbe(
   blockSize = DEFAULT_BLOCK,
   ftsQuery = "lorem",
 ): Promise<StreamProbeResult> {
-  const module = await sqliteModule();
-  const sqlite3 = SQLite.Factory(module);
-  const vfsName = `kdhelp-range-${vfsSeq++}`;
-  const vfs = await RangeVFS.create(vfsName, module, url, blockSize);
-  sqlite3.vfs_register(vfs, false);
-
-  const db = await sqlite3.open_v2(
-    "kdhelp",
-    SQLite.SQLITE_OPEN_READONLY,
-    vfsName,
-  );
-
-  const all = async (sql: string): Promise<any[][]> => {
-    const out: any[][] = [];
-    for await (const stmt of sqlite3.statements(db, sql)) {
-      const n = sqlite3.column_count(stmt);
-      while ((await sqlite3.step(stmt)) === SQLite.SQLITE_ROW) {
-        const row: any[] = [];
-        for (let i = 0; i < n; i++) row.push(sqlite3.column(stmt, i));
-        out.push(row);
-      }
-    }
-    return out;
-  };
-  const one = async (sql: string): Promise<any> => {
-    const r = await all(sql);
-    return r.length ? r[0][0] : null;
-  };
+  const sdb = await StreamingDb.open(url, blockSize);
+  const one = (sql: string): Promise<unknown> => sdb.one(sql);
 
   // Opening + a trivial statement forces the schema (header + sqlite_master).
   await one("SELECT 1");
-  const openBytes = vfs.bytesRead;
+  const openBytes = sdb.bytesRead;
 
   // Point lookups on the `meta` PRIMARY KEY — index reads, not full scans.
   const docsetId = await one("SELECT value FROM meta WHERE key='docset_id'");
   const title = await one("SELECT value FROM meta WHERE key='title'");
-  const metaBytes = vfs.bytesRead - openBytes;
+  const metaBytes = sdb.bytesRead - openBytes;
 
   const pageCount = Number(await one("SELECT count(*) FROM pages"));
 
   // Load exactly ONE page body by PRIMARY KEY — the core streaming win.
-  const before = vfs.bytesRead;
+  const before = sdb.bytesRead;
   const firstPageId = await one("SELECT id FROM pages ORDER BY id LIMIT 1");
   if (firstPageId !== null) {
-    await one(
-      `SELECT body_html FROM pages WHERE id='${String(firstPageId).replace(/'/g, "''")}'`,
-    );
+    await sdb.one("SELECT body_html FROM pages WHERE id = ?", [
+      String(firstPageId),
+    ]);
   }
-  const onePageBytes = vfs.bytesRead - before;
+  const onePageBytes = sdb.bytesRead - before;
 
   // The payoff: a genuine FTS5 MATCH (bm25-ranked), streaming only FTS pages.
-  const beforeFts = vfs.bytesRead;
+  const beforeFts = sdb.bytesRead;
   let hasFts5 = true;
   let ftsError: string | null = null;
   let ftsHits: { id: string; title: string }[] = [];
   try {
-    const q = ftsQuery.replace(/'/g, "''");
-    const r = await all(
-      `SELECT p.id, p.title FROM pages_fts f
+    const r = await sdb.all(
+      `SELECT p.id AS id, p.title AS title FROM pages_fts f
        JOIN pages p ON p.rowid = f.rowid
-       WHERE pages_fts MATCH '${q}'
+       WHERE pages_fts MATCH ?
        ORDER BY bm25(pages_fts) LIMIT 5`,
+      [ftsQuery],
     );
-    ftsHits = r.map((row) => ({ id: String(row[0]), title: String(row[1]) }));
+    ftsHits = r.map((row) => ({
+      id: String(row.id),
+      title: String(row.title),
+    }));
   } catch (e) {
     hasFts5 = false;
-    ftsError = e && (e.message || String(e));
+    ftsError = e instanceof Error ? e.message : String(e);
   }
-  const ftsBytes = vfs.bytesRead - beforeFts;
+  const ftsBytes = sdb.bytesRead - beforeFts;
 
-  await sqlite3.close(db);
+  const totalBytes = sdb.bytesRead;
+  const fileSize = sdb.fileSize;
+  sdb.close();
 
   return {
     docsetId: docsetId === null ? null : String(docsetId),
@@ -287,11 +348,11 @@ export async function streamProbe(
     ftsError,
     ftsHits,
     firstPageId: firstPageId === null ? null : String(firstPageId),
-    fileSize: vfs.fileSize,
+    fileSize,
     openBytes,
     metaBytes,
     onePageBytes,
     ftsBytes,
-    totalBytes: vfs.bytesRead,
+    totalBytes,
   };
 }

@@ -33,10 +33,34 @@ export interface SearchHit {
 }
 
 /**
+ * The common shape of a loaded book, whatever the backend (whole-file sql.js or
+ * a streamed remote `.khb`). Structural queries are **synchronous** — they read
+ * small tables that every backend can keep in memory. The heavy, per-navigation
+ * data is **asynchronous**: a page body, an attachment, or a full-text search may
+ * hit the network (streaming) or just resolve immediately (sql.js).
+ */
+export interface IDocset {
+  readonly id: string;
+  readonly language: string;
+  readonly title: string;
+  readonly collection: string;
+  readonly collectionTitle: string;
+  tocTree(): TocNode[];
+  categories(): Category[];
+  keywords(): KeywordEntry[];
+  pagesByCategory(categoryId: string): string[];
+  related(id: string): string[];
+  page(id: string): Promise<Page | null>;
+  asset(path: string): Promise<AssetBlob | null>;
+  search(query: string, limit?: number): Promise<SearchHit[]>;
+  close(): void;
+}
+
+/**
  * A read-only handle to one `.khb` docset, backed by sql.js. The queries mirror
  * `compiler/core/src/docset.rs` — keep the two in sync.
  */
-export class Docset {
+export class Docset implements IDocset {
   private constructor(
     private readonly db: Database,
     readonly id: string,
@@ -82,7 +106,7 @@ export class Docset {
    * (`pack === ""`) or the sidecar `.khba` whose `meta.pack` matches — with no
    * probing of the other packs.
    */
-  asset(path: string): AssetBlob | null {
+  async asset(path: string): Promise<AssetBlob | null> {
     const pack = assetPack(this.db, path);
     if (pack == null) return null;
     const db = pack === "" ? this.db : this.attachmentsByPack.get(pack);
@@ -147,7 +171,7 @@ export class Docset {
     return entries;
   }
 
-  page(id: string): Page | null {
+  async page(id: string): Promise<Page | null> {
     const rows = all(
       this.db,
       "SELECT id, title, body_html FROM pages WHERE id = ?",
@@ -163,7 +187,7 @@ export class Docset {
       : null;
   }
 
-  search(query: string, limit = 40): SearchHit[] {
+  async search(query: string, limit = 40): Promise<SearchHit[]> {
     const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
     if (!terms.length) return [];
     this.searchDocs ??= all(

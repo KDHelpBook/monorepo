@@ -2,25 +2,30 @@ import {
   Docset,
   type AssetBlob,
   type Category,
+  type IDocset,
   type KeywordEntry,
   type Page,
   type SearchHit,
   type TocNode,
 } from "./docset";
-
 const SEP = ":";
 
 /** A sidecar `.khba` attachment pack: in-memory bytes or a URL (`.gz` = gzip'd). */
 export type AttachmentSource = { bytes: Uint8Array } | { file: string };
 
 /**
- * A docset to load: either already-in-memory bytes or a URL, with zero or more
- * `.khba` attachment packs. A URL ending in `.gz` is gzip-compressed and gets
- * decompressed after fetch (applies to `.khb`/`.khba`/`.khbp` alike).
+ * A docset to load:
+ * - `{ bytes }` — already-in-memory (upload / IndexedDB), whole-file sql.js;
+ * - `{ file }` — a URL fetched **whole** (a `.gz` suffix is decompressed);
+ * - `{ url, mode: "streaming" }` — a remote `.khb` opened **page-by-page** over
+ *   HTTP `Range` via the wa-sqlite engine (real FTS5), never fetched whole.
+ * The first two may carry `.khba` attachment packs.
  */
-export type DocsetSource = ({ bytes: Uint8Array } | { file: string }) & {
-  attachments?: AttachmentSource[];
-};
+export type DocsetSource =
+  | (({ bytes: Uint8Array } | { file: string }) & {
+      attachments?: AttachmentSource[];
+    })
+  | { url: string; mode: "streaming" };
 
 /** Decompress gzip bytes via the native DecompressionStream. */
 async function gunzip(bytes: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
@@ -37,6 +42,12 @@ async function gunzip(bytes: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
  * so the browser has already decompressed the body — while a plain host (e.g. GitHub
  * Pages) serves the `.gz` bytes verbatim. The magic works in both cases.
  */
+/** A streaming source is opened page-by-page over Range, not fetched whole. */
+type StreamingSource = { url: string; mode: "streaming" };
+function isStreaming(s: DocsetSource): s is StreamingSource {
+  return "mode" in s && s.mode === "streaming";
+}
+
 export async function fetchDocsetBytes(url: string): Promise<Uint8Array> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
@@ -52,21 +63,23 @@ export async function fetchDocsetBytes(url: string): Promise<Uint8Array> {
 export class Collection {
   private constructor(
     readonly language: string,
-    private readonly docsets: Docset[],
+    private readonly docsets: IDocset[],
   ) {}
 
   static async load(
     sources: DocsetSource[],
     language: string,
   ): Promise<Collection> {
-    const docsets: Docset[] = [];
+    const docsets: IDocset[] = [];
     for (const src of sources) {
-      let bytes: Uint8Array;
-      if ("bytes" in src) {
-        bytes = src.bytes;
-      } else {
-        bytes = await fetchDocsetBytes(src.file);
+      if (isStreaming(src)) {
+        // Lazy-load the wa-sqlite streaming engine only when a streamed docset is
+        // actually opened, so non-streaming sessions never fetch that chunk.
+        const { StreamingDocset } = await import("./streaming-docset");
+        docsets.push(await StreamingDocset.open(src.url));
+        continue;
       }
+      const bytes = "bytes" in src ? src.bytes : await fetchDocsetBytes(src.file);
       const attachmentBytes: Uint8Array[] = [];
       for (const a of src.attachments ?? []) {
         attachmentBytes.push(
@@ -79,8 +92,8 @@ export class Collection {
   }
 
   /** Resolve an attachment (`asset:<path>`) referenced by a page in `fromNsId`. */
-  asset(fromNsId: string, path: string): AssetBlob | null {
-    return this.find(this.split(fromNsId).docsetId)?.asset(path) ?? null;
+  async asset(fromNsId: string, path: string): Promise<AssetBlob | null> {
+    return (await this.find(this.split(fromNsId).docsetId)?.asset(path)) ?? null;
   }
 
   /** Split a namespaced id into its docset id and the local page id. */
@@ -176,19 +189,31 @@ export class Collection {
     return [...byTerm].map(([term, pageIds]) => ({ term, pageIds }));
   }
 
-  page(nsId: string): Page | null {
+  async page(nsId: string): Promise<Page | null> {
     const { docsetId, localId } = this.split(nsId);
     const d = this.find(docsetId);
-    const p = d?.page(localId);
-    return p ? { ...p, id: this.ns(d!.id, p.id) } : null;
+    if (!d) return null;
+    const p = await d.page(localId);
+    return p ? { ...p, id: this.ns(d.id, p.id) } : null;
   }
 
-  search(query: string, limit = 40): SearchHit[] {
-    const hits = this.docsets.flatMap((d) =>
-      d
-        .search(query, limit)
-        .map((h) => ({ ...h, pageId: this.ns(d.id, h.pageId) })),
+  async search(query: string, limit = 40): Promise<SearchHit[]> {
+    const perBook = await Promise.all(
+      this.docsets.map((d) => d.search(query, limit)),
     );
+    // Different backends score differently (sql.js's occurrence heuristic vs the
+    // streamed books' FTS5 bm25), and the raw magnitudes aren't comparable. Scale
+    // each book's hits to (0,1] by its own top score so results interleave fairly
+    // in the merged ranking instead of one engine crowding out the other.
+    const hits = perBook.flatMap((list, bi) => {
+      const top = Math.max(...list.map((h) => h.score), Number.EPSILON);
+      const d = this.docsets[bi]!;
+      return list.map((h) => ({
+        ...h,
+        pageId: this.ns(d.id, h.pageId),
+        score: h.score / top,
+      }));
+    });
     hits.sort((a, b) => b.score - a.score);
     return hits.slice(0, limit);
   }
@@ -216,7 +241,7 @@ export class Collection {
   private ns(docsetId: string, localId: string): string {
     return `${docsetId}${SEP}${localId}`;
   }
-  private find(docsetId: string): Docset | undefined {
+  private find(docsetId: string): IDocset | undefined {
     return this.docsets.find((d) => d.id === docsetId);
   }
 }

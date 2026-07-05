@@ -31,18 +31,24 @@ index is unusable in the browser build's default engine. The sql.js path searche
 the stored `plain` column in JS instead (`viewer-ts/src/data/docset.ts`
 `search()`); native/Tauri keep real FTS5 (bm25 + stemming).
 
-Streaming engine (browser): `viewer-ts/src/data/streaming.ts` is a **proven,
-self-contained async Range VFS** on a **custom FTS5-enabled `wa-sqlite`** (SQLite
-3.53 `-DSQLITE_ENABLE_FTS5`), vendored under `viewer-ts/vendor/wa-sqlite/` with a
-reproducible Docker build recipe (the *prebuilt* `wa-sqlite` ships without FTS5).
-It opens a remote `.khb` over HTTP `Range`, reads only touched pages (~21 % of a
-618 KB file to open + read a page; ~32 % to also run a real bm25 FTS5 `MATCH`), so
-a streamed docset gets genuine full-text search. It is deliberately **not** wired
-into the sync `sql.js` `Collection` yet: doing so means an async cascade through
-the whole data layer, worthwhile only for large *remote* docsets. `wa-sqlite` 1.1
-authors a VFS by extending `FacadeVFS` (`jOpen`/`jRead`/…; `async` methods run via
-Asyncify). See [docs/streaming.md](docs/streaming.md). Native/Tauri already stream
-via `compiler/core/src/vfs.rs`.
+Streaming engine (browser): `viewer-ts/src/data/streaming.ts` is an async Range VFS
+on a **custom FTS5-enabled `wa-sqlite`** (SQLite 3.53 `-DSQLITE_ENABLE_FTS5`),
+vendored under `viewer-ts/vendor/wa-sqlite/` with a reproducible Docker build recipe
+(the *prebuilt* `wa-sqlite` ships without FTS5). It opens a remote `.khb` over HTTP
+`Range` and reads only touched pages (~21 % of a 618 KB file to open + read a page),
+with genuine bm25 FTS5 search over the streamed index. **It is wired into the live
+viewer:** `StreamingDocset` (`streaming-docset.ts`) implements the shared **`IDocset`**
+interface — structure (toc/categories/keywords/related) is eager-loaded at open and
+served **synchronously**; only `page`/`asset`/`search` are **async** and stream on
+demand. So `Docset`/`Collection`'s `page`/`asset`/`search` are async (structure stays
+sync), and a streamed book merges into the same TOC/index/search as the sql.js books.
+Opt-in via *File → Open from URL… → Stream*; the engine is **code-split** (loaded only
+when a streamed docset opens), and `Collection.search` normalizes per-book scores so
+FTS5 and the sql.js heuristic merge fairly. `wa-sqlite` 1.1 authors a VFS by extending
+`FacadeVFS` (`jOpen`/`jRead`/…; `async` methods run via Asyncify — and
+`SQLite.Factory(module)` must be called exactly once). See
+[docs/streaming.md](docs/streaming.md). Native/Tauri already stream via
+`compiler/core/src/vfs.rs`.
 - `docs/` — `.khb` format spec + compiler manual.
 
 The original single-file prototype (`help-viewer.html`) has been **removed** now

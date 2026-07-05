@@ -67,25 +67,39 @@ export async function docsetsByLanguage(
   return all.filter((d) => d.language === language);
 }
 
-// Remote (online) docsets are persisted as bare URLs and re-fetched each session,
+// Remote (online) docsets are persisted as URLs and re-fetched each session,
 // unlike uploaded docsets (bytes cached in IndexedDB). Kept in localStorage.
+// `streaming` remotes are opened page-by-page over HTTP Range (never fetched
+// whole). Legacy entries were bare URL strings (= whole-fetch); still accepted.
 const REMOTES_KEY = "kdhelp.remotes";
 
-export function getRemotes(): string[] {
+export interface RemoteEntry {
+  url: string;
+  streaming?: boolean;
+}
+
+export function getRemotes(): RemoteEntry[] {
   try {
     const raw = localStorage.getItem(REMOTES_KEY);
     const list = raw ? (JSON.parse(raw) as unknown) : [];
-    return Array.isArray(list) ? list.filter((u): u is string => typeof u === "string") : [];
+    if (!Array.isArray(list)) return [];
+    return list.flatMap((e): RemoteEntry[] => {
+      if (typeof e === "string") return [{ url: e }];
+      if (e && typeof (e as RemoteEntry).url === "string") {
+        return [{ url: (e as RemoteEntry).url, streaming: !!(e as RemoteEntry).streaming }];
+      }
+      return [];
+    });
   } catch {
     return [];
   }
 }
 
-export function addRemote(url: string): void {
+export function addRemote(url: string, streaming = false): void {
   const list = getRemotes();
-  if (!list.includes(url)) {
+  if (!list.some((e) => e.url === url)) {
     try {
-      localStorage.setItem(REMOTES_KEY, JSON.stringify([...list, url]));
+      localStorage.setItem(REMOTES_KEY, JSON.stringify([...list, { url, streaming }]));
     } catch {
       /* storage unavailable — remote just won't persist */
     }
@@ -96,7 +110,7 @@ export function removeRemote(url: string): void {
   try {
     localStorage.setItem(
       REMOTES_KEY,
-      JSON.stringify(getRemotes().filter((u) => u !== url)),
+      JSON.stringify(getRemotes().filter((e) => e.url !== url)),
     );
   } catch {
     /* ignore */

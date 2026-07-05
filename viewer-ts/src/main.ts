@@ -6,7 +6,7 @@ import {
   fetchDocsetBytes,
   type DocsetSource,
 } from "./data/collection";
-import { Docset, type TocNode } from "./data/docset";
+import { Docset, type SearchHit, type TocNode } from "./data/docset";
 import {
   addRemote,
   allDocsets,
@@ -107,14 +107,26 @@ async function bootstrap(): Promise<void> {
   // Uploaded docsets (bytes in IndexedDB) and remote docsets (URLs, re-fetched each
   // session — the online/hybrid path) both extend the languages + collection.
   const uploadedAll = config.externalSources ? await allDocsets() : [];
-  const remotes: { url: string; bytes: Uint8Array; language: string }[] = [];
+  // A remote is either whole-fetched (bytes) or streamed page-by-page (no bytes).
+  const remotes: {
+    url: string;
+    bytes?: Uint8Array;
+    language: string;
+    streaming: boolean;
+  }[] = [];
   if (config.externalSources) {
-    for (const url of getRemotes()) {
+    for (const entry of getRemotes()) {
       try {
-        const bytes = await fetchDocsetBytes(url);
-        const ds = await Docset.open(bytes);
-        remotes.push({ url, bytes, language: ds.language });
-        ds.close();
+        if (entry.streaming) {
+          const { StreamingDocset } = await import("./data/streaming-docset");
+          const { language } = await StreamingDocset.peek(entry.url);
+          remotes.push({ url: entry.url, language, streaming: true });
+        } else {
+          const bytes = await fetchDocsetBytes(entry.url);
+          const ds = await Docset.open(bytes);
+          remotes.push({ url: entry.url, bytes, language: ds.language, streaming: false });
+          ds.close();
+        }
       } catch {
         /* unreachable/invalid remote — skip; the user can remove it */
       }
@@ -146,7 +158,11 @@ async function bootstrap(): Promise<void> {
     }));
   const remote: DocsetSource[] = remotes
     .filter((r) => r.language === lang)
-    .map((r) => ({ bytes: r.bytes }));
+    .map((r) =>
+      r.streaming
+        ? { url: r.url, mode: "streaming" as const }
+        : { bytes: r.bytes! },
+    );
   const sources = [...bundled, ...uploaded, ...remote];
   if (!sources.length) throw new Error(`no docsets for language "${lang}"`);
 
@@ -216,6 +232,11 @@ function start(
   let active = -1;
   const searchScope = { category: "", product: "", sort: "rank" };
   let currentId = "";
+  // Monotonic tokens so a slow async load/search (streaming) that finishes after a
+  // newer one has started is dropped instead of clobbering the newer result.
+  let loadSeq = 0;
+  let searchSeq = 0; // side-panel search
+  let pageSearchSeq = 0; // full Search page
   let mode: Mode = "contents";
   let filterCategory = "";
   let filterProduct = ""; // family/collection scope (union by default)
@@ -466,7 +487,7 @@ function start(
       .map((p) => esc(pages.get(p)?.title ?? p))
       .join(" › ") || "—";
 
-  function runSearch(query: string): void {
+  async function runSearch(query: string): Promise<void> {
     const q = query.trim();
     if (!q) {
       highlightTerms = [];
@@ -474,7 +495,9 @@ function start(
       statusCount.textContent = "";
       return;
     }
-    const results = collection.search(q, 40);
+    const token = ++searchSeq;
+    const results = await collection.search(q, 40);
+    if (token !== searchSeq) return; // superseded by a newer keystroke
     if (!results.length) {
       leftBody.innerHTML = `<div class="empty">${esc(s.noResults)}<br><b>${esc(q)}</b></div>`;
       statusCount.textContent = s.searchResults(0);
@@ -522,8 +545,8 @@ function start(
   }
 
   // Apply the scope/sort controls to a raw search over the whole collection.
-  function searchPageResults(query: string): ReturnType<Collection["search"]> {
-    let hits = collection.search(query, 200);
+  async function searchPageResults(query: string): Promise<SearchHit[]> {
+    let hits = await collection.search(query, 200);
     if (searchScope.category) {
       const allowed = new Set(collection.pagesByCategory(searchScope.category));
       hits = hits.filter((h) => allowed.has(h.pageId));
@@ -550,7 +573,7 @@ function start(
     return hits;
   }
 
-  function renderSearchResults(query: string): void {
+  async function renderSearchResults(query: string): Promise<void> {
     const box = $("#sp-results");
     const countEl = $("#sp-count");
     const q = query.trim();
@@ -559,7 +582,9 @@ function start(
       countEl.textContent = "";
       return;
     }
-    const hits = searchPageResults(q);
+    const token = ++pageSearchSeq;
+    const hits = await searchPageResults(q);
+    if (token !== pageSearchSeq) return; // superseded
     const terms = queryTerms(q);
     countEl.textContent = s.searchResults(hits.length);
     if (!hits.length) {
@@ -635,7 +660,7 @@ function start(
     catSel.value = searchScope.category;
     if (productSel) productSel.value = searchScope.product;
     sortSel.value = searchScope.sort;
-    const rerun = (): void => renderSearchResults(tabs[active]?.query ?? "");
+    const rerun = (): void => void renderSearchResults(tabs[active]?.query ?? "");
     $("#sp-form").addEventListener("submit", (e) => {
       e.preventDefault();
       const v = $<HTMLInputElement>("#sp-q").value;
@@ -797,12 +822,12 @@ function start(
   // Resolve `asset:<path>` references to `data:` URLs (self-contained, so they load
   // inside the origin-isolated content frame where blob URLs would not). Images
   // render inline; other files become downloads.
-  function resolveAssets(root: ParentNode, pageId: string): void {
-    const rewrite = (el: Element, attr: "src" | "href"): void => {
+  async function resolveAssets(root: ParentNode, pageId: string): Promise<void> {
+    const rewrite = async (el: Element, attr: "src" | "href"): Promise<void> => {
       const raw = el.getAttribute(attr);
       if (!raw || !raw.startsWith("asset:")) return;
       const path = raw.slice("asset:".length);
-      const blob = collection.asset(pageId, path);
+      const blob = await collection.asset(pageId, path);
       if (!blob) {
         el.removeAttribute(attr);
         el.setAttribute("data-asset-missing", "");
@@ -813,8 +838,14 @@ function start(
         (el as HTMLAnchorElement).download = path.split("/").pop() ?? "download";
       }
     };
-    root.querySelectorAll("img[src^='asset:']").forEach((el) => rewrite(el, "src"));
-    root.querySelectorAll("a[href^='asset:']").forEach((el) => rewrite(el, "href"));
+    const jobs: Promise<void>[] = [];
+    root
+      .querySelectorAll("img[src^='asset:']")
+      .forEach((el) => jobs.push(rewrite(el, "src")));
+    root
+      .querySelectorAll("a[href^='asset:']")
+      .forEach((el) => jobs.push(rewrite(el, "href")));
+    await Promise.all(jobs);
   }
 
   // Base64-encode bytes (chunked to avoid call-stack limits on big attachments).
@@ -962,8 +993,9 @@ function start(
     if (t) loadContent(t.id);
   }
 
-  function loadContent(id: string): void {
+  async function loadContent(id: string): Promise<void> {
     currentId = id;
+    const token = ++loadSeq;
     if (id === SEARCH_ID) {
       renderSearchPage(); // app UI, rendered into #content (not the sandbox)
       frame.style.display = "none";
@@ -971,7 +1003,10 @@ function start(
       return;
     }
     const info = pages.get(id);
-    const page = collection.page(id);
+    // A streamed page body may take a round-trip; show the intended title now.
+    status.textContent = s.ready;
+    const page = await collection.page(id);
+    if (token !== loadSeq) return; // a newer navigation superseded this one
     const title = page?.title ?? info?.title ?? id;
     if (page) {
       // Build in a detached container (parent origin — full DOM access), then hand
@@ -980,7 +1015,8 @@ function start(
       const holder = document.createElement("div");
       holder.innerHTML = decorate(page.bodyHtml, id);
       stripDangerous(holder);
-      resolveAssets(holder, id); // asset: → data:
+      await resolveAssets(holder, id); // asset: → data: (may stream)
+      if (token !== loadSeq) return;
       applyHighlight(holder);
       rewriteFrameLinks(holder, id);
       frame.srcdoc = frameDoc(holder.innerHTML);
@@ -1134,9 +1170,10 @@ function start(
     input.click();
   }
 
-  // Add a remote (online) docset by URL: fetched each session, merged into the
-  // collection. The host must be CORS-reachable and, ideally, Range-capable (native
-  // streams pages; the browser fetches the file whole for now).
+  // Add a remote (online) docset by URL, merged into the collection each session.
+  // Two modes: whole-fetch (default) or **stream** — opened page-by-page over HTTP
+  // `Range` (real FTS5), never downloaded whole. Streaming needs a Range-capable,
+  // CORS-reachable host serving the `.khb` uncompressed.
   function openUrl(): void {
     const btn =
       "font-family:var(--font-ui);font-size:12px;padding:4px 16px;border:1px solid #16305a;border-radius:2px;cursor:pointer";
@@ -1148,23 +1185,30 @@ function start(
       `<div style="background:linear-gradient(180deg,var(--title-top),var(--title-bot));color:#fff;font-weight:bold;padding:6px 10px">${esc(s.openUrlTitle)}</div>` +
       `<div style="padding:14px 18px"><div style="color:var(--muted);margin-bottom:6px">${esc(s.openUrlHint)}</div>` +
       '<input class="url-in" type="url" placeholder="https://…/docs.khb" spellcheck="false" style="width:100%;font-family:var(--font-mono);font-size:12px;padding:5px 7px;border:1px solid #7f9bc0;border-radius:2px;box-sizing:border-box">' +
+      `<label style="display:flex;align-items:center;gap:6px;margin-top:8px;color:var(--content-fg);font-size:12px;cursor:pointer"><input class="url-stream" type="checkbox"> ${esc(s.streamOption)}</label>` +
+      `<div style="color:var(--muted);font-size:11px;margin-top:2px;margin-left:22px">${esc(s.streamHint)}</div>` +
       '<div class="url-err" style="color:#a33;font-size:11px;min-height:15px;margin-top:5px"></div></div>' +
       '<div style="padding:10px 16px;border-top:1px solid var(--chrome-border);display:flex;gap:8px;justify-content:flex-end">' +
       `<button class="url-cancel" style="${btn};background:#eef1f6">${esc(s.cancel)}</button>` +
       `<button class="url-add" style="${btn};background:linear-gradient(180deg,#eef4fd,#cbd9ec)">${esc(s.add)}</button></div></div>`;
     const input = bg.querySelector<HTMLInputElement>(".url-in")!;
+    const stream = bg.querySelector<HTMLInputElement>(".url-stream")!;
     const err = bg.querySelector<HTMLElement>(".url-err")!;
     const add = bg.querySelector<HTMLButtonElement>(".url-add")!;
     const submit = async (): Promise<void> => {
       const url = input.value.trim();
       if (!url) return;
+      const streaming = stream.checked;
       err.style.color = "var(--muted)";
       err.textContent = s.openUrlChecking;
       add.disabled = true;
       try {
-        const ds = await Docset.open(await fetchDocsetBytes(url)); // validate
-        ds.close();
-        addRemote(url);
+        // Validate: streaming needs a Range-served `.khb` (peek); whole-fetch reads it.
+        if (streaming) {
+          const { StreamingDocset } = await import("./data/streaming-docset");
+          await StreamingDocset.peek(url);
+        } else (await Docset.open(await fetchDocsetBytes(url))).close();
+        addRemote(url, streaming);
         location.reload();
       } catch {
         err.style.color = "#a33";
@@ -1234,10 +1278,13 @@ function start(
       : `<div style="color:var(--muted);padding:6px 0">${esc(s.noUploaded)}</div>`;
     const remoteList = getRemotes();
     const remoteRows = remoteList
-      .map((url) =>
+      .map((e) =>
         row(
-          `<span style="font-family:var(--font-mono);font-size:11px">${esc(url)}</span>`,
-          `data-remove-url="${esc(url)}"`,
+          `<span style="font-family:var(--font-mono);font-size:11px">${esc(e.url)}</span>` +
+            (e.streaming
+              ? ` <span style="font-size:10px;color:var(--muted)">${esc(s.streamingBadge)}</span>`
+              : ""),
+          `data-remove-url="${esc(e.url)}"`,
         ),
       )
       .join("");

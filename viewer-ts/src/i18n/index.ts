@@ -74,6 +74,9 @@ export interface Strings {
   add: string;
   cancel: string;
   remotesTitle: string;
+  streamOption: string;
+  streamHint: string;
+  streamingBadge: string;
 }
 
 const en: Strings = {
@@ -141,6 +144,9 @@ const en: Strings = {
   add: "Add",
   cancel: "Cancel",
   remotesTitle: "Remote docsets",
+  streamOption: "Stream (don't download the whole file)",
+  streamHint: "Reads pages on demand over HTTP Range, with real full-text search.",
+  streamingBadge: "· streaming",
 };
 
 const pl: Strings = {
@@ -209,6 +215,10 @@ const pl: Strings = {
   add: "Dodaj",
   cancel: "Anuluj",
   remotesTitle: "Zdalne docsety",
+  streamOption: "Strumieniuj (nie pobieraj całego pliku)",
+  streamHint:
+    "Czyta strony na żądanie po HTTP Range, z prawdziwym wyszukiwaniem pełnotekstowym.",
+  streamingBadge: "· strumieniowanie",
 };
 
 const TABLES: Record<Lang, Strings> = { en, pl };

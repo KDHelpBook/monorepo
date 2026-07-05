@@ -6,19 +6,17 @@
 > ~15 % for open + TOC + one page + one search), and the CLI's `kdhelp inspect
 > <url>` reads a remote `.khb` over HTTP `Range`. The viewer has **online / hybrid**
 > loading (*File → Open from URL…*, persisted remotes merged with bundled +
-> uploaded). And the browser now has a working **async Range VFS**
-> (`viewer-ts/src/data/streaming.ts`, on `wa-sqlite`): opening a remote `.khb` and
-> reading one page by primary key fetches **~18–21 % of a demo file** (139 KB / 618
-> KB), mirroring the native win — and it runs **real, bm25-ranked FTS5 `MATCH`** over
-> the streamed index, via a **custom FTS5-enabled `wa-sqlite` build** vendored under
-> `viewer-ts/vendor/wa-sqlite/` (the prebuilt `wa-sqlite` has no FTS5). One thing
-> keeps it from being the viewer's *default* engine: merging a *streamed* book into
-> the live `Collection` means making the (currently synchronous, `sql.js`) data
-> layer async — a trade deferred because it would make every *local* docset async
-> for a benefit only large *remote* docsets receive. So the browser still fetches a
-> remote `.khb` whole today; the streaming engine (with FTS5) is built, measured, and
-> waiting behind that seam. Offline works throughout (bundled docsets + IndexedDB
-> uploads + PWA).
+> uploaded). And the browser now **streams too**: *File → Open from URL…* has a
+> **"Stream (don't download the whole file)"** option that opens a remote `.khb`
+> page-by-page over HTTP `Range` and **merges it into the live collection** — one
+> TOC / index / search alongside the whole-file books. A streamed book fetches
+> **~18–21 % of a demo file** (139 KB / 618 KB) to open + read a page, mirroring the
+> native win, and runs **real, bm25-ranked FTS5** over the streamed index via a
+> **custom FTS5-enabled `wa-sqlite` build** vendored under `viewer-ts/vendor/wa-sqlite/`
+> (the prebuilt `wa-sqlite` has no FTS5). The engine is **code-split**, so sessions
+> without a streamed docset never load it. Whole-file remains the default (and only
+> option for a non-Range host); offline works throughout (bundled + IndexedDB uploads
+> + PWA).
 
 ## Why SQLite makes this possible
 
@@ -80,13 +78,17 @@ Streaming needs a **SQLite VFS over byte ranges**:
   streamed docset gets genuine bm25-ranked full-text search, not the `plain`-column
   fallback the sql.js path uses (see [format.md](format.md)).
 
-  One thing keeps this from being the viewer's *default* engine: the **sync → async
-  cascade.** `sql.js` is synchronous and the whole data layer (`Docset`/`Collection`)
-  and its call sites are written against that; `wa-sqlite`'s async VFS is
-  asynchronous. Merging a streamed book into the live collection means making that
-  layer async everywhere — which also makes every *local* docset async, for a benefit
-  only large *remote* docsets get. So the engine is kept as a proven, self-contained
-  module behind the source seam rather than swapped in wholesale.
+  **Merged into the live collection.** `StreamingDocset` (`streaming-docset.ts`)
+  wraps this engine as an `IDocset`: it **eager-loads the small structure** at open
+  (toc/categories/keywords/related — sync thereafter) and **streams the heavy parts**
+  (`page`/`asset`/`search`) on demand. That split kept the sync→async change small:
+  only `page`/`asset`/`search` went async across `Docset`/`Collection` and their
+  call sites; structure stayed synchronous, so local (sql.js) books are unaffected.
+  A streamed book therefore drops into the same TOC / index / search as the whole-file
+  books. The engine is **code-split** (loaded only when a streamed docset is opened),
+  and `Collection.search` **normalizes each book's scores** before merging so FTS5
+  bm25 and the sql.js heuristic interleave fairly instead of one crowding out the
+  other.
 
 ## Wiring it into the existing seams
 
@@ -96,10 +98,9 @@ source kind**, not a rewrite:
 ```ts
 // viewer-ts/src/data/collection.ts — today:
 type DocsetSource =
-  | { bytes: Uint8Array }   // upload / IndexedDB
-  | { file: string };       // fetch (a `.gz` name is decompressed after fetch)
-// planned add:
-  | { url: string; mode: "streaming" };   // opened via Range-VFS, pages on demand
+  | { bytes: Uint8Array }                  // upload / IndexedDB
+  | { file: string }                       // fetch whole (`.gz` decompressed after)
+  | { url: string; mode: "streaming" };    // Range-VFS, pages on demand (wa-sqlite)
 ```
 
 - `Collection` already merges N books into one TOC / index / search / category
@@ -111,13 +112,13 @@ type DocsetSource =
 - Attachment packs (`.khba`) can likewise be local files or remote URLs; `asset_index`
   already names the owning pack, so the resolver just fetches from the right place.
 
-**Online / hybrid is shipped (browser fetches whole).** *File → Open from URL…* adds a
-remote docset by URL; it is persisted (as a URL, re-fetched each session — the "online"
-part) and merged with bundled + uploaded docsets into one collection, so you can mix a
-product's own docs with remote ones. The only thing still whole-file is the *transport*
-in the browser: a remote `.khb` is fetched entirely before opening, because browser
-**page-level** streaming needs the async-VFS engine below. Natively (`kdhelp inspect
-<url>`, Tauri) the same remote docset already streams page-by-page through the Range-VFS.
+**Online / hybrid is shipped — whole-file *and* page-level.** *File → Open from URL…*
+adds a remote docset by URL; it is persisted (as a URL, re-fetched each session — the
+"online" part) and merged with bundled + uploaded docsets into one collection, so you
+can mix a product's own docs with remote ones. Its **"Stream"** checkbox chooses the
+transport: unchecked fetches the `.khb` whole (works on any CORS host); checked opens
+it **page-by-page over `Range`** through the browser async-VFS engine — the same
+page-level streaming that `kdhelp inspect <url>` / Tauri do natively.
 
 ## Content packs — splitting page bodies out of the `.khb`
 
@@ -193,17 +194,19 @@ small fully-fetched index for a remote book).
 2. Remote docsets in the viewer. **✅ Done** — *File → Open from URL…* + persisted
    remotes, merged into the collection (online / hybrid). The browser still fetches a
    remote `.khb` **whole** (page-level streaming waits on step 3).
-3. **Browser page-level streaming.** **✅ Engine built & measured, with FTS5** —
+3. **Browser page-level streaming.** **✅ Built, wired in & verified, with FTS5.**
    `viewer-ts/src/data/streaming.ts` is an async Range VFS on a **custom FTS5-enabled
-   `wa-sqlite`** (vendored under `viewer-ts/vendor/wa-sqlite/`) that opens a remote
-   `.khb` over `Range`, reads only touched pages (~21 % of a 618 KB file to open +
-   read a page; ~32 % to also run a bm25 `MATCH`), and runs real in-browser FTS5.
-   Verified against Vite's dev server (serves `206`). **One follow-up remains before
-   it replaces `sql.js` as the default:** making `Docset`/`Collection` and their call
-   sites async so a streamed book merges into the live collection — deferred because
-   it makes the common *local* path async for a *remote*-only benefit. Until then the
-   browser fetches a remote `.khb` whole (step 2) and the streaming engine waits
-   behind the source seam.
+   `wa-sqlite`** (vendored under `viewer-ts/vendor/wa-sqlite/`); `StreamingDocset`
+   (`streaming-docset.ts`) implements the shared `IDocset` — **eager-loading the small
+   structure** (toc/categories/keywords/related) at open and **streaming the heavy
+   parts on demand** (page bodies, embedded assets, FTS5 search). The data layer went
+   async where it matters (`Docset`/`Collection` `page`/`asset`/`search`; structure
+   stays sync), so a streamed book **merges into the live collection** — verified: it
+   appears as its own family folder, its pages + graphics stream on click (~21 % of a
+   618 KB file to open + read a page), and its bm25 FTS5 hits interleave with the
+   sql.js books (per-book score normalization keeps the merge fair). Opt-in via *File →
+   Open from URL… → Stream*; the engine is code-split so non-streaming sessions never
+   load it. Whole-file (step 2) stays the default and the fallback for non-Range hosts.
 4. Tauri `khb-asset://` protocol with `Range` support for streamed media.
 5. **Content packs** — a `page_index` table + a compiler `--split` that peels
    `body_html` (and assets) into `.khbp` packs, and a `Docset.page(id)` that routes
