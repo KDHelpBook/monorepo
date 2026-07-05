@@ -66,6 +66,11 @@ export class Collection {
     private readonly docsets: IDocset[],
   ) {}
 
+  /** Build a collection from already-open docsets (native Tauri path / tests). */
+  static of(docsets: IDocset[], language: string): Collection {
+    return new Collection(language, docsets);
+  }
+
   static async load(
     sources: DocsetSource[],
     language: string,
