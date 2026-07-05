@@ -305,7 +305,8 @@ function start(docset: Docset): void {
   // ---- Modes ----
   function setMode(next: Mode): void {
     mode = next;
-    document.querySelectorAll<HTMLElement>(".left-tabs button").forEach((b) => {
+    // Highlight the active tab in both the bottom tabs and the side strip.
+    document.querySelectorAll<HTMLElement>("[data-mode]").forEach((b) => {
       b.classList.toggle("on", b.dataset.mode === next);
     });
     filterbar.style.display = next === "contents" ? "" : "none";

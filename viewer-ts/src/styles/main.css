@@ -214,16 +214,21 @@ body {
 }
 .left-head .hbtn {
   cursor: pointer;
-  color: #345;
+  color: #46607f;
   padding: 0 3px;
-  font-weight: bold;
+  display: inline-flex;
+  align-items: center;
 }
 .left-head .hbtn:hover {
-  color: #000;
+  color: #16325b;
+}
+.left-head .hbtn svg {
+  width: 13px;
+  height: 13px;
+  display: block;
 }
 /* Unpinned pushpin: laid on its side (auto-hide mode), like Visual Studio. */
-.left-head .hbtn.unpinned {
-  display: inline-block;
+.left-head .hbtn.unpinned svg {
   transform: rotate(90deg);
 }
 .filterbar {
@@ -745,6 +750,13 @@ body {
 .left-strip button:hover {
   background: #fbfdff;
   border-left-color: var(--swoosh);
+}
+/* Active mode gets highlighted in the strip too. */
+.left-strip button.on {
+  background: var(--panel);
+  border-left-color: var(--swoosh);
+  color: var(--content-h);
+  font-weight: bold;
 }
 .left-strip button svg {
   width: 15px;

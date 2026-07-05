@@ -160,7 +160,11 @@
           <button class="strip-exp" id="strip-exp" title="Expand panel">
             »
           </button>
-          <button data-action="mode-contents" title="Contents">
+          <button
+            data-action="mode-contents"
+            data-mode="contents"
+            title="Contents"
+          >
             <svg viewBox="0 0 16 16">
               <rect
                 x="2"
@@ -179,7 +183,7 @@
               /></svg
             ><span class="vlabel">Contents</span>
           </button>
-          <button data-action="mode-index" title="Index">
+          <button data-action="mode-index" data-mode="index" title="Index">
             <svg viewBox="0 0 16 16">
               <path d="M4 2h8v12H4z" fill="#fff" stroke="#1f4d8f" />
               <path
@@ -190,7 +194,7 @@
               /></svg
             ><span class="vlabel">Index</span>
           </button>
-          <button data-action="mode-search" title="Search">
+          <button data-action="mode-search" data-mode="search" title="Search">
             <svg viewBox="0 0 16 16">
               <circle
                 cx="7"
@@ -208,7 +212,11 @@
               /></svg
             ><span class="vlabel">Search</span>
           </button>
-          <button data-action="mode-favorites" title="Favorites">
+          <button
+            data-action="mode-favorites"
+            data-mode="favorites"
+            title="Favorites"
+          >
             <svg viewBox="0 0 16 16">
               <path
                 d="M8 2l1.7 3.5 3.8.5-2.8 2.7.7 3.8L8 10.6 4.6 12.5l.7-3.8L2.5 6l3.8-.5z"
@@ -224,13 +232,19 @@
             <span id="left-title">Contents</span>
             <span class="spacer"></span>
             <span
-              class="hbtn"
+              class="hbtn pin"
               id="left-pin"
               title="Auto-hide panel"
               role="button"
               tabindex="0"
-              >📌</span
             >
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path
+                  fill="currentColor"
+                  d="M4.146.146A.5.5 0 0 1 4.5 0h7a.5.5 0 0 1 .354.854L10.243 2.46l.83 2.198 1.846 1.846A.5.5 0 0 1 13 7.5H8.75v5l-.5 1-.5-1v-5H3.5a.5.5 0 0 1-.354-.854L4.992 4.66l.83-2.198L4.146.854a.5.5 0 0 1 0-.708"
+                />
+              </svg>
+            </span>
           </div>
           <div class="filterbar" id="filterbar">
             <label for="filter">Filter by category:</label>
