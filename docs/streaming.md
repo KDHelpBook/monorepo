@@ -1,14 +1,23 @@
 # Streaming, online & hybrid modes
 
-> **Status: native streaming + online/hybrid are built; browser *page-level*
-> streaming is the one piece left.** `compiler/core` has a read-only SQLite VFS
-> (`vfs.rs`): `Docset::open_reader` streams only the pages a query touches (a 2 MB
-> docset reads ~15 % for open + TOC + one page + one search), and the CLI's
-> `kdhelp inspect <url>` reads a remote `.khb` over HTTP `Range`. The viewer has
-> **online / hybrid** loading (*File → Open from URL…*, persisted remotes merged with
-> bundled + uploaded). What remains is browser *page-level* streaming — it fetches a
-> remote `.khb` whole for now (step 3 below), pending an async-VFS SQLite-WASM engine.
-> Offline works throughout (bundled docsets + IndexedDB uploads + PWA).
+> **Status: streaming is proven on every tier — native, HTTP, and now the
+> browser.** `compiler/core` has a read-only SQLite VFS (`vfs.rs`):
+> `Docset::open_reader` streams only the pages a query touches (a 2 MB docset reads
+> ~15 % for open + TOC + one page + one search), and the CLI's `kdhelp inspect
+> <url>` reads a remote `.khb` over HTTP `Range`. The viewer has **online / hybrid**
+> loading (*File → Open from URL…*, persisted remotes merged with bundled +
+> uploaded). And the browser now has a working **async Range VFS**
+> (`viewer-ts/src/data/streaming.ts`, on `wa-sqlite`): opening a remote `.khb` and
+> reading one page by primary key fetches **~18 % of a 139 KB demo file**, mirroring
+> the native win. Two honest caveats remain before it becomes the viewer's default
+> engine: **(1)** the *prebuilt* `wa-sqlite` has **no FTS5**, so real in-browser
+> full-text search still needs a custom Emscripten build (until then the viewer
+> searches the stored `plain` column); **(2)** merging a *streamed* book into the
+> live `Collection` means making the (currently synchronous, `sql.js`) data layer
+> async — a trade deferred because it would make every *local* docset async for a
+> benefit only large *remote* docsets receive. So the browser still fetches a remote
+> `.khb` whole today; the streaming engine is built and measured, waiting behind that
+> seam. Offline works throughout (bundled docsets + IndexedDB uploads + PWA).
 
 ## Why SQLite makes this possible
 
@@ -50,11 +59,27 @@ Streaming needs a **SQLite VFS over byte ranges**:
   **`kdhelp inspect <url>`** opens a remote `.khb` this way; e.g. it reads a docset's
   full metadata by fetching ~1×64 KiB block, and a 2 MB docset streams ~15 % for
   open + TOC + one page + one search.
-- **Browser — still design.** An FTS5-capable, VFS-enabled SQLite-WASM build (the
-  official `sqlite-wasm`, or `sql.js-httpvfs`) opens a URL as a database, fetching
-  pages via `Range`. This would also restore *real* FTS5 in the browser (today the
-  viewer searches the stored `plain` column because stock `sql.js` has no FTS5 — see
-  [format.md](format.md)).
+- **Browser — built and measured.** `viewer-ts/src/data/streaming.ts` implements an
+  **async Range VFS** on [`wa-sqlite`](https://github.com/rhashimoto/wa-sqlite)
+  (its Asyncify build lets a VFS method `await` a `fetch(url, {headers:{Range}})`).
+  `RangeVFS` treats the file as immutable (writes/locks are no-ops; it reports
+  `IMMUTABLE`), coalesces reads into cached blocks (64 KiB default; tunable down to
+  one 4 KiB page), and `streamProbe(url)` opens a remote `.khb`, reads its metadata
+  and one page **by primary key**, and reports the bytes fetched. On the 139 KB demo
+  docset that is **~2.9 % to open + parse the schema** and **~18 % to also read a
+  full page** — the browser mirror of the native VFS's 15 %-of-2 MB.
+
+  Two things keep this from being the viewer's *default* engine yet:
+  - **No FTS5 in the prebuilt binary.** `wa-sqlite`'s shipped wasm is built without
+    FTS5, so it would *not* by itself restore real in-browser full-text search — that
+    needs a custom Emscripten build (`-DSQLITE_ENABLE_FTS5`). Until then the viewer
+    keeps searching the stored `plain` column (see [format.md](format.md)).
+  - **Sync → async cascade.** `sql.js` is synchronous and the whole data layer
+    (`Docset`/`Collection`) and its call sites are written against that; `wa-sqlite`'s
+    async VFS is asynchronous. Merging a streamed book into the live collection means
+    making that layer async everywhere — which also makes every *local* docset async,
+    for a benefit only large *remote* docsets get. So the engine is kept as a proven,
+    self-contained module behind the source seam rather than swapped in wholesale.
 
 ## Wiring it into the existing seams
 
@@ -161,12 +186,17 @@ small fully-fetched index for a remote book).
 2. Remote docsets in the viewer. **✅ Done** — *File → Open from URL…* + persisted
    remotes, merged into the collection (online / hybrid). The browser still fetches a
    remote `.khb` **whole** (page-level streaming waits on step 3).
-3. **Browser page-level streaming** — the one large piece left: swap `sql.js` for an
-   FTS5-capable, async-VFS SQLite-WASM (official `sqlite-wasm` with an async Range VFS
-   via Asyncify, or `sql.js-httpvfs`). Rewrites `viewer-ts/src/data/docset.ts` against
-   the new engine; also restores *real* FTS5 in the browser (today it searches the
-   stored `plain` column — see [format.md](format.md)). Higher risk (engine swap) and
-   needs a `Range`-capable host to verify.
+3. **Browser page-level streaming.** **✅ Engine built & measured** —
+   `viewer-ts/src/data/streaming.ts` is an async Range VFS on `wa-sqlite` that opens a
+   remote `.khb` over `Range` and reads only touched pages (~18 % of a 139 KB file to
+   open + read a page; verified against Vite's dev server, which serves `206`). **Two
+   follow-ups remain before it replaces `sql.js` as the default:** (a) a custom
+   Emscripten `wa-sqlite` build *with FTS5* to restore real in-browser full-text
+   search (the prebuilt binary has none); (b) making `Docset`/`Collection` and their
+   call sites async so a streamed book merges into the live collection — deferred
+   because it makes the common *local* path async for a *remote*-only benefit. Until
+   then the browser fetches a remote `.khb` whole (step 2) and the streaming engine
+   waits behind the source seam.
 4. Tauri `khb-asset://` protocol with `Range` support for streamed media.
 5. **Content packs** — a `page_index` table + a compiler `--split` that peels
    `body_html` (and assets) into `.khbp` packs, and a `Docset.page(id)` that routes

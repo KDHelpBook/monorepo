@@ -29,7 +29,18 @@ sql.js in the browser) — keep the SQL in sync with `compiler/core/src/docset.r
 Also: sql.js's default wasm build has **no FTS5**, so the prebuilt `pages_fts`
 index is unusable in the browser. The viewer searches the stored `plain` column
 in JS instead (`viewer-ts/src/data/docset.ts` `search()`); native/Tauri keep real
-FTS5 (bm25 + stemming). A future upgrade could swap in an FTS5-enabled SQLite-wasm.
+FTS5 (bm25 + stemming). An FTS5-enabled SQLite-wasm would restore it — but the
+off-the-shelf `wa-sqlite` binary also ships without FTS5, so that still needs a
+custom Emscripten build.
+
+Streaming engine (browser): `viewer-ts/src/data/streaming.ts` is a **proven,
+self-contained async Range VFS on `wa-sqlite`** — it opens a remote `.khb` over
+HTTP `Range` and reads only touched pages (~18 % of a 139 KB file to open + read
+one page). It is deliberately **not** wired into the sync `sql.js` `Collection`
+yet: doing so means an async cascade through the whole data layer for a benefit
+only large *remote* docsets get, and the prebuilt engine can't add FTS5 anyway.
+See [docs/streaming.md](docs/streaming.md). Native/Tauri already stream via
+`compiler/core/src/vfs.rs`.
 - `docs/` — `.khb` format spec + compiler manual.
 
 The original single-file prototype (`help-viewer.html`) has been **removed** now
