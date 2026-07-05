@@ -44,10 +44,17 @@ that the TypeScript viewer reached parity; it lives in git history (commit
 - `.khba` — sidecar SQLite file of attachments (images/downloads) for a `.khb`.
   Attachments may instead be **embedded** in the `.khb` (`assets` table, format v2);
   one `.khb` can have several `.khba` packs. Pages link assets as `asset:<path>`;
-  the viewer resolves them to blob URLs (`compiler/core/src/assets.rs`). Resolution
+  the viewer resolves them to `data:` URLs (`compiler/core/src/assets.rs`). Resolution
   is routed by the `asset_index` table (path → pack; `''` = embedded, else a sidecar's
   `meta.pack` id) — one lookup, no probing — which is what makes streaming packs over
   HTTP viable later (`docs/streaming.md`).
+
+## Security (untrusted docsets)
+- Page bodies (`body_html`) are **untrusted** and rendered in a **sandboxed `<iframe>`**
+  (no `allow-scripts`/`allow-same-origin`) → JS inert, origin-isolated from the app
+  (no parent DOM / IndexedDB / chrome access). Assets inline as `data:`; in-content
+  links drive the top hash (router), external links `target=_blank rel=noopener`. The
+  Search page (app UI) stays in the normal `#content` div. See `docs/format.md` §Security.
 
 ## Key decisions & conventions
 - **Rust `core` is the engine for CLI + Tauri.** The browser mirrors its SQL via

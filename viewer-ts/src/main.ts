@@ -1,4 +1,6 @@
 import "./styles/main.css";
+// The page-body typography, injected as a string into the sandboxed content frame.
+import contentCss from "./styles/content.css?inline";
 import { Collection, type DocsetSource } from "./data/collection";
 import { Docset, type TocNode } from "./data/docset";
 import { allDocsets, deleteDocset, putDocset } from "./data/library";
@@ -141,7 +143,8 @@ function start(
   }
   const leftBody = $("#left-body");
   const leftTitle = $("#left-title");
-  const content = $("#content");
+  const content = $("#content"); // app UI (Search page)
+  const frame = $<HTMLIFrameElement>("#content-frame"); // sandboxed page bodies
   const contentWrap = $("#content-wrap");
   const filterbar = $("#filterbar");
   const filterSel = $<HTMLSelectElement>("#filter");
@@ -170,8 +173,6 @@ function start(
   // Terms to highlight in the opened page — set when a search result is clicked,
   // persisted across navigation (like MS Document Explorer) until explicitly cleared.
   let highlightTerms: string[] = [];
-  // Object URLs minted for the current page's attachments; revoked on navigation.
-  let assetUrls: string[] = [];
 
   const escapeRe = (t: string): string => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const queryTerms = (q: string): string[] => [
@@ -607,7 +608,7 @@ function start(
     });
 
     renderSearchResults(query);
-    contentWrap.scrollTop = 0;
+    content.scrollTop = 0;
     renderTabs();
     updateFavBtn();
     highlightTree();
@@ -743,34 +744,89 @@ function start(
     return d.innerHTML;
   }
 
-  // Resolve `asset:<path>` references in the loaded page against the docset's
-  // attachment store (embedded table or sidecar `.khba`). Images render inline;
-  // other files become download links. Object URLs are tracked for revocation.
-  // `root` is a *detached* container so an `asset:` src never triggers a (failing)
-  // network fetch — we rewrite it to a blob URL before the nodes are connected.
+  // Resolve `asset:<path>` references to `data:` URLs (self-contained, so they load
+  // inside the origin-isolated content frame where blob URLs would not). Images
+  // render inline; other files become downloads.
   function resolveAssets(root: ParentNode, pageId: string): void {
     const rewrite = (el: Element, attr: "src" | "href"): void => {
       const raw = el.getAttribute(attr);
       if (!raw || !raw.startsWith("asset:")) return;
-      const blob = collection.asset(pageId, raw.slice("asset:".length));
+      const path = raw.slice("asset:".length);
+      const blob = collection.asset(pageId, path);
       if (!blob) {
-        el.removeAttribute(attr); // avoid an ERR_UNKNOWN_URL_SCHEME fetch
+        el.removeAttribute(attr);
         el.setAttribute("data-asset-missing", "");
         return;
       }
-      const url = URL.createObjectURL(
-        new Blob([blob.data as BlobPart], { type: blob.mime }),
-      );
-      assetUrls.push(url);
-      el.setAttribute(attr, url);
+      el.setAttribute(attr, `data:${blob.mime};base64,${toBase64(blob.data)}`);
       if (attr === "href") {
-        const name = raw.slice("asset:".length).split("/").pop() ?? "download";
-        (el as HTMLAnchorElement).download = name;
+        (el as HTMLAnchorElement).download = path.split("/").pop() ?? "download";
       }
     };
     root.querySelectorAll("img[src^='asset:']").forEach((el) => rewrite(el, "src"));
     root.querySelectorAll("a[href^='asset:']").forEach((el) => rewrite(el, "href"));
   }
+
+  // Base64-encode bytes (chunked to avoid call-stack limits on big attachments).
+  function toBase64(bytes: Uint8Array): string {
+    let bin = "";
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
+    }
+    return btoa(bin);
+  }
+
+  // Drop elements that could misbehave even inside the sandbox, and inline event
+  // handlers. The frame (no allow-scripts) already blocks JS; this is hygiene.
+  function stripDangerous(root: ParentNode): void {
+    root
+      .querySelectorAll(
+        "script,style,iframe,object,embed,form,meta,base,link,noscript",
+      )
+      .forEach((el) => el.remove());
+    root.querySelectorAll<HTMLElement>("*").forEach((el) => {
+      for (const attr of [...el.attributes]) {
+        if (attr.name.toLowerCase().startsWith("on")) {
+          el.removeAttribute(attr.name);
+        }
+      }
+    });
+  }
+
+  // Retarget links for the sandboxed frame: internal (`#local` / see-also) links
+  // navigate the top window's hash (→ our router); external links open a new tab;
+  // anything else is neutralised.
+  function rewriteFrameLinks(root: ParentNode, fromId: string): void {
+    root.querySelectorAll<HTMLAnchorElement>("a").forEach((a) => {
+      const rel = a.getAttribute("data-rel");
+      if (rel) {
+        a.setAttribute("href", `#${rel}`);
+        a.setAttribute("target", "_top");
+        a.removeAttribute("data-rel");
+        a.classList.remove("rel-link");
+        return;
+      }
+      const href = a.getAttribute("href") ?? "";
+      if (href.startsWith("#")) {
+        a.setAttribute("href", `#${collection.resolveLink(fromId, href.slice(1))}`);
+        a.setAttribute("target", "_top");
+      } else if (/^(https?:|mailto:|tel:)/i.test(href)) {
+        a.setAttribute("target", "_blank");
+        a.setAttribute("rel", "noopener noreferrer");
+      } else if (!href.startsWith("data:")) {
+        a.removeAttribute("href"); // e.g. javascript: — inert in the sandbox anyway
+      }
+    });
+  }
+
+  // Wrap page-body HTML into a full document for the sandboxed frame, injecting the
+  // theme CSS (the frame is isolated and can't see the app stylesheet).
+  const frameDoc = (bodyHtml: string): string =>
+    `<!doctype html><html><head><meta charset="utf-8">` +
+    `<meta name="referrer" content="no-referrer">` +
+    `<style>${contentCss}\n:root{--content-size:${fontSize}px}</style>` +
+    `</head><body class="content">${bodyHtml}</body></html>`;
 
   // Wrap every occurrence of the active search terms in the content in <mark>,
   // skipping script/style and our keyword footer. Runs after each page load.
@@ -858,29 +914,33 @@ function start(
 
   function loadContent(id: string): void {
     currentId = id;
-    // Release the previous page's attachment object URLs before rendering the next.
-    for (const u of assetUrls) URL.revokeObjectURL(u);
-    assetUrls = [];
-    content.classList.toggle("search-mode", id === SEARCH_ID);
     if (id === SEARCH_ID) {
-      renderSearchPage();
+      renderSearchPage(); // app UI, rendered into #content (not the sandbox)
+      frame.style.display = "none";
+      content.style.display = "";
       return;
     }
     const info = pages.get(id);
     const page = collection.page(id);
     const title = page?.title ?? info?.title ?? id;
-    // Build the page in a detached container, resolve assets to blob URLs and apply
-    // highlights there, then connect it — so the DOM never holds an `asset:` URL.
-    const holder = document.createElement("div");
-    holder.innerHTML = page
-      ? decorate(page.bodyHtml, id)
-      : `<h1>${esc(s.notFoundTitle)}</h1><p>${s.notFoundBody(esc(id))}</p>`;
-    resolveAssets(holder, id);
-    applyHighlight(holder);
-    content.replaceChildren(...holder.childNodes);
-    const firstHit = content.querySelector<HTMLElement>("mark.hl");
-    if (firstHit) firstHit.scrollIntoView({ block: "center", inline: "nearest" });
-    else contentWrap.scrollTop = 0;
+    if (page) {
+      // Build in a detached container (parent origin — full DOM access), then hand
+      // the serialized HTML to the sandboxed frame, which isolates the untrusted
+      // docset markup from the app's origin.
+      const holder = document.createElement("div");
+      holder.innerHTML = decorate(page.bodyHtml, id);
+      stripDangerous(holder);
+      resolveAssets(holder, id); // asset: → data:
+      applyHighlight(holder);
+      rewriteFrameLinks(holder, id);
+      frame.srcdoc = frameDoc(holder.innerHTML);
+    } else {
+      frame.srcdoc = frameDoc(
+        `<h1>${esc(s.notFoundTitle)}</h1><p>${s.notFoundBody(esc(id))}</p>`,
+      );
+    }
+    frame.style.display = "";
+    content.style.display = "none";
     document.title = `${title} — kdhelp`;
     const { docsetId, localId } = collection.split(id);
     address.value = `ms-help://${docsetId}/${localId}.htm`;
@@ -931,11 +991,11 @@ function start(
         break;
       case "font-up":
         fontSize = Math.min(20, fontSize + 1);
-        content.style.setProperty("--content-size", `${fontSize}px`);
+        if (currentId !== SEARCH_ID) loadContent(currentId); // re-inject frame CSS
         break;
       case "font-down":
         fontSize = Math.max(11, fontSize - 1);
-        content.style.setProperty("--content-size", `${fontSize}px`);
+        if (currentId !== SEARCH_ID) loadContent(currentId);
         break;
       case "print":
         window.print();
@@ -1169,30 +1229,8 @@ function start(
   // ＋ opens the current page in a new tab.
   $("#tab-new").addEventListener("click", () => openPage(currentId, true));
 
-  // Resolve a click on an in-content link to a fully-qualified page id, or null.
-  const contentLinkTarget = (e: MouseEvent): string | null => {
-    const el = e.target as HTMLElement;
-    // "See also" links carry a full id in data-rel (may be cross-book).
-    const rel = el.closest<HTMLElement>("a[data-rel]");
-    if (rel) return rel.getAttribute("data-rel");
-    // Other in-content links are `#localId`, relative to the current book.
-    const a = el.closest<HTMLAnchorElement>('a[href^="#"]');
-    return a ? collection.resolveLink(currentId, a.getAttribute("href")!.slice(1)) : null;
-  };
-  content.addEventListener("click", (e) => {
-    const target = contentLinkTarget(e);
-    if (target === null) return;
-    e.preventDefault();
-    openPage(target, wantNew(e));
-  });
-  content.addEventListener("auxclick", (e) => {
-    if (e.button !== 1) return;
-    const target = contentLinkTarget(e);
-    if (target === null) return;
-    e.preventDefault();
-    openPage(target, true);
-  });
-
+  // Page-body links live inside the sandboxed frame and navigate the top window's
+  // hash (see rewriteFrameLinks) — handled by the hashchange listener below.
   window.addEventListener("hashchange", () => {
     const id = location.hash.slice(1);
     if (id && id !== currentId) openPage(id);

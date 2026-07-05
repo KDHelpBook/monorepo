@@ -108,7 +108,7 @@ For the desktop app, stream bytes to the webview through a **custom URI scheme**
 - the handler resolves the pack via `asset_index`, then reads from the embedded
   table, a local `.khba`, or a remote one over Range-VFS;
 - it honours the request's `Range` header, so `<video>`/`<audio>` seek and large
-  downloads stream instead of being buffered whole into a blob URL (which is what the
+  downloads stream instead of being inlined whole as a `data:` URL (which is what the
   browser build does today for simplicity).
 
 ## Online / hybrid (the MS Help model)

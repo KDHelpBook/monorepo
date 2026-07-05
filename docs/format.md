@@ -113,7 +113,7 @@ ORDER BY score DESC;
 Images and downloadable files live in the `assets` table, keyed by a docset-relative
 path (e.g. `assets/diagram.svg`). Pages reference them via the **`asset:<path>`**
 scheme, which the compiler rewrites from ordinary `assets/…` image/link targets; the
-viewer resolves each `asset:` URL to a blob URL at load time (images render inline,
+viewer resolves each `asset:` URL to a `data:` URL at load time (images render inline,
 other types become download links). Plain text and the FTS index are unaffected.
 
 Attachments can be stored two ways:
@@ -134,6 +134,26 @@ read of the right file, instead of N probes (see [streaming.md](streaming.md)).
 In a packed distribution, `docsets.json` lists a docset's attachment packs in an
 `attachments` array; `kdhelp pack`/`patch` auto-detect the sibling files `foo.khba`
 and `foo.<tag>.khba` next to `foo.khb` and rebuild `asset_index` to cover them all.
+
+## Security — opening untrusted docsets
+
+A `.khb` can come from anywhere (a user opens/uploads one), so its stored `body_html`
+is **untrusted**. The viewer renders every page body in a **sandboxed `<iframe>`**
+with neither `allow-scripts` nor `allow-same-origin`, so the frame is an isolated,
+opaque origin:
+
+- No JavaScript runs — `<script>`, inline `on*` handlers and `javascript:` URLs are
+  all inert.
+- Being a different origin, the frame **cannot reach the app**: no access to the
+  parent DOM, `localStorage`, or the IndexedDB where other docsets live. Content CSS
+  is likewise confined to the frame and can't spoof the app chrome.
+- Attachments are inlined as `data:` URLs (self-contained, so they load in the
+  isolated frame). In-content links navigate the top window's hash (→ the router);
+  external links open in a new tab with `rel="noopener"`.
+- The bundled compiler additionally renders Markdown with raw HTML **escaped**, so
+  first-party docsets never contain markup to sanitise in the first place.
+
+App-generated UI (the Search page) renders in the normal document, not the frame.
 
 ## `.khbb` (binary)
 

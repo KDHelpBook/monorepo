@@ -488,7 +488,18 @@
             <input id="address" spellcheck="false" value="" />
           </div>
           <div class="content-wrap" id="content-wrap">
-            <div class="content" id="content"></div>
+            <!-- Page bodies (untrusted docset HTML) render here, origin-isolated:
+                 no allow-scripts / allow-same-origin. Links navigate the top via
+                 hash (user-activated); external links open in a new tab. -->
+            <iframe
+              id="content-frame"
+              class="content-frame"
+              title="Documentation"
+              sandbox="allow-top-navigation-by-user-activation allow-popups allow-popups-to-escape-sandbox"
+              referrerpolicy="no-referrer"
+            ></iframe>
+            <!-- App-generated UI (the Search results page) — not untrusted. -->
+            <div class="content" id="content" style="display: none"></div>
           </div>
         </div>
       </div>
