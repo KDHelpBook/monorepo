@@ -29,8 +29,10 @@ index is unusable in the browser. The viewer searches the stored `plain` column
 in JS instead (`viewer-ts/src/data/docset.ts` `search()`); native/Tauri keep real
 FTS5 (bm25 + stemming). A future upgrade could swap in an FTS5-enabled SQLite-wasm.
 - `docs/` — `.khb` format spec + compiler manual.
-- `help-viewer.html` — original single-file prototype, the **reference to port
-  from** (removed once parity is verified). `HANDOFF.md` documents it (Polish).
+
+The original single-file prototype (`help-viewer.html`) has been **removed** now
+that the TypeScript viewer reached parity; it lives in git history (commit
+`Initial`/`Baseline`) and `HANDOFF.md` documents it (Polish).
 
 ## Formats
 - `.khb` — SQLite docset; the form queried at runtime.

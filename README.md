@@ -19,9 +19,14 @@ This is a monorepo with three parts:
 | [`viewer-ts/`](viewer-ts/) | Vite + TypeScript viewer — **UI only**, backed by the wasm `core`. |
 | [`docs/`](docs/) | The `.khb` format specification and the compiler manual. |
 
-`help-viewer.html` is the original single-file prototype, kept as the visual /
-behavioral reference to port from (see `HANDOFF.md`). It will be removed once
-the new viewer reaches parity.
+The `viewer-ts` app began as a single-file HTML prototype (`help-viewer.html`,
+documented in `HANDOFF.md`); that prototype has been removed now that the viewer
+reached parity — it remains in the project's git history.
+
+## Desktop (Tauri)
+
+The viewer runs unchanged inside a **Tauri** window for an offline desktop app —
+see [`docs/desktop.md`](docs/desktop.md).
 
 ## Formats
 
