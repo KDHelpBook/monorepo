@@ -336,6 +336,15 @@ function start(docset: Docset): void {
     setMode(m);
   };
 
+  // Pushpin: when pinned (default) the panel stays docked; when unpinned it
+  // auto-hides after you pick a topic. The × button just closes the panel.
+  let pinned = true;
+  const pinBtn = $("#left-pin");
+  const updatePin = (): void => {
+    pinBtn.classList.toggle("unpinned", !pinned);
+    pinBtn.title = pinned ? "Auto-hide (unpin)" : "Dock (pin)";
+  };
+
   // ---- Content ----
   function decorate(html: string, id: string): string {
     const d = document.createElement("div");
@@ -390,7 +399,8 @@ function start(docset: Docset): void {
 
   function openPage(id: string): void {
     loadContent(id);
-    if (narrow()) collapse(); // close the drawer after picking a topic
+    // Close the drawer (mobile) or auto-hide (unpinned) after picking a topic.
+    if (narrow() || !pinned) collapse();
   }
 
   // ---- Actions (menu / toolbar / tabs) ----
@@ -566,8 +576,14 @@ function start(docset: Docset): void {
   $("#btn-pane").addEventListener("click", () =>
     win.classList.toggle("is-collapsed"),
   );
-  $("#left-pin").addEventListener("click", collapse);
-  $("#left-close").addEventListener("click", collapse);
+  pinBtn.addEventListener("click", () => {
+    pinned = !pinned;
+    updatePin();
+    if (pinned) expand();
+    else collapse(); // auto-hide immediately on unpin
+  });
+  updatePin();
+  $("#left-close").addEventListener("click", collapse); // × closes the panel
   $("#strip-exp").addEventListener("click", expand);
   $("#scrim").addEventListener("click", collapse);
 

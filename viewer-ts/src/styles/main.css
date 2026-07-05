@@ -220,6 +220,11 @@ body {
 .left-head .hbtn:hover {
   color: #000;
 }
+/* Unpinned pushpin: laid on its side (auto-hide mode), like Visual Studio. */
+.left-head .hbtn.unpinned {
+  display: inline-block;
+  transform: rotate(90deg);
+}
 .filterbar {
   padding: 6px;
   flex: none;
