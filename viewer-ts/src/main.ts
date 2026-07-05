@@ -161,10 +161,11 @@ function start(
   const SEARCH_ID = "@search";
   const tabs: { id: string; query?: string }[] = [];
   let active = -1;
-  const searchScope = { category: "", book: "", sort: "rank" };
+  const searchScope = { category: "", product: "", sort: "rank" };
   let currentId = "";
   let mode: Mode = "contents";
   let filterCategory = "";
+  let filterProduct = ""; // family/collection scope (union by default)
   let fontSize = 13;
   // Terms to highlight in the opened page — set when a search result is clicked,
   // persisted across navigation (like MS Document Explorer) until explicitly cleared.
@@ -231,13 +232,14 @@ function start(
   const isAncestorOfCurrent = (id: string): boolean =>
     (pages.get(currentId)?.path ?? []).includes(id);
 
-  function treeNode(n: TocNode): HTMLLIElement {
+  function treeNode(n: TocNode, forceOpen = false): HTMLLIElement {
     const li = document.createElement("li");
     const kids = n.children.length > 0;
     const row = document.createElement("div");
     row.className = "node" + (n.group ? " group" : "");
     row.dataset.id = n.pageId;
-    const open = isAncestorOfCurrent(n.pageId) || n.pageId === currentId;
+    const open =
+      forceOpen || isAncestorOfCurrent(n.pageId) || n.pageId === currentId;
     row.innerHTML =
       `<span class="twisty ${kids ? "" : "leaf"}">${kids ? (open ? "−" : "+") : ""}</span>` +
       (n.group ? groupIcon() : pageIcon(kids)) +
@@ -246,7 +248,7 @@ function start(
     if (kids) {
       const sub = document.createElement("ul");
       sub.style.display = open ? "" : "none";
-      for (const c of n.children) sub.appendChild(treeNode(c));
+      for (const c of n.children) sub.appendChild(treeNode(c, forceOpen));
       li.appendChild(sub);
       const twistyEl = row.querySelector(".twisty")!;
       const toggle = (): void => {
@@ -267,29 +269,54 @@ function start(
 
   function renderTree(): void {
     leftBody.innerHTML = "";
+    const ul = document.createElement("ul");
+    ul.className = "tree";
+    // A product scope drills into that family's subtree (drops the wrapper).
+    const roots = familyRoots(filterProduct);
     if (filterCategory) {
+      // Prune to pages in the category, but KEEP the folder/tree structure (the
+      // ancestors leading to a match survive); reveal it fully expanded.
       const ids = new Set(collection.pagesByCategory(filterCategory));
-      const list = document.createElement("div");
-      list.className = "index-list";
-      for (const [id, info] of pages) {
-        if (!ids.has(id)) continue;
-        const row = document.createElement("div");
-        row.className = "node";
-        row.dataset.id = id;
-        row.innerHTML =
-          pageIcon(false) + `<span class="label">${esc(info.title)}</span>`;
-        linkOpen(row, id);
-        list.appendChild(row);
-      }
-      leftBody.appendChild(list);
+      const pruned = pruneTree(roots, (id) => ids.has(id) && inProduct(id));
+      for (const n of pruned) ul.appendChild(treeNode(n, true));
     } else {
-      const ul = document.createElement("ul");
-      ul.className = "tree";
-      for (const n of toc) ul.appendChild(treeNode(n));
-      leftBody.appendChild(ul);
+      for (const n of roots) ul.appendChild(treeNode(n));
     }
+    leftBody.appendChild(ul);
     highlightTree();
   }
+
+  // Keep a node when it is a matching page or has a matching descendant, so the
+  // path (folders + intermediate pages) to every match is preserved.
+  function pruneTree(
+    nodes: TocNode[],
+    keep: (id: string) => boolean,
+  ): TocNode[] {
+    const out: TocNode[] = [];
+    for (const n of nodes) {
+      const children = n.children.length ? pruneTree(n.children, keep) : [];
+      if (children.length || (!n.group && keep(n.pageId))) {
+        out.push({
+          pageId: n.pageId,
+          title: n.title,
+          group: n.group,
+          children,
+        });
+      }
+    }
+    return out;
+  }
+
+  // True if a page belongs to the scoped product (or no product scope is set).
+  const inProduct = (nsId: string): boolean =>
+    !filterProduct || collection.collectionOf(nsId) === filterProduct;
+  // The top-level nodes to render for a product scope: the matching family's
+  // children (unwrapped), or the whole toc when unscoped / ungrouped.
+  const familyRoots = (product: string): TocNode[] => {
+    if (!product) return toc;
+    const g = toc.find((n) => n.group && n.pageId === `@collection:${product}`);
+    return g ? g.children : toc;
+  };
 
   const highlightTree = (): void => {
     leftBody.querySelectorAll<HTMLElement>(".node").forEach((el) => {
@@ -300,6 +327,8 @@ function start(
   function syncTree(): void {
     filterCategory = "";
     filterSel.value = "";
+    filterProduct = "";
+    $<HTMLSelectElement>("#filter-product").value = "";
     showMode("contents");
     const info = pages.get(currentId);
     if (!info) return;
@@ -322,18 +351,19 @@ function start(
   // ---- Index ----
   function renderIndex(): void {
     const locale = collection.language || "en";
-    // Same "Filtered by:" facet as Contents — restrict the index to keywords that
-    // still point at a page in the chosen category.
+    // Same "Filtered by:" facets as Contents — restrict the index to keywords that
+    // still point at a page in the chosen product and/or category.
     const allowed = filterCategory
       ? new Set(collection.pagesByCategory(filterCategory))
       : null;
     const keys = collection
       .keywords()
-      .map((k) =>
-        allowed
-          ? { term: k.term, pageIds: k.pageIds.filter((id) => allowed.has(id)) }
-          : k,
-      )
+      .map((k) => ({
+        term: k.term,
+        pageIds: k.pageIds.filter(
+          (id) => inProduct(id) && (!allowed || allowed.has(id)),
+        ),
+      }))
       .filter((k) => k.pageIds.length > 0)
       .sort((a, b) =>
         a.term.localeCompare(b.term, locale, { sensitivity: "base" }),
@@ -447,9 +477,9 @@ function start(
       const allowed = new Set(collection.pagesByCategory(searchScope.category));
       hits = hits.filter((h) => allowed.has(h.pageId));
     }
-    if (searchScope.book) {
+    if (searchScope.product) {
       hits = hits.filter(
-        (h) => collection.split(h.pageId).docsetId === searchScope.book,
+        (h) => collection.collectionOf(h.pageId) === searchScope.product,
       );
     }
     const locale = collection.language || "en";
@@ -485,11 +515,11 @@ function start(
       box.innerHTML = `<div class="empty">${esc(s.noResults)}<br><b>${esc(q)}</b></div>`;
       return;
     }
-    const multiBook = collection.books().length > 1;
+    const showSource = collection.books().length > 1;
     box.innerHTML = "";
     for (const hit of hits) {
       const trail = crumb(hit.pageId);
-      const book = multiBook ? esc(collection.docsetTitle(hit.pageId)) : "";
+      const book = showSource ? esc(collection.docsetTitle(hit.pageId)) : "";
       const source = [trail === "—" ? "" : trail, book].filter(Boolean).join(" · ");
       const div = document.createElement("div");
       div.className = "sp-hit";
@@ -515,8 +545,8 @@ function start(
     document.title = `${s.search} — kdhelp`;
     address.value = `search:${query}`;
     const cats = collection.categories();
-    const books = collection.books();
-    const multiBook = books.length > 1;
+    const products = collection.families();
+    const multiProduct = products.length > 1;
     const opts = (
       items: { id: string; title: string }[],
       first: string,
@@ -532,14 +562,16 @@ function start(
       `<button type="submit" class="sp-go">${esc(s.search)}</button>` +
       `</form>` +
       `<div class="sp-controls">` +
-      `<label>${esc(s.filterLabel)} <select id="sp-cat">${opts(cats, s.filterAll)}</select></label>` +
-      (multiBook
-        ? `<label>${esc(s.scopeBook)} <select id="sp-book">${opts(books, s.allBooks)}</select></label>`
+      (multiProduct
+        ? `<label>${esc(s.scopeProduct)} <select id="sp-product">${opts(products, s.allProducts)}</select></label>`
         : "") +
+      `<label>${esc(s.filterLabel)} <select id="sp-cat">${opts(cats, s.filterAll)}</select></label>` +
       `<label>${esc(s.sortBy)} <select id="sp-sort">` +
       `<option value="rank">${esc(s.sortRank)}</option>` +
       `<option value="title">${esc(s.sortTitle)}</option>` +
-      (multiBook ? `<option value="source">${esc(s.sortSource)}</option>` : "") +
+      (multiProduct
+        ? `<option value="source">${esc(s.sortSource)}</option>`
+        : "") +
       `</select></label>` +
       `<span class="sp-count" id="sp-count"></span>` +
       `</div>` +
@@ -547,10 +579,10 @@ function start(
       `</div>`;
 
     const catSel = $<HTMLSelectElement>("#sp-cat");
-    const bookSel = document.querySelector<HTMLSelectElement>("#sp-book");
+    const productSel = document.querySelector<HTMLSelectElement>("#sp-product");
     const sortSel = $<HTMLSelectElement>("#sp-sort");
     catSel.value = searchScope.category;
-    if (bookSel) bookSel.value = searchScope.book;
+    if (productSel) productSel.value = searchScope.product;
     sortSel.value = searchScope.sort;
     const rerun = (): void => renderSearchResults(tabs[active]?.query ?? "");
     $("#sp-form").addEventListener("submit", (e) => {
@@ -565,8 +597,8 @@ function start(
       searchScope.category = catSel.value;
       rerun();
     });
-    bookSel?.addEventListener("change", () => {
-      searchScope.book = bookSel.value;
+    productSel?.addEventListener("change", () => {
+      searchScope.product = productSel.value;
       rerun();
     });
     sortSel.addEventListener("change", () => {
@@ -1044,6 +1076,24 @@ function start(
   }
   filterSel.addEventListener("change", () => {
     filterCategory = filterSel.value;
+    if (mode === "contents") renderTree();
+    else if (mode === "index") renderIndex();
+  });
+
+  // Product (family) scope — only meaningful when more than one family is loaded.
+  const productSel = $<HTMLSelectElement>("#filter-product");
+  const families = collection.families();
+  if (families.length > 1) {
+    for (const f of families) {
+      const o = document.createElement("option");
+      o.value = f.id;
+      o.textContent = f.title;
+      productSel.appendChild(o);
+    }
+    $("#filter-product-row").style.display = "";
+  }
+  productSel.addEventListener("change", () => {
+    filterProduct = productSel.value;
     if (mode === "contents") renderTree();
     else if (mode === "index") renderIndex();
   });

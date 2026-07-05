@@ -27,6 +27,8 @@ export interface Strings {
   // left panel
   filterLabel: string;
   filterAll: string;
+  filterProduct: string;
+  filterAllProducts: string;
   searchPlaceholder: string;
   searchPrompt: string;
   noResults: string;
@@ -37,8 +39,8 @@ export interface Strings {
   sortRank: string;
   sortTitle: string;
   sortSource: string;
-  scopeBook: string;
-  allBooks: string;
+  scopeProduct: string;
+  allProducts: string;
   sourceLabel: string;
   favEmpty1: string;
   favEmpty2: string;
@@ -85,6 +87,8 @@ const en: Strings = {
   favorites: "Favorites",
   filterLabel: "Filter by category:",
   filterAll: "(all)",
+  filterProduct: "Filter by product:",
+  filterAllProducts: "(all products)",
   searchPlaceholder: "Type words to search…",
   searchPrompt: "Type words to search the documentation.",
   noResults: "No results for:",
@@ -94,8 +98,8 @@ const en: Strings = {
   sortRank: "Rank",
   sortTitle: "Title",
   sortSource: "Source",
-  scopeBook: "Book:",
-  allBooks: "(all books)",
+  scopeProduct: "Product:",
+  allProducts: "(all products)",
   sourceLabel: "Source:",
   favEmpty1: "No favorites yet.",
   favEmpty2: "Open a page and click ☆ Favorite.",
@@ -140,6 +144,8 @@ const pl: Strings = {
   favorites: "Ulubione",
   filterLabel: "Filtruj wg kategorii:",
   filterAll: "(wszystkie)",
+  filterProduct: "Filtruj wg produktu:",
+  filterAllProducts: "(wszystkie produkty)",
   searchPlaceholder: "Wpisz szukane słowa…",
   searchPrompt: "Wpisz słowa, aby przeszukać dokumentację.",
   noResults: "Brak wyników dla:",
@@ -149,8 +155,8 @@ const pl: Strings = {
   sortRank: "Trafność",
   sortTitle: "Tytuł",
   sortSource: "Źródło",
-  scopeBook: "Książka:",
-  allBooks: "(wszystkie książki)",
+  scopeProduct: "Produkt:",
+  allProducts: "(wszystkie produkty)",
   sourceLabel: "Źródło:",
   favEmpty1: "Brak ulubionych.",
   favEmpty2: "Otwórz stronę i kliknij ☆ Ulubione.",
