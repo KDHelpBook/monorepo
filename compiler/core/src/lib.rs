@@ -14,9 +14,11 @@ pub mod model;
 pub mod render;
 pub mod schema;
 pub mod source;
+pub mod vfs;
 
 pub use docset::{Attachments, Docset, KeywordEntry, Page, SearchHit, TocEntry};
 pub use model::{Asset, Category, RenderedDocset, RenderedPage, SourceDocset, SourcePage, TocNode};
+pub use vfs::{FileRangeReader, RangeReader};
 
 /// The on-disk `.khb`/`.khbb` format version this build reads and writes. Bumped to
 /// 2 for binary attachments (the `assets` table / sidecar `.khba`), to 3 for family

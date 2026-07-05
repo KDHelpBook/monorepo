@@ -61,6 +61,11 @@ impl Docset {
         Ok(Self { conn })
     }
 
+    /// Wrap an already-open connection (e.g. one opened through the Range-VFS).
+    pub(crate) fn from_conn(conn: Connection) -> Self {
+        Self { conn }
+    }
+
     /// Look up a `meta` value.
     pub fn meta(&self, key: &str) -> Result<Option<String>> {
         Ok(self

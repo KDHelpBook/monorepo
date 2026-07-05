@@ -1,11 +1,12 @@
-# Streaming, online & hybrid modes (planned)
+# Streaming, online & hybrid modes
 
-> **Status: design, not yet built.** The current browser path (`sql.js`) loads each
-> `.khb`/`.khba` **fully** into memory, and offline works today (bundled docsets +
-> IndexedDB uploads + the PWA cache). This document describes the architecture the
-> format was chosen for — how the same page-aligned SQLite files can later be
-> **streamed** over HTTP and mixed **online + offline** — and which seams already
-> exist so it drops in without a rewrite.
+> **Status: the native Range-VFS is built; the browser + online/hybrid pieces are
+> still design.** `compiler/core` now has a read-only SQLite VFS
+> (`vfs.rs`) that serves a `.khb` through a byte-range reader — `Docset::open_reader`
+> streams only the pages a query touches (a test opens a 2 MB docset and reads ~15 %
+> of it for open + TOC + one page + one search). The browser still uses `sql.js`
+> (whole-file), and offline works today (bundled docsets + IndexedDB uploads + PWA).
+> The rest of this document is the architecture the format was chosen for.
 
 ## Why SQLite makes this possible
 
@@ -22,19 +23,33 @@ Attachments compound the win: with the **`asset_index`** routing table, resolvin
 a probe across every `.khba`. Routing is by the sidecar's stable `meta.pack` id, so
 order/placement of packs never matters.
 
-## The one missing piece: a Range-VFS loader
+## The Range-VFS loader
 
-Everything else is in place; streaming needs a **SQLite VFS over HTTP Range**:
+Streaming needs a **SQLite VFS over byte ranges**:
 
-- **Browser.** An FTS5-capable, VFS-enabled SQLite-WASM build (e.g. the official
-  `sqlite-wasm`, or `sql.js-httpvfs`) opens a URL as a database, fetching pages via
-  `Range` and caching them. This would also restore *real* FTS5 in the browser
-  (today the viewer searches the stored `plain` column because stock `sql.js` has no
-  FTS5 — see [format.md](format.md)).
-- **Native / Tauri.** A Rust VFS in `compiler/core` backed by an HTTP client (the
-  spike the plan calls out). Natively this is easier than in the browser — real
-  threads, no CORS/wasm limits — and local files already read lazily from disk, with
-  incremental BLOB I/O (`sqlite3_blob_read`) for large attachments.
+- **Native / Tauri — done.** `compiler/core/src/vfs.rs` is a read-only VFS written
+  directly against `rusqlite::ffi` (the same bundled SQLite the engine uses, so no
+  "two SQLite libraries" clash). It treats the file as **immutable** (writes/locks
+  are no-ops; the device reports `IMMUTABLE`, so no journal/WAL), coalesces reads
+  into 64 KiB cached blocks, and drives everything through a small trait:
+
+  ```rust
+  pub trait RangeReader: Send + Sync {
+      fn size(&self) -> u64;
+      fn read_at(&self, offset: u64, buf: &mut [u8]) -> anyhow::Result<()>;
+  }
+  Docset::open_reader(reader: Arc<dyn RangeReader>) -> Docset  // queries stream
+  ```
+
+  A `FileRangeReader` ships for local/streaming use and tests. An **HTTP reader** is
+  then a ~20-line trait impl (`read_at` → `GET` with a `Range:` header; `size` from
+  `Content-Range`/`HEAD`) — deliberately kept out of `core`'s dependencies so a
+  consumer (CLI/Tauri) plugs in its own client (`ureq`, `reqwest`, …).
+- **Browser — still design.** An FTS5-capable, VFS-enabled SQLite-WASM build (the
+  official `sqlite-wasm`, or `sql.js-httpvfs`) opens a URL as a database, fetching
+  pages via `Range`. This would also restore *real* FTS5 in the browser (today the
+  viewer searches the stored `plain` column because stock `sql.js` has no FTS5 — see
+  [format.md](format.md)).
 
 ## Wiring it into the existing seams
 
@@ -128,8 +143,9 @@ small fully-fetched index for a remote book).
 
 ## Summary of what to build, in order
 
-1. A Range-VFS SQLite loader (native first — easiest — then an FTS5+VFS SQLite-WASM
-   in the browser). Fallback already documented: `sql.js-httpvfs`.
+1. A Range-VFS SQLite loader. **Native done** (`core/src/vfs.rs` +
+   `Docset::open_reader`); next is an HTTP `RangeReader` and then an FTS5+VFS
+   SQLite-WASM in the browser. Fallback already documented: `sql.js-httpvfs`.
 2. A `{ url, mode: "streaming" }` `DocsetSource` + `streaming` in `docsets.json`;
    attachment packs likewise addressable by URL.
 3. Tauri `khb-asset://` protocol with `Range` support for streamed media.

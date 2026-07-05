@@ -8,8 +8,10 @@ database) and rendered by a TypeScript viewer.
 ## Monorepo layout
 - `compiler/` — Rust **Cargo workspace** (the native data engine):
   - `core/` — format/schema, `Docset` queries, SQLite + FTS5, Markdown render,
-    `.khb` writer/reader, `.khbb` (postcard) codec. **Native only** (CLI + Tauri).
-    No DOM.
+    `.khb` writer/reader, `.khbb` (postcard) codec, and a read-only **Range-VFS**
+    (`vfs.rs`: `RangeReader` + `Docset::open_reader`) that streams only the pages a
+    query touches — the native basis for HTTP streaming (`docs/streaming.md`).
+    **Native only** (CLI + Tauri). No DOM.
   - `cli/` — the `kdhelp` CLI: `compile` / `convert` (`pack` / `patch` later).
   - `wasm/` — reserved (currently a stub). See the browser-SQLite note below.
   - `examples/{en,pl}/` — seed content compiled into the demo docsets.
