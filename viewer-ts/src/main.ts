@@ -121,6 +121,7 @@ async function bootstrap(): Promise<void> {
     bytes?: Uint8Array;
     language: string;
     streaming: boolean;
+    attachments?: string[];
   }[] = [];
   if (config.externalSources) {
     for (const entry of getRemotes()) {
@@ -128,7 +129,12 @@ async function bootstrap(): Promise<void> {
         if (entry.streaming) {
           const { StreamingDocset } = await import("./data/streaming-docset");
           const { language } = await StreamingDocset.peek(entry.url);
-          remotes.push({ url: entry.url, language, streaming: true });
+          remotes.push({
+            url: entry.url,
+            language,
+            streaming: true,
+            attachments: entry.attachments,
+          });
         } else {
           const bytes = await fetchDocsetBytes(entry.url);
           const ds = await Docset.open(bytes);
@@ -168,7 +174,7 @@ async function bootstrap(): Promise<void> {
     .filter((r) => r.language === lang)
     .map((r) =>
       r.streaming
-        ? { url: r.url, mode: "streaming" as const }
+        ? { url: r.url, mode: "streaming" as const, attachments: r.attachments }
         : { bytes: r.bytes! },
     );
   const sources = [...bundled, ...uploaded, ...remote];
@@ -1228,18 +1234,29 @@ function start(
       '<input class="url-in" type="url" placeholder="https://…/docs.khb" spellcheck="false" style="width:100%;font-family:var(--font-mono);font-size:12px;padding:5px 7px;border:1px solid #7f9bc0;border-radius:2px;box-sizing:border-box">' +
       `<label style="display:flex;align-items:center;gap:6px;margin-top:8px;color:var(--content-fg);font-size:12px;cursor:pointer"><input class="url-stream" type="checkbox"> ${esc(s.streamOption)}</label>` +
       `<div style="color:var(--muted);font-size:11px;margin-top:2px;margin-left:22px">${esc(s.streamHint)}</div>` +
+      `<div class="url-sidecars-row" style="display:none;margin-top:8px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">${esc(s.streamSidecars)}</div>` +
+      '<textarea class="url-sidecars" rows="2" spellcheck="false" placeholder="https://…/docs.khba" style="width:100%;font-family:var(--font-mono);font-size:12px;padding:5px 7px;border:1px solid #7f9bc0;border-radius:2px;box-sizing:border-box;resize:vertical"></textarea></div>' +
       '<div class="url-err" style="color:#a33;font-size:11px;min-height:15px;margin-top:5px"></div></div>' +
       '<div style="padding:10px 16px;border-top:1px solid var(--chrome-border);display:flex;gap:8px;justify-content:flex-end">' +
       `<button class="url-cancel" style="${btn};background:#eef1f6">${esc(s.cancel)}</button>` +
       `<button class="url-add" style="${btn};background:linear-gradient(180deg,#eef4fd,#cbd9ec)">${esc(s.add)}</button></div></div>`;
     const input = bg.querySelector<HTMLInputElement>(".url-in")!;
     const stream = bg.querySelector<HTMLInputElement>(".url-stream")!;
+    const sidecarsRow = bg.querySelector<HTMLElement>(".url-sidecars-row")!;
+    const sidecars = bg.querySelector<HTMLTextAreaElement>(".url-sidecars")!;
     const err = bg.querySelector<HTMLElement>(".url-err")!;
     const add = bg.querySelector<HTMLButtonElement>(".url-add")!;
+    // Sidecar packs only make sense for a streamed docset.
+    stream.addEventListener("change", () => {
+      sidecarsRow.style.display = stream.checked ? "" : "none";
+    });
     const submit = async (): Promise<void> => {
       const url = input.value.trim();
       if (!url) return;
       const streaming = stream.checked;
+      const packs = streaming
+        ? sidecars.value.split(/\s+/).map((u) => u.trim()).filter(Boolean)
+        : [];
       err.style.color = "var(--muted)";
       err.textContent = s.openUrlChecking;
       add.disabled = true;
@@ -1249,7 +1266,7 @@ function start(
           const { StreamingDocset } = await import("./data/streaming-docset");
           await StreamingDocset.peek(url);
         } else (await Docset.open(await fetchDocsetBytes(url))).close();
-        addRemote(url, streaming);
+        addRemote(url, streaming, packs);
         location.reload();
       } catch {
         err.style.color = "#a33";

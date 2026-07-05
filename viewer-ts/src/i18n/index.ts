@@ -76,6 +76,7 @@ export interface Strings {
   remotesTitle: string;
   streamOption: string;
   streamHint: string;
+  streamSidecars: string;
   streamingBadge: string;
 }
 
@@ -146,6 +147,7 @@ const en: Strings = {
   remotesTitle: "Remote docsets",
   streamOption: "Stream (don't download the whole file)",
   streamHint: "Reads pages on demand over HTTP Range, with real full-text search.",
+  streamSidecars: "Attachment packs (.khba URLs, one per line — optional):",
   streamingBadge: "· streaming",
 };
 
@@ -218,6 +220,7 @@ const pl: Strings = {
   streamOption: "Strumieniuj (nie pobieraj całego pliku)",
   streamHint:
     "Czyta strony na żądanie po HTTP Range, z prawdziwym wyszukiwaniem pełnotekstowym.",
+  streamSidecars: "Paczki załączników (adresy .khba, po jednym w wierszu — opcjonalne):",
   streamingBadge: "· strumieniowanie",
 };
 

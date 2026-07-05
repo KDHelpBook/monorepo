@@ -35,6 +35,9 @@ export class StreamingDocset implements IDocset {
     private readonly byCategory: Map<string, string[]>,
     private readonly relatedById: Map<string, string[]>,
     private readonly hasFts5: boolean,
+    // Sidecar `.khba` packs keyed by their `meta.pack`, each its own streamed
+    // connection — so `asset_index` can route an asset straight to its store.
+    private readonly byPack: Map<string, StreamingDb>,
   ) {}
 
   /**
@@ -56,7 +59,10 @@ export class StreamingDocset implements IDocset {
     }
   }
 
-  static async open(url: string): Promise<StreamingDocset> {
+  static async open(
+    url: string,
+    sidecarUrls: string[] = [],
+  ): Promise<StreamingDocset> {
     const db = await StreamingDb.open(url);
     const meta = async (k: string): Promise<string | null> => {
       const v = await db.one("SELECT value FROM meta WHERE key = ?", [k]);
@@ -119,9 +125,23 @@ export class StreamingDocset implements IDocset {
       hasFts5 = false;
     }
 
+    // Open each sidecar `.khba` over Range and key it by its `meta.pack`, so the
+    // `asset_index` routing can address one directly (order-independent).
+    const byPack = new Map<string, StreamingDb>();
+    for (const sidecarUrl of sidecarUrls) {
+      try {
+        const pack = await StreamingDb.open(sidecarUrl);
+        const packId = await pack.one("SELECT value FROM meta WHERE key='pack'");
+        if (packId != null) byPack.set(String(packId), pack);
+        else pack.close();
+      } catch {
+        /* unreachable/invalid sidecar — its assets just won't resolve */
+      }
+    }
+
     return new StreamingDocset(
       db, id, language, title, collection, collectionTitle,
-      toc, cats, kws, byCategory, relatedById, hasFts5,
+      toc, cats, kws, byCategory, relatedById, hasFts5, byPack,
     );
   }
 
@@ -155,14 +175,16 @@ export class StreamingDocset implements IDocset {
   }
 
   async asset(path: string): Promise<AssetBlob | null> {
-    // Route via the index; only embedded assets (pack "") stream today —
-    // a streamed sidecar `.khba` would need its own URL/handle.
+    // Route via the index to the owning store: the main `.khb`'s embedded `assets`
+    // (pack "") or the streamed sidecar `.khba` whose `meta.pack` matches.
     const pack = await this.db.one(
       "SELECT pack FROM asset_index WHERE path = ?",
       [path],
     );
-    if (pack == null || String(pack) !== "") return null;
-    const rows = await this.db.all(
+    if (pack == null) return null;
+    const store = String(pack) === "" ? this.db : this.byPack.get(String(pack));
+    if (!store) return null; // sidecar not loaded
+    const rows = await store.all(
       "SELECT mime, data FROM assets WHERE path = ?",
       [path],
     );
@@ -199,6 +221,7 @@ export class StreamingDocset implements IDocset {
 
   close(): void {
     this.db.close();
+    for (const pack of this.byPack.values()) pack.close();
   }
 }
 

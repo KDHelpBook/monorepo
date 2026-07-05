@@ -76,6 +76,8 @@ const REMOTES_KEY = "kdhelp.remotes";
 export interface RemoteEntry {
   url: string;
   streaming?: boolean;
+  /** Sidecar `.khba` pack URLs (streaming remotes only). */
+  attachments?: string[];
 }
 
 export function getRemotes(): RemoteEntry[] {
@@ -85,8 +87,18 @@ export function getRemotes(): RemoteEntry[] {
     if (!Array.isArray(list)) return [];
     return list.flatMap((e): RemoteEntry[] => {
       if (typeof e === "string") return [{ url: e }];
-      if (e && typeof (e as RemoteEntry).url === "string") {
-        return [{ url: (e as RemoteEntry).url, streaming: !!(e as RemoteEntry).streaming }];
+      const entry = e as RemoteEntry;
+      if (e && typeof entry.url === "string") {
+        const atts = Array.isArray(entry.attachments)
+          ? entry.attachments.filter((u): u is string => typeof u === "string")
+          : undefined;
+        return [
+          {
+            url: entry.url,
+            streaming: !!entry.streaming,
+            ...(atts && atts.length ? { attachments: atts } : {}),
+          },
+        ];
       }
       return [];
     });
@@ -95,11 +107,20 @@ export function getRemotes(): RemoteEntry[] {
   }
 }
 
-export function addRemote(url: string, streaming = false): void {
+export function addRemote(
+  url: string,
+  streaming = false,
+  attachments: string[] = [],
+): void {
   const list = getRemotes();
   if (!list.some((e) => e.url === url)) {
+    const entry: RemoteEntry = {
+      url,
+      streaming,
+      ...(attachments.length ? { attachments } : {}),
+    };
     try {
-      localStorage.setItem(REMOTES_KEY, JSON.stringify([...list, { url, streaming }]));
+      localStorage.setItem(REMOTES_KEY, JSON.stringify([...list, entry]));
     } catch {
       /* storage unavailable — remote just won't persist */
     }

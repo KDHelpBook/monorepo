@@ -199,7 +199,8 @@ small fully-fetched index for a remote book).
    `wa-sqlite`** (vendored under `viewer-ts/vendor/wa-sqlite/`); `StreamingDocset`
    (`streaming-docset.ts`) implements the shared `IDocset` — **eager-loading the small
    structure** (toc/categories/keywords/related) at open and **streaming the heavy
-   parts on demand** (page bodies, embedded assets, FTS5 search). The data layer went
+   parts on demand** (page bodies, assets — embedded *or* from a streamed `.khba`
+   sidecar routed by `asset_index` — and FTS5 search). The data layer went
    async where it matters (`Docset`/`Collection` `page`/`asset`/`search`; structure
    stays sync), so a streamed book **merges into the live collection** — verified: it
    appears as its own family folder, its pages + graphics stream on click (~21 % of a

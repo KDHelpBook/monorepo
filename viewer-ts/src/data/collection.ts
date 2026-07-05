@@ -25,7 +25,7 @@ export type DocsetSource =
   | (({ bytes: Uint8Array } | { file: string }) & {
       attachments?: AttachmentSource[];
     })
-  | { url: string; mode: "streaming" };
+  | { url: string; mode: "streaming"; attachments?: string[] };
 
 /** Decompress gzip bytes via the native DecompressionStream. */
 async function gunzip(bytes: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
@@ -76,7 +76,7 @@ export class Collection {
         // Lazy-load the wa-sqlite streaming engine only when a streamed docset is
         // actually opened, so non-streaming sessions never fetch that chunk.
         const { StreamingDocset } = await import("./streaming-docset");
-        docsets.push(await StreamingDocset.open(src.url));
+        docsets.push(await StreamingDocset.open(src.url, src.attachments ?? []));
         continue;
       }
       const bytes = "bytes" in src ? src.bytes : await fetchDocsetBytes(src.file);
