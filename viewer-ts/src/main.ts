@@ -153,6 +153,19 @@ function start(
   let mode: Mode = "contents";
   let filterCategory = "";
   let fontSize = 13;
+  // Terms to highlight in the opened page — set when a search result is clicked,
+  // persisted across navigation (like MS Document Explorer) until explicitly cleared.
+  let highlightTerms: string[] = [];
+
+  const escapeRe = (t: string): string => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const queryTerms = (q: string): string[] => [
+    ...new Set(
+      q
+        .toLowerCase()
+        .split(/[^\p{L}\p{N}]+/u)
+        .filter((t) => t.length >= 2),
+    ),
+  ];
 
   // Ctrl/⌘-click or middle-click opens a link in a new document tab.
   const wantNew = (e: MouseEvent): boolean => e.ctrlKey || e.metaKey;
@@ -281,8 +294,19 @@ function start(
   // ---- Index ----
   function renderIndex(): void {
     const locale = collection.language || "en";
+    // Same "Filtered by:" facet as Contents — restrict the index to keywords that
+    // still point at a page in the chosen category.
+    const allowed = filterCategory
+      ? new Set(collection.pagesByCategory(filterCategory))
+      : null;
     const keys = collection
       .keywords()
+      .map((k) =>
+        allowed
+          ? { term: k.term, pageIds: k.pageIds.filter((id) => allowed.has(id)) }
+          : k,
+      )
+      .filter((k) => k.pageIds.length > 0)
       .sort((a, b) =>
         a.term.localeCompare(b.term, locale, { sensitivity: "base" }),
       );
@@ -336,6 +360,7 @@ function start(
   function runSearch(query: string): void {
     const q = query.trim();
     if (!q) {
+      highlightTerms = [];
       leftBody.innerHTML = `<div class="empty">${esc(s.searchPrompt)}</div>`;
       statusCount.textContent = "";
       return;
@@ -346,6 +371,7 @@ function start(
       statusCount.textContent = s.searchResults(0);
       return;
     }
+    const terms = queryTerms(q);
     const frag = document.createDocumentFragment();
     for (const hit of results) {
       const div = document.createElement("div");
@@ -354,7 +380,17 @@ function start(
         `<div class="r-title">${esc(hit.title)}</div>` +
         `<div class="r-crumb">${crumb(hit.pageId)}</div>` +
         `<div class="r-snip">${hit.snippet}</div>`;
-      linkOpen(div, hit.pageId);
+      // Opening a result highlights the query terms on the destination page.
+      div.addEventListener("click", (e) => {
+        highlightTerms = terms;
+        openPage(hit.pageId, wantNew(e));
+      });
+      div.addEventListener("auxclick", (e) => {
+        if (e.button !== 1) return;
+        e.preventDefault();
+        highlightTerms = terms;
+        openPage(hit.pageId, true);
+      });
       frag.appendChild(div);
     }
     leftBody.innerHTML = "";
@@ -401,7 +437,8 @@ function start(
     document.querySelectorAll<HTMLElement>("[data-mode]").forEach((b) => {
       b.classList.toggle("on", b.dataset.mode === next);
     });
-    filterbar.style.display = next === "contents" ? "" : "none";
+    filterbar.style.display =
+      next === "contents" || next === "index" ? "" : "none";
     searchBox.style.display = next === "search" ? "" : "none";
     leftTitle.textContent = {
       contents: s.contents,
@@ -474,6 +511,44 @@ function start(
     return d.innerHTML;
   }
 
+  // Wrap every occurrence of the active search terms in the content in <mark>,
+  // skipping script/style and our keyword footer. Runs after each page load.
+  function applyHighlight(): void {
+    if (!highlightTerms.length) return;
+    const re = new RegExp(`(${highlightTerms.map(escapeRe).join("|")})`, "giu");
+    const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT, {
+      acceptNode: (node) =>
+        (node as Text).parentElement?.closest("script,style,mark,.kw")
+          ? NodeFilter.FILTER_REJECT
+          : NodeFilter.FILTER_ACCEPT,
+    });
+    const targets: Text[] = [];
+    let n: Node | null;
+    while ((n = walker.nextNode())) targets.push(n as Text);
+    for (const node of targets) {
+      const text = node.nodeValue ?? "";
+      re.lastIndex = 0;
+      if (!re.test(text)) continue;
+      re.lastIndex = 0;
+      const frag = document.createDocumentFragment();
+      let last = 0;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(text))) {
+        if (m.index > last)
+          frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+        const mark = document.createElement("mark");
+        mark.className = "hl";
+        mark.textContent = m[0];
+        frag.appendChild(mark);
+        last = m.index + m[0].length;
+        if (re.lastIndex === m.index) re.lastIndex++; // guard against empty match
+      }
+      if (last < text.length)
+        frag.appendChild(document.createTextNode(text.slice(last)));
+      node.parentNode?.replaceChild(frag, node);
+    }
+  }
+
   function renderTabs(): void {
     tabstrip.innerHTML = "";
     tabs.forEach((t, i) => {
@@ -527,7 +602,10 @@ function start(
     content.innerHTML = page
       ? decorate(page.bodyHtml, id)
       : `<h1>${esc(s.notFoundTitle)}</h1><p>${s.notFoundBody(esc(id))}</p>`;
-    contentWrap.scrollTop = 0;
+    applyHighlight();
+    const firstHit = content.querySelector<HTMLElement>("mark.hl");
+    if (firstHit) firstHit.scrollIntoView({ block: "center", inline: "nearest" });
+    else contentWrap.scrollTop = 0;
     document.title = `${title} — kdhelp`;
     const { docsetId, localId } = collection.split(id);
     address.value = `ms-help://${docsetId}/${localId}.htm`;
@@ -586,6 +664,10 @@ function start(
         break;
       case "print":
         window.print();
+        break;
+      case "clear-highlight":
+        highlightTerms = [];
+        loadContent(currentId);
         break;
       case "find":
         status.textContent = "Use your browser Find (Ctrl/⌘-F).";
@@ -724,6 +806,7 @@ function start(
   filterSel.addEventListener("change", () => {
     filterCategory = filterSel.value;
     if (mode === "contents") renderTree();
+    else if (mode === "index") renderIndex();
   });
 
   // Language switcher: persist + reload (the content docset changes with the UI).

@@ -13,6 +13,7 @@ export interface Strings {
   print: string;
   find: string;
   sync: string;
+  clearHighlight: string;
   largerText: string;
   smallerText: string;
   back: string;
@@ -64,6 +65,7 @@ const en: Strings = {
   print: "Print…",
   find: "Find on page…",
   sync: "Sync with Contents",
+  clearHighlight: "Clear search highlight",
   largerText: "Larger text",
   smallerText: "Smaller text",
   back: "Back",
@@ -111,6 +113,7 @@ const pl: Strings = {
   print: "Drukuj…",
   find: "Znajdź na stronie…",
   sync: "Zsynchronizuj ze spisem treści",
+  clearHighlight: "Wyczyść podświetlenie wyszukiwania",
   largerText: "Większy tekst",
   smallerText: "Mniejszy tekst",
   back: "Wstecz",
