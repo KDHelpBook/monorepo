@@ -1,12 +1,19 @@
-//! The in-memory source model — a docset ready to be written.
+//! The in-memory data model.
 //!
-//! This is intentionally decoupled from any particular source format. The bundled
-//! loader ([`crate::source`]) builds a [`SourceDocset`] from Markdown + YAML, but a
-//! different front end could build the same struct from any format and still emit a
-//! valid `.khb`.
+//! Two stages:
+//! - [`SourceDocset`] — pages still as Markdown, produced by a source loader
+//!   ([`crate::source`]). Front-end / format-specific.
+//! - [`RenderedDocset`] — pages as rendered HTML + plain text. This is the pivot
+//!   both output formats share: `.khb` (SQLite, [`crate::build`]) and `.khbb`
+//!   (binary, [`crate::binary`]) are just two encodings of the same rendered data.
 
-/// A single page: `markdown` is the source body; the writer renders it to HTML and
-/// plain text.
+use serde::{Deserialize, Serialize};
+
+// ---------------------------------------------------------------------------
+// Source stage (Markdown in, format-specific)
+// ---------------------------------------------------------------------------
+
+/// A page whose body is still Markdown. Rendered by [`crate::render`].
 #[derive(Debug, Clone)]
 pub struct SourcePage {
     pub id: String,
@@ -17,31 +24,62 @@ pub struct SourcePage {
     pub categories: Vec<String>,
 }
 
-/// A node in the table-of-contents tree. `page_id` points at a page; `title` may
-/// override the page title for display in the tree.
-#[derive(Debug, Clone)]
-pub struct SourceTocNode {
-    pub page_id: String,
-    pub title: String,
-    pub children: Vec<SourceTocNode>,
-}
-
-/// A category definition (the label/order for a facet tag).
-#[derive(Debug, Clone)]
-pub struct SourceCategory {
-    pub id: String,
-    pub title: String,
-}
-
-/// A complete docset ready for [`crate::build::build_khb`].
+/// A complete docset with Markdown pages.
 #[derive(Debug, Clone)]
 pub struct SourceDocset {
     pub id: String,
     pub title: String,
     pub version: String,
-    /// BCP-47-ish language tag (e.g. `en`, `pl`). Selects the FTS tokenizer.
     pub language: String,
     pub pages: Vec<SourcePage>,
-    pub toc: Vec<SourceTocNode>,
-    pub categories: Vec<SourceCategory>,
+    pub toc: Vec<TocNode>,
+    pub categories: Vec<Category>,
+}
+
+// ---------------------------------------------------------------------------
+// Shared structure (identical in both stages)
+// ---------------------------------------------------------------------------
+
+/// A node in the table-of-contents tree. `page_id` points at a page; `title` may
+/// override the page title for display in the tree.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TocNode {
+    pub page_id: String,
+    pub title: String,
+    #[serde(default)]
+    pub children: Vec<TocNode>,
+}
+
+/// A category definition (the label/order for a facet tag).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Category {
+    pub id: String,
+    pub title: String,
+}
+
+// ---------------------------------------------------------------------------
+// Rendered stage (HTML in, format-agnostic pivot)
+// ---------------------------------------------------------------------------
+
+/// A page rendered to HTML + plain text, ready to be encoded into a docset.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RenderedPage {
+    pub id: String,
+    pub title: String,
+    pub body_html: String,
+    pub plain: String,
+    pub keywords: Vec<String>,
+    pub categories: Vec<String>,
+}
+
+/// A complete rendered docset — the pivot shared by `.khb` and `.khbb`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RenderedDocset {
+    pub id: String,
+    pub title: String,
+    pub version: String,
+    pub language: String,
+    pub pages: Vec<RenderedPage>,
+    pub toc: Vec<TocNode>,
+    pub categories: Vec<Category>,
 }

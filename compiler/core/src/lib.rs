@@ -5,15 +5,17 @@
 //! query API. It is compiled both natively (for the CLI and, later, Tauri) and to
 //! wasm (for the browser viewer). It must stay free of any DOM or JS assumptions.
 
+pub mod binary;
 pub mod build;
 pub mod docset;
 pub mod markdown;
 pub mod model;
+pub mod render;
 pub mod schema;
 pub mod source;
 
-pub use docset::{Category, Docset, KeywordEntry, Page, SearchHit, TocEntry};
-pub use model::{SourceCategory, SourceDocset, SourcePage, SourceTocNode};
+pub use docset::{Docset, KeywordEntry, Page, SearchHit, TocEntry};
+pub use model::{Category, RenderedDocset, RenderedPage, SourceDocset, SourcePage, TocNode};
 
 /// The on-disk `.khb` format version this build reads and writes.
 pub const FORMAT_VERSION: u32 = 1;
@@ -49,16 +51,16 @@ mod tests {
                     categories: vec![],
                 },
             ],
-            toc: vec![SourceTocNode {
+            toc: vec![TocNode {
                 page_id: "intro".into(),
                 title: "Introduction".into(),
-                children: vec![SourceTocNode {
+                children: vec![TocNode {
                     page_id: "adv".into(),
                     title: "Advanced".into(),
                     children: vec![],
                 }],
             }],
-            categories: vec![SourceCategory {
+            categories: vec![Category {
                 id: "basics".into(),
                 title: "Basics".into(),
             }],
@@ -69,7 +71,8 @@ mod tests {
     fn build_and_query_roundtrip() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("demo.khb");
-        build::build_khb(&demo_source(), &path).unwrap();
+        let doc = render::render(&demo_source());
+        build::build_khb(&doc, &path).unwrap();
 
         let ds = Docset::open(&path).unwrap();
         assert_eq!(ds.id().unwrap(), "demo");
@@ -111,6 +114,30 @@ mod tests {
         assert!(kw
             .iter()
             .any(|k| k.term == "intro" && k.page_ids == vec!["intro".to_string()]));
+    }
+
+    #[test]
+    fn khbb_roundtrip_matches_khb() {
+        let doc = render::render(&demo_source());
+
+        // RenderedDocset -> .khbb bytes -> RenderedDocset
+        let bytes = binary::to_khbb(&doc).unwrap();
+        let restored = binary::from_khbb(&bytes).unwrap();
+        assert_eq!(restored.id, doc.id);
+        assert_eq!(restored.pages.len(), doc.pages.len());
+
+        // Rebuild a .khb from the restored data; search still works.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("from_khbb.khb");
+        build::build_khb(&restored, &path).unwrap();
+        let ds = Docset::open(&path).unwrap();
+        assert_eq!(ds.search("fox", 10).unwrap().len(), 2);
+
+        // And the reverse: .khb -> RenderedDocset reproduces the same shape.
+        let back = ds.to_rendered().unwrap();
+        assert_eq!(back.pages.len(), doc.pages.len());
+        assert_eq!(back.toc.len(), doc.toc.len());
+        assert_eq!(back.categories.len(), doc.categories.len());
     }
 
     #[test]

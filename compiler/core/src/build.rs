@@ -1,17 +1,17 @@
-//! Writer: turn a [`SourceDocset`] into a `.khb` SQLite file.
+//! Writer: turn a [`RenderedDocset`] into a `.khb` SQLite file.
 
 use std::path::Path;
 
 use anyhow::{Context, Result};
 use rusqlite::{params, Connection, Transaction};
 
-use crate::model::{SourceDocset, SourceTocNode};
-use crate::{markdown, schema};
+use crate::model::{RenderedDocset, TocNode};
+use crate::schema;
 
-/// Build a `.khb` docset at `out_path` (overwriting any existing file). Renders each
-/// page's Markdown to HTML + plain text, populates the structural tables, builds the
-/// FTS5 index with the language-appropriate tokenizer, then compacts with `VACUUM`.
-pub fn build_khb(src: &SourceDocset, out_path: &Path) -> Result<()> {
+/// Build a `.khb` docset at `out_path` (overwriting any existing file). Populates the
+/// structural tables from the rendered pages, builds the FTS5 index with the
+/// language-appropriate tokenizer, then compacts with `VACUUM`.
+pub fn build_khb(doc: &RenderedDocset, out_path: &Path) -> Result<()> {
     if out_path.exists() {
         std::fs::remove_file(out_path)
             .with_context(|| format!("removing existing {}", out_path.display()))?;
@@ -22,18 +22,18 @@ pub fn build_khb(src: &SourceDocset, out_path: &Path) -> Result<()> {
     // page_size must be set before any table is created.
     conn.execute_batch("PRAGMA page_size = 4096;")?;
 
-    let tokenizer = schema::tokenizer_for_language(&src.language);
+    let tokenizer = schema::tokenizer_for_language(&doc.language);
 
     let tx = conn.transaction()?;
     tx.execute_batch(schema::SCHEMA_SQL)?;
 
-    write_meta(&tx, src, tokenizer)?;
+    write_meta(&tx, doc, tokenizer)?;
     // Categories before pages: `page_categories` rows reference `categories(id)`,
     // and the bundled SQLite enforces foreign keys. Pages before toc for the same
     // reason (`toc.page_id` → `pages(id)`).
-    write_categories(&tx, src)?;
-    write_pages(&tx, src)?;
-    write_toc(&tx, &src.toc, None)?;
+    write_categories(&tx, doc)?;
+    write_pages(&tx, doc)?;
+    write_toc(&tx, &doc.toc, None)?;
 
     tx.execute_batch(&schema::create_fts_sql(tokenizer))?;
     // Populate the external-content index from the `pages` table.
@@ -44,13 +44,13 @@ pub fn build_khb(src: &SourceDocset, out_path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn write_meta(tx: &Transaction, src: &SourceDocset, tokenizer: &str) -> Result<()> {
+fn write_meta(tx: &Transaction, doc: &RenderedDocset, tokenizer: &str) -> Result<()> {
     let entries = [
         ("format_version", crate::FORMAT_VERSION.to_string()),
-        ("docset_id", src.id.clone()),
-        ("title", src.title.clone()),
-        ("version", src.version.clone()),
-        ("language", src.language.clone()),
+        ("docset_id", doc.id.clone()),
+        ("title", doc.title.clone()),
+        ("version", doc.version.clone()),
+        ("language", doc.language.clone()),
         ("tokenizer", tokenizer.to_string()),
         ("generator", crate::generator()),
     ];
@@ -63,14 +63,18 @@ fn write_meta(tx: &Transaction, src: &SourceDocset, tokenizer: &str) -> Result<(
     Ok(())
 }
 
-fn write_pages(tx: &Transaction, src: &SourceDocset) -> Result<()> {
-    for page in &src.pages {
-        let html = markdown::render_html(&page.markdown);
-        let plain = markdown::html_to_plain(&html);
+fn write_pages(tx: &Transaction, doc: &RenderedDocset) -> Result<()> {
+    for page in &doc.pages {
         let keywords_text = page.keywords.join(" ");
         tx.execute(
             "INSERT INTO pages(id, title, body_html, plain, keywords) VALUES(?1, ?2, ?3, ?4, ?5)",
-            params![page.id, page.title, html, plain, keywords_text],
+            params![
+                page.id,
+                page.title,
+                page.body_html,
+                page.plain,
+                keywords_text
+            ],
         )
         .with_context(|| format!("inserting page {}", page.id))?;
 
@@ -94,8 +98,8 @@ fn write_pages(tx: &Transaction, src: &SourceDocset) -> Result<()> {
     Ok(())
 }
 
-fn write_categories(tx: &Transaction, src: &SourceDocset) -> Result<()> {
-    for (position, category) in src.categories.iter().enumerate() {
+fn write_categories(tx: &Transaction, doc: &RenderedDocset) -> Result<()> {
+    for (position, category) in doc.categories.iter().enumerate() {
         tx.execute(
             "INSERT INTO categories(id, title, position) VALUES(?1, ?2, ?3)",
             params![category.id, category.title, position as i64],
@@ -104,7 +108,7 @@ fn write_categories(tx: &Transaction, src: &SourceDocset) -> Result<()> {
     Ok(())
 }
 
-fn write_toc(tx: &Transaction, nodes: &[SourceTocNode], parent: Option<i64>) -> Result<()> {
+fn write_toc(tx: &Transaction, nodes: &[TocNode], parent: Option<i64>) -> Result<()> {
     for (position, node) in nodes.iter().enumerate() {
         tx.execute(
             "INSERT INTO toc(page_id, parent_id, position, title) VALUES(?1, ?2, ?3, ?4)",

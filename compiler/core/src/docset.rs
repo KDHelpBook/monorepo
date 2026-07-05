@@ -8,6 +8,8 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 
+use crate::model::{Category, RenderedDocset, RenderedPage, TocNode};
+
 /// A page's renderable content.
 #[derive(Debug, Clone)]
 pub struct Page {
@@ -25,14 +27,6 @@ pub struct TocEntry {
     pub parent_id: Option<i64>,
     pub position: i64,
     pub title: String,
-}
-
-/// A category (facet) definition.
-#[derive(Debug, Clone)]
-pub struct Category {
-    pub id: String,
-    pub title: String,
-    pub position: i64,
 }
 
 /// A keyword and the pages it points at (the F1 index).
@@ -112,13 +106,12 @@ impl Docset {
     pub fn categories(&self) -> Result<Vec<Category>> {
         let mut stmt = self
             .conn
-            .prepare("SELECT id, title, position FROM categories ORDER BY position")?;
+            .prepare("SELECT id, title FROM categories ORDER BY position")?;
         let rows = stmt
             .query_map([], |r| {
                 Ok(Category {
                     id: r.get(0)?,
                     title: r.get(1)?,
-                    position: r.get(2)?,
                 })
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -202,6 +195,98 @@ impl Docset {
             .collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(rows)
     }
+
+    /// The table of contents as a nested tree (rebuilt from the flat rows).
+    pub fn toc_tree(&self) -> Result<Vec<TocNode>> {
+        Ok(build_toc_tree(&self.toc()?, None))
+    }
+
+    /// Read the whole docset back into a [`RenderedDocset`] — the inverse of the
+    /// writer, used to down-convert a `.khb` to `.khbb`.
+    pub fn to_rendered(&self) -> Result<RenderedDocset> {
+        use std::collections::HashMap;
+
+        let mut keywords_by_page: HashMap<String, Vec<String>> = HashMap::new();
+        {
+            let mut stmt = self
+                .conn
+                .prepare("SELECT page_id, term FROM keywords ORDER BY page_id, term")?;
+            let rows =
+                stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
+            for row in rows {
+                let (page_id, term) = row?;
+                keywords_by_page.entry(page_id).or_default().push(term);
+            }
+        }
+
+        let mut categories_by_page: HashMap<String, Vec<String>> = HashMap::new();
+        {
+            let mut stmt = self.conn.prepare(
+                "SELECT page_id, category_id FROM page_categories ORDER BY page_id, category_id",
+            )?;
+            let rows =
+                stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
+            for row in rows {
+                let (page_id, category_id) = row?;
+                categories_by_page
+                    .entry(page_id)
+                    .or_default()
+                    .push(category_id);
+            }
+        }
+
+        let mut pages = Vec::new();
+        {
+            let mut stmt = self
+                .conn
+                .prepare("SELECT id, title, body_html, plain FROM pages ORDER BY rowid")?;
+            let rows = stmt.query_map([], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, String>(3)?,
+                ))
+            })?;
+            for row in rows {
+                let (id, title, body_html, plain) = row?;
+                let keywords = keywords_by_page.remove(&id).unwrap_or_default();
+                let categories = categories_by_page.remove(&id).unwrap_or_default();
+                pages.push(RenderedPage {
+                    id,
+                    title,
+                    body_html,
+                    plain,
+                    keywords,
+                    categories,
+                });
+            }
+        }
+
+        Ok(RenderedDocset {
+            id: self.id()?,
+            title: self.meta("title")?.unwrap_or_default(),
+            version: self.meta("version")?.unwrap_or_default(),
+            language: self.language()?,
+            pages,
+            toc: self.toc_tree()?,
+            categories: self.categories()?,
+        })
+    }
+}
+
+/// Rebuild the nested TOC tree from the flat `toc` rows.
+fn build_toc_tree(flat: &[TocEntry], parent: Option<i64>) -> Vec<TocNode> {
+    let mut level: Vec<&TocEntry> = flat.iter().filter(|e| e.parent_id == parent).collect();
+    level.sort_by_key(|e| e.position);
+    level
+        .into_iter()
+        .map(|e| TocNode {
+            page_id: e.page_id.clone(),
+            title: e.title.clone(),
+            children: build_toc_tree(flat, Some(e.id)),
+        })
+        .collect()
 }
 
 /// Turn a user query into a safe FTS5 MATCH expression: each whitespace-separated

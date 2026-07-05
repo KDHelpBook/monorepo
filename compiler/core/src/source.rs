@@ -19,7 +19,7 @@ use serde::Deserialize;
 use walkdir::WalkDir;
 
 use crate::markdown;
-use crate::model::{SourceCategory, SourceDocset, SourcePage, SourceTocNode};
+use crate::model::{Category, SourceDocset, SourcePage, TocNode};
 
 #[derive(Deserialize)]
 struct DocsetToml {
@@ -82,7 +82,7 @@ pub fn load_dir(dir: &Path) -> Result<SourceDocset> {
     for page in &pages {
         for category in &page.categories {
             if known.insert(category.clone()) {
-                categories.push(SourceCategory {
+                categories.push(Category {
                     id: category.clone(),
                     title: category.clone(),
                 });
@@ -105,7 +105,7 @@ pub fn load_dir(dir: &Path) -> Result<SourceDocset> {
     })
 }
 
-fn load_categories(dir: &Path) -> Result<Vec<SourceCategory>> {
+fn load_categories(dir: &Path) -> Result<Vec<Category>> {
     let path = dir.join("categories.yaml");
     if !path.exists() {
         return Ok(Vec::new());
@@ -114,7 +114,7 @@ fn load_categories(dir: &Path) -> Result<Vec<SourceCategory>> {
         .with_context(|| format!("parsing {}", path.display()))?;
     Ok(raw
         .into_iter()
-        .map(|c| SourceCategory {
+        .map(|c| Category {
             id: c.id,
             title: c.title,
         })
@@ -188,7 +188,7 @@ fn split_frontmatter(raw: &str) -> Result<(Frontmatter, String)> {
     Ok((Frontmatter::default(), text.to_string()))
 }
 
-fn load_toc(dir: &Path, pages: &[SourcePage]) -> Result<Vec<SourceTocNode>> {
+fn load_toc(dir: &Path, pages: &[SourcePage]) -> Result<Vec<TocNode>> {
     let path = dir.join("toc.yaml");
     if path.exists() {
         let raw: Vec<TocYaml> = serde_yaml::from_str(&fs::read_to_string(&path)?)
@@ -202,7 +202,7 @@ fn load_toc(dir: &Path, pages: &[SourcePage]) -> Result<Vec<SourceTocNode>> {
     // Fallback: flat TOC in page order.
     Ok(pages
         .iter()
-        .map(|p| SourceTocNode {
+        .map(|p| TocNode {
             page_id: p.id.clone(),
             title: p.title.clone(),
             children: Vec::new(),
@@ -210,13 +210,13 @@ fn load_toc(dir: &Path, pages: &[SourcePage]) -> Result<Vec<SourceTocNode>> {
         .collect())
 }
 
-fn toc_from_yaml(node: &TocYaml, titles: &BTreeMap<&str, &str>) -> SourceTocNode {
+fn toc_from_yaml(node: &TocYaml, titles: &BTreeMap<&str, &str>) -> TocNode {
     let title = node
         .title
         .clone()
         .or_else(|| titles.get(node.page.as_str()).map(|s| s.to_string()))
         .unwrap_or_else(|| node.page.clone());
-    SourceTocNode {
+    TocNode {
         page_id: node.page.clone(),
         title,
         children: node
@@ -227,7 +227,7 @@ fn toc_from_yaml(node: &TocYaml, titles: &BTreeMap<&str, &str>) -> SourceTocNode
     }
 }
 
-fn validate_toc(nodes: &[SourceTocNode], page_ids: &BTreeSet<&str>) -> Result<()> {
+fn validate_toc(nodes: &[TocNode], page_ids: &BTreeSet<&str>) -> Result<()> {
     for node in nodes {
         if !page_ids.contains(node.page_id.as_str()) {
             bail!("toc references unknown page id `{}`", node.page_id);
