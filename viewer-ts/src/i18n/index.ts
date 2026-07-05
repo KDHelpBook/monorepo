@@ -32,6 +32,14 @@ export interface Strings {
   noResults: string;
   searchResults: (n: number) => string;
   indexKeywords: (n: number) => string;
+  // full search page
+  sortBy: string;
+  sortRank: string;
+  sortTitle: string;
+  sortSource: string;
+  scopeBook: string;
+  allBooks: string;
+  sourceLabel: string;
   favEmpty1: string;
   favEmpty2: string;
   // right panel / misc
@@ -82,6 +90,13 @@ const en: Strings = {
   noResults: "No results for:",
   searchResults: (n) => `${n} result${n === 1 ? "" : "s"}`,
   indexKeywords: (n) => `${n} keyword${n === 1 ? "" : "s"}`,
+  sortBy: "Sort by:",
+  sortRank: "Rank",
+  sortTitle: "Title",
+  sortSource: "Source",
+  scopeBook: "Book:",
+  allBooks: "(all books)",
+  sourceLabel: "Source:",
   favEmpty1: "No favorites yet.",
   favEmpty2: "Open a page and click ☆ Favorite.",
   addressLabel: "Address:",
@@ -130,6 +145,13 @@ const pl: Strings = {
   noResults: "Brak wyników dla:",
   searchResults: (n) => `${n} ${n === 1 ? "wynik" : "wyników"}`,
   indexKeywords: (n) => `${n} ${n === 1 ? "hasło" : "haseł"}`,
+  sortBy: "Sortuj wg:",
+  sortRank: "Trafność",
+  sortTitle: "Tytuł",
+  sortSource: "Źródło",
+  scopeBook: "Książka:",
+  allBooks: "(wszystkie książki)",
+  sourceLabel: "Źródło:",
   favEmpty1: "Brak ulubionych.",
   favEmpty2: "Otwórz stronę i kliknij ☆ Ulubione.",
   addressLabel: "Adres:",

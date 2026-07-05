@@ -724,6 +724,104 @@ body {
   color: #42526b;
 }
 
+/* Full Search page (document area) */
+.content.search-mode {
+  max-width: none;
+  padding: 16px 22px 60px;
+  font-family: var(--font-ui);
+}
+.search-page {
+  max-width: 1000px;
+}
+.sp-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.sp-bar input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  padding: 5px 8px;
+  border: 1px solid #7f9bc0;
+  border-radius: 2px;
+  background: #fff;
+}
+.sp-go {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: bold;
+  padding: 4px 18px;
+  border: 1px solid #16305a;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #eef4fd, #cbd9ec);
+  color: #16325b;
+  cursor: pointer;
+}
+.sp-go:hover {
+  background: linear-gradient(180deg, #f6faff, #d6e2f2);
+}
+.sp-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 7px 10px;
+  background: #f1f5fb;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  color: var(--muted);
+}
+.sp-controls select {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  padding: 2px 4px;
+  border: 1px solid #7f9bc0;
+  border-radius: 2px;
+  background: #fff;
+  color: #12233d;
+}
+.sp-controls .sp-count {
+  margin-left: auto;
+  color: #16325b;
+  font-weight: bold;
+}
+.sp-results {
+  margin-top: 6px;
+}
+.sp-hit {
+  padding: 10px 10px 11px;
+  border-bottom: 1px solid #e8edf5;
+  cursor: pointer;
+}
+.sp-hit:hover {
+  background: var(--hover);
+}
+.sp-h-title {
+  color: var(--link);
+  font-weight: bold;
+  font-size: 13px;
+}
+.sp-hit:hover .sp-h-title {
+  text-decoration: underline;
+}
+.sp-h-snip {
+  color: #333;
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 3px 0;
+}
+.sp-h-src {
+  color: var(--muted);
+  font-size: 11px;
+}
+.sp-results mark {
+  background: #ffe79a;
+  color: #000;
+  padding: 0 1px;
+}
+
 /* Status bar */
 .statusbar {
   display: flex;

@@ -157,8 +157,12 @@ function start(
   const pages = new Map<string, PageInfo>();
   const pageKeywords = new Map<string, string[]>();
   const favorites = new Set<string>();
-  const tabs: { id: string }[] = [];
+  // A tab is a docset page, or the full Search results page (id === SEARCH_ID,
+  // which carries its query + the last scroll of scope/sort controls).
+  const SEARCH_ID = "@search";
+  const tabs: { id: string; query?: string }[] = [];
   let active = -1;
+  const searchScope = { category: "", book: "", sort: "rank" };
   let currentId = "";
   let mode: Mode = "contents";
   let filterCategory = "";
@@ -410,6 +414,162 @@ function start(
     statusCount.textContent = s.searchResults(results.length);
   }
 
+  // ---- Full Search page (roomy results in the document area, dexplore-style) ----
+  // Open (or focus) the Search page tab for `query`, keeping any reading tab.
+  function openSearchPage(query: string): void {
+    const existing = tabs.find((t) => t.id === SEARCH_ID);
+    if (existing) {
+      existing.query = query;
+      active = tabs.indexOf(existing);
+    } else {
+      tabs.push({ id: SEARCH_ID, query });
+      active = tabs.length - 1;
+    }
+    loadContent(SEARCH_ID);
+  }
+
+  // Apply the scope/sort controls to a raw search over the whole collection.
+  function searchPageResults(query: string): ReturnType<Collection["search"]> {
+    let hits = collection.search(query, 200);
+    if (searchScope.category) {
+      const allowed = new Set(collection.pagesByCategory(searchScope.category));
+      hits = hits.filter((h) => allowed.has(h.pageId));
+    }
+    if (searchScope.book) {
+      hits = hits.filter(
+        (h) => collection.split(h.pageId).docsetId === searchScope.book,
+      );
+    }
+    const locale = collection.language || "en";
+    if (searchScope.sort === "title") {
+      hits = [...hits].sort((a, b) =>
+        a.title.localeCompare(b.title, locale, { sensitivity: "base" }),
+      );
+    } else if (searchScope.sort === "source") {
+      hits = [...hits].sort(
+        (a, b) =>
+          collection
+            .docsetTitle(a.pageId)
+            .localeCompare(collection.docsetTitle(b.pageId), locale) ||
+          b.score - a.score,
+      );
+    }
+    return hits;
+  }
+
+  function renderSearchResults(query: string): void {
+    const box = $("#sp-results");
+    const countEl = $("#sp-count");
+    const q = query.trim();
+    if (!q) {
+      box.innerHTML = `<div class="empty">${esc(s.searchPrompt)}</div>`;
+      countEl.textContent = "";
+      return;
+    }
+    const hits = searchPageResults(q);
+    const terms = queryTerms(q);
+    countEl.textContent = s.searchResults(hits.length);
+    if (!hits.length) {
+      box.innerHTML = `<div class="empty">${esc(s.noResults)}<br><b>${esc(q)}</b></div>`;
+      return;
+    }
+    const multiBook = collection.books().length > 1;
+    box.innerHTML = "";
+    for (const hit of hits) {
+      const trail = crumb(hit.pageId);
+      const book = multiBook ? esc(collection.docsetTitle(hit.pageId)) : "";
+      const source = [trail === "—" ? "" : trail, book].filter(Boolean).join(" · ");
+      const div = document.createElement("div");
+      div.className = "sp-hit";
+      div.innerHTML =
+        `<div class="sp-h-title">${esc(hit.title)}</div>` +
+        `<div class="sp-h-snip">${hit.snippet}</div>` +
+        `<div class="sp-h-src">${esc(s.sourceLabel)} ${source || "—"}</div>`;
+      const open = (e: MouseEvent): void => {
+        highlightTerms = terms;
+        openPage(hit.pageId, true); // new tab; keep the Search page
+        if (e.button === 1) e.preventDefault();
+      };
+      div.addEventListener("click", open);
+      div.addEventListener("auxclick", (e) => {
+        if (e.button === 1) open(e);
+      });
+      box.appendChild(div);
+    }
+  }
+
+  function renderSearchPage(): void {
+    const query = tabs[active]?.query ?? "";
+    document.title = `${s.search} — kdhelp`;
+    address.value = `search:${query}`;
+    const cats = collection.categories();
+    const books = collection.books();
+    const multiBook = books.length > 1;
+    const opts = (
+      items: { id: string; title: string }[],
+      first: string,
+    ): string =>
+      `<option value="">${esc(first)}</option>` +
+      items
+        .map((i) => `<option value="${esc(i.id)}">${esc(i.title)}</option>`)
+        .join("");
+    content.innerHTML =
+      `<div class="search-page">` +
+      `<form class="sp-bar" id="sp-form">` +
+      `<input id="sp-q" type="search" value="${esc(query)}" placeholder="${esc(s.searchPlaceholder)}" autocomplete="off">` +
+      `<button type="submit" class="sp-go">${esc(s.search)}</button>` +
+      `</form>` +
+      `<div class="sp-controls">` +
+      `<label>${esc(s.filterLabel)} <select id="sp-cat">${opts(cats, s.filterAll)}</select></label>` +
+      (multiBook
+        ? `<label>${esc(s.scopeBook)} <select id="sp-book">${opts(books, s.allBooks)}</select></label>`
+        : "") +
+      `<label>${esc(s.sortBy)} <select id="sp-sort">` +
+      `<option value="rank">${esc(s.sortRank)}</option>` +
+      `<option value="title">${esc(s.sortTitle)}</option>` +
+      (multiBook ? `<option value="source">${esc(s.sortSource)}</option>` : "") +
+      `</select></label>` +
+      `<span class="sp-count" id="sp-count"></span>` +
+      `</div>` +
+      `<div class="sp-results" id="sp-results"></div>` +
+      `</div>`;
+
+    const catSel = $<HTMLSelectElement>("#sp-cat");
+    const bookSel = document.querySelector<HTMLSelectElement>("#sp-book");
+    const sortSel = $<HTMLSelectElement>("#sp-sort");
+    catSel.value = searchScope.category;
+    if (bookSel) bookSel.value = searchScope.book;
+    sortSel.value = searchScope.sort;
+    const rerun = (): void => renderSearchResults(tabs[active]?.query ?? "");
+    $("#sp-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const v = $<HTMLInputElement>("#sp-q").value;
+      const t = tabs[active];
+      if (t) t.query = v;
+      address.value = `search:${v}`;
+      rerun();
+    });
+    catSel.addEventListener("change", () => {
+      searchScope.category = catSel.value;
+      rerun();
+    });
+    bookSel?.addEventListener("change", () => {
+      searchScope.book = bookSel.value;
+      rerun();
+    });
+    sortSel.addEventListener("change", () => {
+      searchScope.sort = sortSel.value;
+      rerun();
+    });
+
+    renderSearchResults(query);
+    contentWrap.scrollTop = 0;
+    renderTabs();
+    updateFavBtn();
+    highlightTree();
+    status.textContent = s.ready;
+  }
+
   // ---- Favorites ----
   function renderFavorites(): void {
     if (!favorites.size) {
@@ -590,11 +750,12 @@ function start(
   function renderTabs(): void {
     tabstrip.innerHTML = "";
     tabs.forEach((t, i) => {
-      const info = pages.get(t.id);
+      const name =
+        t.id === SEARCH_ID ? s.search : (pages.get(t.id)?.title ?? t.id);
       const tab = document.createElement("div");
       tab.className = "doctab" + (i === active ? " active" : "");
       tab.innerHTML =
-        `<span class="dt-name">${esc(info?.title ?? t.id)}</span>` +
+        `<span class="dt-name">${esc(name)}</span>` +
         (tabs.length > 1
           ? '<span class="dt-x" title="Close tab">×</span>'
           : "");
@@ -637,6 +798,11 @@ function start(
     // Release the previous page's attachment object URLs before rendering the next.
     for (const u of assetUrls) URL.revokeObjectURL(u);
     assetUrls = [];
+    content.classList.toggle("search-mode", id === SEARCH_ID);
+    if (id === SEARCH_ID) {
+      renderSearchPage();
+      return;
+    }
     const info = pages.get(id);
     const page = collection.page(id);
     const title = page?.title ?? info?.title ?? id;
@@ -891,6 +1057,14 @@ function start(
   searchInput.addEventListener("input", () => {
     clearTimeout(searchTimer);
     searchTimer = window.setTimeout(() => runSearch(searchInput.value), 160);
+  });
+  // Enter opens the roomy Search page (in the document area) for the full results.
+  searchInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && searchInput.value.trim()) {
+      e.preventDefault();
+      openSearchPage(searchInput.value);
+      if (narrow() || !pinned) retract();
+    }
   });
 
   address.addEventListener("keydown", (e) => {

@@ -93,6 +93,11 @@ export class Collection {
     return this.find(this.split(nsId).docsetId)?.title ?? "";
   }
 
+  /** The books (docsets) in this collection, for scope filters. */
+  books(): { id: string; title: string }[] {
+    return this.docsets.map((d) => ({ id: d.id, title: d.title }));
+  }
+
   tocTree(): TocNode[] {
     const nsNode = (docsetId: string, n: TocNode): TocNode => ({
       pageId: this.ns(docsetId, n.pageId),
