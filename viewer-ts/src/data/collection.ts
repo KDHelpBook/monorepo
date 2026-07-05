@@ -9,6 +9,14 @@ import {
 
 const SEP = ":";
 
+/** Decompress gzip bytes (a `.khbc` docset) via the native DecompressionStream. */
+async function gunzip(bytes: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
+  const stream = new Blob([bytes as BlobPart])
+    .stream()
+    .pipeThrough(new DecompressionStream("gzip"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
 /**
  * A merged view over several `.khb` docsets — the MS Help 2 "collection": one
  * table of contents, one index, one search across many books. Page ids are
@@ -21,13 +29,14 @@ export class Collection {
   ) {}
 
   static async load(
-    entries: { file: string }[],
+    entries: { file: string; mode?: string }[],
     language: string,
   ): Promise<Collection> {
     const docsets: Docset[] = [];
     for (const entry of entries) {
       const res = await fetch(entry.file);
-      const bytes = new Uint8Array(await res.arrayBuffer());
+      let bytes = new Uint8Array(await res.arrayBuffer());
+      if (entry.mode === "compact") bytes = await gunzip(bytes); // .khbc
       docsets.push(await Docset.open(bytes));
     }
     return new Collection(language, docsets);

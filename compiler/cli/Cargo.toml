@@ -14,4 +14,8 @@ path = "src/main.rs"
 [dependencies]
 kdhelp-core = { path = "../core" }
 anyhow.workspace = true
+serde.workspace = true
 clap = { version = "4", features = ["derive"] }
+serde_json = "1"
+flate2 = "1"
+walkdir = "2"
