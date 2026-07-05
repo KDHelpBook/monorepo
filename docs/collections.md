@@ -47,6 +47,9 @@ The viewer loads, per language:
 1. **Bundled** docsets listed in `docsets.json` (written by `kdhelp pack`).
 2. **Uploaded** docsets the user opened via *File → Open docset…*, persisted in
    the browser's IndexedDB and restored on the next visit.
+3. **Remote** docsets added via *File → Open docset from URL…* — persisted as a URL
+   and re-fetched each session (online / hybrid), the host permitting CORS. All three
+   merge into one collection (see [streaming.md](streaming.md)).
 
 `docsets.json`:
 

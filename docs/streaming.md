@@ -1,12 +1,14 @@
 # Streaming, online & hybrid modes
 
-> **Status: the native Range-VFS is built; the browser + online/hybrid pieces are
-> still design.** `compiler/core` now has a read-only SQLite VFS
-> (`vfs.rs`) that serves a `.khb` through a byte-range reader — `Docset::open_reader`
-> streams only the pages a query touches (a test opens a 2 MB docset and reads ~15 %
-> of it for open + TOC + one page + one search). The browser still uses `sql.js`
-> (whole-file), and offline works today (bundled docsets + IndexedDB uploads + PWA).
-> The rest of this document is the architecture the format was chosen for.
+> **Status: native streaming + online/hybrid are built; browser *page-level*
+> streaming is the one piece left.** `compiler/core` has a read-only SQLite VFS
+> (`vfs.rs`): `Docset::open_reader` streams only the pages a query touches (a 2 MB
+> docset reads ~15 % for open + TOC + one page + one search), and the CLI's
+> `kdhelp inspect <url>` reads a remote `.khb` over HTTP `Range`. The viewer has
+> **online / hybrid** loading (*File → Open from URL…*, persisted remotes merged with
+> bundled + uploaded). What remains is browser *page-level* streaming — it fetches a
+> remote `.khb` whole for now (step 3 below), pending an async-VFS SQLite-WASM engine.
+> Offline works throughout (bundled docsets + IndexedDB uploads + PWA).
 
 ## Why SQLite makes this possible
 
@@ -77,6 +79,14 @@ type DocsetSource =
 - Attachment packs (`.khba`) can likewise be local files or remote URLs; `asset_index`
   already names the owning pack, so the resolver just fetches from the right place.
 
+**Online / hybrid is shipped (browser fetches whole).** *File → Open from URL…* adds a
+remote docset by URL; it is persisted (as a URL, re-fetched each session — the "online"
+part) and merged with bundled + uploaded docsets into one collection, so you can mix a
+product's own docs with remote ones. The only thing still whole-file is the *transport*
+in the browser: a remote `.khb` is fetched entirely before opening, because browser
+**page-level** streaming needs the async-VFS engine below. Natively (`kdhelp inspect
+<url>`, Tauri) the same remote docset already streams page-by-page through the Range-VFS.
+
 ## Content packs — splitting page bodies out of the `.khb`
 
 Attachments already move the bulky *binary* payload into sidecars. The same idea
@@ -146,18 +156,22 @@ small fully-fetched index for a remote book).
 
 ## Summary of what to build, in order
 
-1. A Range-VFS SQLite loader. **Native + HTTP done** (`core/src/vfs.rs` +
-   `Docset::open_reader`; the CLI's `HttpRangeReader` + `kdhelp inspect <url>`); next
-   is an FTS5+VFS SQLite-WASM in the browser. Fallback already documented:
-   `sql.js-httpvfs`.
-2. A `{ url, mode: "streaming" }` `DocsetSource` + `streaming` in `docsets.json`;
-   attachment packs likewise addressable by URL.
-3. Tauri `khb-asset://` protocol with `Range` support for streamed media.
-4. **Content packs** — a `page_index` table + a compiler `--split` that peels
+1. A Range-VFS SQLite loader. **✅ Native + HTTP done** (`core/src/vfs.rs` +
+   `Docset::open_reader`; the CLI's `HttpRangeReader` + `kdhelp inspect <url>`).
+2. Remote docsets in the viewer. **✅ Done** — *File → Open from URL…* + persisted
+   remotes, merged into the collection (online / hybrid). The browser still fetches a
+   remote `.khb` **whole** (page-level streaming waits on step 3).
+3. **Browser page-level streaming** — the one large piece left: swap `sql.js` for an
+   FTS5-capable, async-VFS SQLite-WASM (official `sqlite-wasm` with an async Range VFS
+   via Asyncify, or `sql.js-httpvfs`). Rewrites `viewer-ts/src/data/docset.ts` against
+   the new engine; also restores *real* FTS5 in the browser (today it searches the
+   stored `plain` column — see [format.md](format.md)). Higher risk (engine swap) and
+   needs a `Range`-capable host to verify.
+4. Tauri `khb-asset://` protocol with `Range` support for streamed media.
+5. **Content packs** — a `page_index` table + a compiler `--split` that peels
    `body_html` (and assets) into `.khbp` packs, and a `Docset.page(id)` that routes
-   through it. Optional; only worthwhile once (1) exists. Until then, use collections
-   for offline modularity.
+   through it. Optional; only worthwhile once step 3 exists.
 
-Steps 1–3 change **no** format — the files shipped today are already streaming-ready.
-Step 4 adds one routing table (`page_index`) mirroring `asset_index`; the master
+Steps 1–4 change **no** format — the files shipped today are already streaming-ready.
+Step 5 adds one routing table (`page_index`) mirroring `asset_index`; the master
 `.khb` and the packs stay ordinary SQLite.

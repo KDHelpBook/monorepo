@@ -66,3 +66,39 @@ export async function docsetsByLanguage(
   const all = await allDocsets();
   return all.filter((d) => d.language === language);
 }
+
+// Remote (online) docsets are persisted as bare URLs and re-fetched each session,
+// unlike uploaded docsets (bytes cached in IndexedDB). Kept in localStorage.
+const REMOTES_KEY = "kdhelp.remotes";
+
+export function getRemotes(): string[] {
+  try {
+    const raw = localStorage.getItem(REMOTES_KEY);
+    const list = raw ? (JSON.parse(raw) as unknown) : [];
+    return Array.isArray(list) ? list.filter((u): u is string => typeof u === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+export function addRemote(url: string): void {
+  const list = getRemotes();
+  if (!list.includes(url)) {
+    try {
+      localStorage.setItem(REMOTES_KEY, JSON.stringify([...list, url]));
+    } catch {
+      /* storage unavailable — remote just won't persist */
+    }
+  }
+}
+
+export function removeRemote(url: string): void {
+  try {
+    localStorage.setItem(
+      REMOTES_KEY,
+      JSON.stringify(getRemotes().filter((u) => u !== url)),
+    );
+  } catch {
+    /* ignore */
+  }
+}

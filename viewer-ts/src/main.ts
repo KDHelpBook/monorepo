@@ -1,9 +1,20 @@
 import "./styles/main.css";
 // The page-body typography, injected as a string into the sandboxed content frame.
 import contentCss from "./styles/content.css?inline";
-import { Collection, type DocsetSource } from "./data/collection";
+import {
+  Collection,
+  fetchDocsetBytes,
+  type DocsetSource,
+} from "./data/collection";
 import { Docset, type TocNode } from "./data/docset";
-import { allDocsets, deleteDocset, putDocset } from "./data/library";
+import {
+  addRemote,
+  allDocsets,
+  deleteDocset,
+  getRemotes,
+  putDocset,
+  removeRemote,
+} from "./data/library";
 import { applyStatic, strings, type Strings } from "./i18n";
 
 interface Config {
@@ -93,12 +104,27 @@ async function bootstrap(): Promise<void> {
   const manifest = (await manifestRes.json()) as Manifest;
   const config = await loadConfig();
 
-  // Uploaded docsets extend both the available languages and the current collection.
+  // Uploaded docsets (bytes in IndexedDB) and remote docsets (URLs, re-fetched each
+  // session — the online/hybrid path) both extend the languages + collection.
   const uploadedAll = config.externalSources ? await allDocsets() : [];
+  const remotes: { url: string; bytes: Uint8Array; language: string }[] = [];
+  if (config.externalSources) {
+    for (const url of getRemotes()) {
+      try {
+        const bytes = await fetchDocsetBytes(url);
+        const ds = await Docset.open(bytes);
+        remotes.push({ url, bytes, language: ds.language });
+        ds.close();
+      } catch {
+        /* unreachable/invalid remote — skip; the user can remove it */
+      }
+    }
+  }
   const available = [
     ...new Set([
       ...manifest.docsets.map((d) => d.language),
       ...uploadedAll.map((d) => d.language),
+      ...remotes.map((r) => r.language),
     ]),
   ];
   const lang = chooseLang(available);
@@ -118,7 +144,10 @@ async function bootstrap(): Promise<void> {
       bytes: d.bytes,
       attachments: (d.attachments ?? []).map((bytes) => ({ bytes })),
     }));
-  const sources = [...bundled, ...uploaded];
+  const remote: DocsetSource[] = remotes
+    .filter((r) => r.language === lang)
+    .map((r) => ({ bytes: r.bytes }));
+  const sources = [...bundled, ...uploaded, ...remote];
   if (!sources.length) throw new Error(`no docsets for language "${lang}"`);
 
   if (config.pwa) registerServiceWorker();
@@ -158,7 +187,7 @@ function start(
   if (!config.externalSources) {
     document
       .querySelectorAll<HTMLElement>(
-        '[data-action="open-docset"], [data-action="manage-docsets"]',
+        '[data-action="open-docset"], [data-action="open-url"], [data-action="manage-docsets"]',
       )
       .forEach((el) => (el.style.display = "none"));
   }
@@ -1031,6 +1060,9 @@ function start(
       case "open-docset":
         pickDocset();
         break;
+      case "open-url":
+        openUrl();
+        break;
       case "manage-docsets":
         void showLibrary();
         break;
@@ -1102,6 +1134,56 @@ function start(
     input.click();
   }
 
+  // Add a remote (online) docset by URL: fetched each session, merged into the
+  // collection. The host must be CORS-reachable and, ideally, Range-capable (native
+  // streams pages; the browser fetches the file whole for now).
+  function openUrl(): void {
+    const btn =
+      "font-family:var(--font-ui);font-size:12px;padding:4px 16px;border:1px solid #16305a;border-radius:2px;cursor:pointer";
+    const bg = document.createElement("div");
+    bg.style.cssText =
+      "position:fixed;inset:0;background:rgba(20,35,60,.35);display:grid;place-items:center;z-index:50";
+    bg.innerHTML =
+      '<div style="width:480px;max-width:92vw;background:var(--chrome-top);border:1px solid #17335c;border-radius:3px;box-shadow:0 12px 40px rgba(0,0,0,.5);overflow:hidden">' +
+      `<div style="background:linear-gradient(180deg,var(--title-top),var(--title-bot));color:#fff;font-weight:bold;padding:6px 10px">${esc(s.openUrlTitle)}</div>` +
+      `<div style="padding:14px 18px"><div style="color:var(--muted);margin-bottom:6px">${esc(s.openUrlHint)}</div>` +
+      '<input class="url-in" type="url" placeholder="https://…/docs.khb" spellcheck="false" style="width:100%;font-family:var(--font-mono);font-size:12px;padding:5px 7px;border:1px solid #7f9bc0;border-radius:2px;box-sizing:border-box">' +
+      '<div class="url-err" style="color:#a33;font-size:11px;min-height:15px;margin-top:5px"></div></div>' +
+      '<div style="padding:10px 16px;border-top:1px solid var(--chrome-border);display:flex;gap:8px;justify-content:flex-end">' +
+      `<button class="url-cancel" style="${btn};background:#eef1f6">${esc(s.cancel)}</button>` +
+      `<button class="url-add" style="${btn};background:linear-gradient(180deg,#eef4fd,#cbd9ec)">${esc(s.add)}</button></div></div>`;
+    const input = bg.querySelector<HTMLInputElement>(".url-in")!;
+    const err = bg.querySelector<HTMLElement>(".url-err")!;
+    const add = bg.querySelector<HTMLButtonElement>(".url-add")!;
+    const submit = async (): Promise<void> => {
+      const url = input.value.trim();
+      if (!url) return;
+      err.style.color = "var(--muted)";
+      err.textContent = s.openUrlChecking;
+      add.disabled = true;
+      try {
+        const ds = await Docset.open(await fetchDocsetBytes(url)); // validate
+        ds.close();
+        addRemote(url);
+        location.reload();
+      } catch {
+        err.style.color = "#a33";
+        err.textContent = s.openUrlError;
+        add.disabled = false;
+      }
+    };
+    add.addEventListener("click", () => void submit());
+    bg.querySelector(".url-cancel")!.addEventListener("click", () => bg.remove());
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") void submit();
+    });
+    bg.addEventListener("click", (e) => {
+      if (e.target === bg) bg.remove();
+    });
+    document.body.appendChild(bg);
+    setTimeout(() => input.focus(), 0);
+  }
+
   async function uploadDocset(
     file: File,
     attachmentFiles: File[] = [],
@@ -1136,14 +1218,34 @@ function start(
 
   async function showLibrary(): Promise<void> {
     const uploaded = await allDocsets();
-    const rows = uploaded.length
+    const rmBtn =
+      'font-family:var(--font-ui);font-size:12px;padding:3px 10px;border:1px solid #b3462f;border-radius:2px;background:#fdeeea;color:#a33;cursor:pointer';
+    const row = (label: string, attr: string): string =>
+      `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--rule)"><span style="flex:1;overflow:hidden;text-overflow:ellipsis">${label}</span><button ${attr} style="${rmBtn}">${esc(s.remove)}</button></div>`;
+    const uploadedRows = uploaded.length
       ? uploaded
-          .map(
-            (d) =>
-              `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--rule)"><span style="flex:1">${esc(d.title)} <span style="color:var(--muted)">(${esc(d.language)})</span></span><button data-remove="${esc(d.id)}" style="font-family:var(--font-ui);font-size:12px;padding:3px 10px;border:1px solid #b3462f;border-radius:2px;background:#fdeeea;color:#a33;cursor:pointer">${esc(s.remove)}</button></div>`,
+          .map((d) =>
+            row(
+              `${esc(d.title)} <span style="color:var(--muted)">(${esc(d.language)})</span>`,
+              `data-remove="${esc(d.id)}"`,
+            ),
           )
           .join("")
       : `<div style="color:var(--muted);padding:6px 0">${esc(s.noUploaded)}</div>`;
+    const remoteList = getRemotes();
+    const remoteRows = remoteList
+      .map((url) =>
+        row(
+          `<span style="font-family:var(--font-mono);font-size:11px">${esc(url)}</span>`,
+          `data-remove-url="${esc(url)}"`,
+        ),
+      )
+      .join("");
+    const rows =
+      uploadedRows +
+      (remoteList.length
+        ? `<div style="margin-top:12px;color:var(--content-h);font-weight:bold">${esc(s.remotesTitle)}</div>${remoteRows}`
+        : "");
     const bg = document.createElement("div");
     bg.style.cssText =
       "position:fixed;inset:0;background:rgba(20,35,60,.35);display:grid;place-items:center;z-index:50";
@@ -1155,8 +1257,12 @@ function start(
     bg.addEventListener("click", (e) => {
       const t = e.target as HTMLElement;
       const rm = t.getAttribute("data-remove");
+      const rmUrl = t.getAttribute("data-remove-url");
       if (rm) {
         void deleteDocset(rm).then(() => location.reload());
+      } else if (rmUrl) {
+        removeRemote(rmUrl);
+        location.reload();
       } else if (t === bg || t.classList.contains("lib-ok")) {
         bg.remove();
       }

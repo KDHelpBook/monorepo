@@ -37,8 +37,9 @@ async function gunzip(bytes: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
  * so the browser has already decompressed the body — while a plain host (e.g. GitHub
  * Pages) serves the `.gz` bytes verbatim. The magic works in both cases.
  */
-async function fetchMaybeGz(url: string): Promise<Uint8Array> {
+export async function fetchDocsetBytes(url: string): Promise<Uint8Array> {
   const res = await fetch(url);
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   const bytes = new Uint8Array(await res.arrayBuffer());
   return bytes[0] === 0x1f && bytes[1] === 0x8b ? await gunzip(bytes) : bytes;
 }
@@ -64,12 +65,12 @@ export class Collection {
       if ("bytes" in src) {
         bytes = src.bytes;
       } else {
-        bytes = await fetchMaybeGz(src.file);
+        bytes = await fetchDocsetBytes(src.file);
       }
       const attachmentBytes: Uint8Array[] = [];
       for (const a of src.attachments ?? []) {
         attachmentBytes.push(
-          "bytes" in a ? a.bytes : await fetchMaybeGz(a.file),
+          "bytes" in a ? a.bytes : await fetchDocsetBytes(a.file),
         );
       }
       docsets.push(await Docset.open(bytes, attachmentBytes));

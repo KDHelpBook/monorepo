@@ -65,6 +65,15 @@ export interface Strings {
   remove: string;
   uploadError: string;
   bundledBadge: string;
+  // remote / online docsets
+  openUrl: string;
+  openUrlTitle: string;
+  openUrlHint: string;
+  openUrlChecking: string;
+  openUrlError: string;
+  add: string;
+  cancel: string;
+  remotesTitle: string;
 }
 
 const en: Strings = {
@@ -123,6 +132,15 @@ const en: Strings = {
   remove: "Remove",
   uploadError: "Could not read that file as a docset.",
   bundledBadge: "bundled",
+  openUrl: "Open from URL…",
+  openUrlTitle: "Open docset from URL",
+  openUrlHint:
+    "The docset is fetched from this URL each session (the host must allow CORS).",
+  openUrlChecking: "Fetching…",
+  openUrlError: "Could not load a docset from that URL.",
+  add: "Add",
+  cancel: "Cancel",
+  remotesTitle: "Remote docsets",
 };
 
 const pl: Strings = {
@@ -182,6 +200,15 @@ const pl: Strings = {
   remove: "Usuń",
   uploadError: "Nie udało się odczytać tego pliku jako docsetu.",
   bundledBadge: "wbudowany",
+  openUrl: "Otwórz z URL…",
+  openUrlTitle: "Otwórz docset z URL",
+  openUrlHint:
+    "Docset jest pobierany z tego URL przy każdym uruchomieniu (host musi zezwalać na CORS).",
+  openUrlChecking: "Pobieranie…",
+  openUrlError: "Nie udało się wczytać docsetu z tego URL.",
+  add: "Dodaj",
+  cancel: "Anuluj",
+  remotesTitle: "Zdalne docsety",
 };
 
 const TABLES: Record<Lang, Strings> = { en, pl };
