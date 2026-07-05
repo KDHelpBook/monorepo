@@ -147,10 +147,25 @@ function start(
   const pages = new Map<string, PageInfo>();
   const pageKeywords = new Map<string, string[]>();
   const favorites = new Set<string>();
+  const tabs: { id: string }[] = [];
+  let active = -1;
   let currentId = "";
   let mode: Mode = "contents";
   let filterCategory = "";
   let fontSize = 13;
+
+  // Ctrl/⌘-click or middle-click opens a link in a new document tab.
+  const wantNew = (e: MouseEvent): boolean => e.ctrlKey || e.metaKey;
+  const linkOpen = (el: Element, id: string): void => {
+    el.addEventListener("click", (e) => openPage(id, wantNew(e as MouseEvent)));
+    el.addEventListener("auxclick", (e) => {
+      const me = e as MouseEvent;
+      if (me.button === 1) {
+        me.preventDefault();
+        openPage(id, true);
+      }
+    });
+  };
 
   const toc = collection.tocTree();
   (function buildPages(nodes: TocNode[], path: string[]) {
@@ -205,7 +220,7 @@ function start(
         row.querySelector(".twisty")!.textContent = showing ? "+" : "−";
       });
     }
-    row.addEventListener("click", () => openPage(n.pageId));
+    linkOpen(row, n.pageId);
     return li;
   }
 
@@ -222,7 +237,7 @@ function start(
         row.dataset.id = id;
         row.innerHTML =
           pageIcon(false) + `<span class="label">${esc(info.title)}</span>`;
-        row.addEventListener("click", () => openPage(id));
+        linkOpen(row, id);
         list.appendChild(row);
       }
       leftBody.appendChild(list);
@@ -287,7 +302,7 @@ function start(
       row.className = "idx-key" + (k.pageIds.length > 1 ? " multi" : "");
       row.textContent = k.term;
       if (k.pageIds.length === 1) {
-        row.addEventListener("click", () => openPage(k.pageIds[0]!));
+        linkOpen(row, k.pageIds[0]!);
         wrap.appendChild(row);
       } else {
         const sub = document.createElement("div");
@@ -297,7 +312,7 @@ function start(
           const t = document.createElement("div");
           t.className = "idx-topic";
           t.textContent = pages.get(id)?.title ?? id;
-          t.addEventListener("click", () => openPage(id));
+          linkOpen(t, id);
           sub.appendChild(t);
         }
         row.addEventListener("click", () => {
@@ -339,7 +354,7 @@ function start(
         `<div class="r-title">${esc(hit.title)}</div>` +
         `<div class="r-crumb">${crumb(hit.pageId)}</div>` +
         `<div class="r-snip">${hit.snippet}</div>`;
-      div.addEventListener("click", () => openPage(hit.pageId));
+      linkOpen(div, hit.pageId);
       frag.appendChild(div);
     }
     leftBody.innerHTML = "";
@@ -360,9 +375,7 @@ function start(
       const row = document.createElement("div");
       row.className = "fav-row";
       row.innerHTML = `<span class="f-star">★</span><span class="f-title">${esc(info.title)}</span><span class="f-del" title="Remove">×</span>`;
-      row
-        .querySelector(".f-title")!
-        .addEventListener("click", () => openPage(id));
+      linkOpen(row.querySelector(".f-title")!, id);
       row.querySelector(".f-del")!.addEventListener("click", (e) => {
         e.stopPropagation();
         favorites.delete(id);
@@ -462,10 +475,48 @@ function start(
   }
 
   function renderTabs(): void {
-    const info = pages.get(currentId);
-    tabstrip.innerHTML = `<div class="doctab active"><span class="dt-name">${esc(
-      info?.title ?? currentId,
-    )}</span></div>`;
+    tabstrip.innerHTML = "";
+    tabs.forEach((t, i) => {
+      const info = pages.get(t.id);
+      const tab = document.createElement("div");
+      tab.className = "doctab" + (i === active ? " active" : "");
+      tab.innerHTML =
+        `<span class="dt-name">${esc(info?.title ?? t.id)}</span>` +
+        (tabs.length > 1
+          ? '<span class="dt-x" title="Close tab">×</span>'
+          : "");
+      tab.addEventListener("click", () => activateTab(i));
+      tab.addEventListener("auxclick", (e) => {
+        if (e.button === 1) {
+          e.preventDefault();
+          closeTab(i);
+        }
+      });
+      tab.querySelector(".dt-x")?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        closeTab(i);
+      });
+      tabstrip.appendChild(tab);
+    });
+    tabstrip.children[active]?.scrollIntoView({
+      inline: "nearest",
+      block: "nearest",
+    });
+  }
+
+  function activateTab(i: number): void {
+    active = i;
+    const t = tabs[i];
+    if (t) loadContent(t.id);
+    else renderTabs();
+  }
+
+  function closeTab(i: number): void {
+    if (tabs.length <= 1) return;
+    tabs.splice(i, 1);
+    if (i < active || active >= tabs.length) active = Math.max(0, active - 1);
+    const t = tabs[active];
+    if (t) loadContent(t.id);
   }
 
   function loadContent(id: string): void {
@@ -488,7 +539,14 @@ function start(
     status.textContent = s.ready;
   }
 
-  function openPage(id: string): void {
+  function openPage(id: string, newTab = false): void {
+    if (newTab || active < 0) {
+      tabs.push({ id });
+      active = tabs.length - 1;
+    } else {
+      const t = tabs[active];
+      if (t) t.id = id;
+    }
     loadContent(id);
     // Close the drawer (mobile) or retract the auto-hide fly-out after a pick.
     if (narrow() || !pinned) retract();
@@ -712,10 +770,8 @@ function start(
     updateFavBtn();
     if (mode === "favorites") renderFavorites();
   });
-  $("#tab-new").addEventListener(
-    "click",
-    () => (status.textContent = "Tabs: coming soon."),
-  );
+  // ＋ opens the current page in a new tab.
+  $("#tab-new").addEventListener("click", () => openPage(currentId, true));
 
   content.addEventListener("click", (e) => {
     const a = (e.target as HTMLElement).closest<HTMLAnchorElement>(
@@ -726,6 +782,18 @@ function start(
     // In-content links are `#localId`, relative to the current page's book.
     openPage(
       collection.resolveLink(currentId, a.getAttribute("href")!.slice(1)),
+      wantNew(e),
+    );
+  });
+  content.addEventListener("auxclick", (e) => {
+    const a = (e.target as HTMLElement).closest<HTMLAnchorElement>(
+      'a[href^="#"]',
+    );
+    if (!a || e.button !== 1) return;
+    e.preventDefault();
+    openPage(
+      collection.resolveLink(currentId, a.getAttribute("href")!.slice(1)),
+      true,
     );
   });
 
