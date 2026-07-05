@@ -58,6 +58,46 @@ type DocsetSource =
 - Attachment packs (`.khba`) can likewise be local files or remote URLs; `asset_index`
   already names the owning pack, so the resolver just fetches from the right place.
 
+## Content packs — splitting page bodies out of the `.khb`
+
+Attachments already move the bulky *binary* payload into sidecars. The same idea
+generalises to **page content**: keep a small navigable/searchable skeleton in the
+main `.khb` and stream the heavy rendered HTML on demand.
+
+The split falls out of one fact: **`plain` (the searchable text) is a separate column
+from `body_html` (the rendered page).** So the master `.khb` can keep everything
+needed to browse and search — `title` + `plain` + `keywords` + `toc` + `categories` +
+the FTS5 index — plus routing tables, while each **content pack** carries the
+`body_html` rows (and assets). Concretely:
+
+| Lives in the master `.khb` | Lives in a content pack |
+|----------------------------|-------------------------|
+| `meta`, `toc`, `categories`, `keywords`, `pages(id, title, plain, keywords)`, `pages_fts` | `pages(id, body_html)` for its slice, and/or `assets` |
+| `page_index(page_id → pack)`, `asset_index(path → pack)` | — |
+
+- **Search, index, TOC, snippets work fully offline** from the (small) master file —
+  `snippet()` already draws from `plain`, not `body_html`.
+- **Opening a page** looks up `page_index` (exactly like `asset_index`), then reads
+  `body_html` from the one routed pack — one lookup, one ranged read, no probing.
+- Routing is by the pack's stable `meta.pack` id, so packs are order-independent
+  (same property that makes re-uploaded attachment packs resolve correctly).
+
+This is the symmetric extension of what already ships: `Docset.asset(path)` routes via
+`asset_index`; a future `Docset.page(id)` would route its `body_html` via `page_index`
+the same way, and `Collection` merges packs as it already merges books.
+
+**Naming.** A content pack is just a `.khb`-shaped SQLite file carrying a *subset* of
+tables — a `.khba` is the degenerate "assets-only" case. Do **not** reuse `.khbc`
+(that already means a gzip'd `.khb`). Proposed: **`.khbp`** ("pack") for a general
+content pack, with `.khba` kept (or folded in) as the assets-only shorthand. The
+master `.khb`'s `page_index`/`asset_index` name the owning pack by its `meta.pack`.
+
+**When to use which.** For purely **offline** modularity — a base product plus
+optional expansion books — you don't need any of this: ship several complete `.khb`
+files and let **collections** merge them (that works today). Content packs earn their
+keep only alongside streaming, where the point is a tiny initial download with page
+bodies fetched lazily.
+
 ## Tauri: streamed assets & media in the webview
 
 For the desktop app, stream bytes to the webview through a **custom URI scheme**
@@ -91,6 +131,11 @@ small fully-fetched index for a remote book).
 2. A `{ url, mode: "streaming" }` `DocsetSource` + `streaming` in `docsets.json`;
    attachment packs likewise addressable by URL.
 3. Tauri `khb-asset://` protocol with `Range` support for streamed media.
+4. **Content packs** — a `page_index` table + a compiler `--split` that peels
+   `body_html` (and assets) into `.khbp` packs, and a `Docset.page(id)` that routes
+   through it. Optional; only worthwhile once (1) exists. Until then, use collections
+   for offline modularity.
 
-None of these change the `.khb`/`.khba` format — the files shipped today are already
-streaming-ready.
+Steps 1–3 change **no** format — the files shipped today are already streaming-ready.
+Step 4 adds one routing table (`page_index`) mirroring `asset_index`; the master
+`.khb` and the packs stay ordinary SQLite.
