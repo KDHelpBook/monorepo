@@ -244,11 +244,30 @@ function start(
   // behaviour that recomputed openness from the current page and collapsed the rest.
   const expanded = new Set<string>(loadExpanded());
   const persistTabs = (): void =>
-    saveTabs({ tabs: tabs.map((t) => ({ ...t })), active });
+    saveTabs({
+      // Persist the open pages only, not each tab's transient back/forward stack.
+      tabs: tabs.map((t) => (t.query != null ? { id: t.id, query: t.query } : { id: t.id })),
+      active,
+    });
   // A tab is a docset page, or the full Search results page (id === SEARCH_ID,
   // which carries its query + the last scroll of scope/sort controls).
   const SEARCH_ID = "@search";
-  const tabs: { id: string; query?: string }[] = [];
+  // Each tab keeps its OWN back/forward stack (`hist` + `pos`), like MS Document
+  // Explorer and browser tabs — Back/Forward move within the active tab only, and
+  // switching tabs never touches another tab's history. `id` mirrors `hist[pos]`.
+  interface Tab {
+    id: string;
+    query?: string;
+    hist: string[];
+    pos: number;
+  }
+  const mkTab = (id: string, query?: string): Tab => ({
+    id,
+    query,
+    hist: [id],
+    pos: 0,
+  });
+  const tabs: Tab[] = [];
   let active = -1;
   const searchScope = { category: "", product: "", sort: "rank" };
   let currentId = "";
@@ -577,7 +596,7 @@ function start(
       existing.query = query;
       active = tabs.indexOf(existing);
     } else {
-      tabs.push({ id: SEARCH_ID, query });
+      tabs.push(mkTab(SEARCH_ID, query));
       active = tabs.length - 1;
     }
     loadContent(SEARCH_ID);
@@ -1093,21 +1112,39 @@ function start(
     updateFavBtn();
     if (mode === "contents") revealCurrent();
     else highlightTree();
-    if (location.hash.slice(1) !== id) location.hash = id;
+    // Reflect the current page in the URL for deep-linking/bookmarking, but with
+    // replaceState so it doesn't build a *browser* history that would fight the
+    // per-tab Back/Forward (the toolbar buttons own navigation now).
+    if (location.hash.slice(1) !== id) history.replaceState(null, "", `#${id}`);
     status.textContent = s.ready;
   }
 
   function openPage(id: string, newTab = false): void {
-    if (newTab || active < 0) {
-      tabs.push({ id });
+    const t = tabs[active];
+    if (newTab || active < 0 || !t) {
+      tabs.push(mkTab(id));
       active = tabs.length - 1;
-    } else {
-      const t = tabs[active];
-      if (t) t.id = id;
+    } else if (t.id !== id) {
+      // Navigate the active tab: drop any forward history, then push.
+      t.hist = t.hist.slice(0, t.pos + 1);
+      t.hist.push(id);
+      t.pos = t.hist.length - 1;
+      t.id = id;
     }
     loadContent(id);
     // Close the drawer (mobile) or retract the auto-hide fly-out after a pick.
     if (narrow() || !pinned) retract();
+  }
+
+  // Back/Forward move within the *active* tab's own history only.
+  function goHistory(delta: number): void {
+    const t = tabs[active];
+    if (!t) return;
+    const next = t.pos + delta;
+    if (next < 0 || next >= t.hist.length) return;
+    t.pos = next;
+    t.id = t.hist[next]!;
+    loadContent(t.id);
   }
 
   // ---- Actions (menu / toolbar / tabs) ----
@@ -1129,10 +1166,10 @@ function start(
         syncTree();
         break;
       case "back":
-        history.back();
+        goHistory(-1);
         break;
       case "forward":
-        history.forward();
+        goHistory(1);
         break;
       case "font-up":
         fontSize = Math.min(20, fontSize + 1);
@@ -1587,8 +1624,9 @@ function start(
   const restored = (saved?.tabs ?? []).filter(validTab);
   if (restored.length) {
     // Restore the previous session's tabs + active tab first — never let the hash
-    // (which we set on every navigation) collapse it back to a single tab.
-    tabs.push(...restored);
+    // (which we set on every navigation) collapse it back to a single tab. Each
+    // restored tab starts a fresh (single-entry) back/forward history.
+    tabs.push(...restored.map((t) => mkTab(t.id, t.query)));
     active = Math.min(Math.max(0, saved?.active ?? 0), tabs.length - 1);
     const openIdx = deepLink ? tabs.findIndex((t) => t.id === deepLink) : -1;
     if (deepLink && openIdx === -1) {
