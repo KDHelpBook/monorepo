@@ -1592,23 +1592,30 @@ function start(
 
   // ---- Start ----
   setMode("contents");
-  const startId = location.hash.slice(1);
-  // The first real page (the toc roots may be family folders, which aren't pages).
+  // A hash deep link, if any (our own navigation also parks the current page here,
+  // so it usually just names the session's active page on reload).
+  const deepLink = pages.has(location.hash.slice(1)) ? location.hash.slice(1) : "";
   const firstPageId = pages.keys().next().value ?? "";
   const validTab = (t: { id: string }): boolean =>
     t.id === SEARCH_ID || pages.has(t.id);
   const saved = loadTabs();
   const restored = (saved?.tabs ?? []).filter(validTab);
-  if (startId && pages.has(startId)) {
-    // A deep link (address hash) wins over the restored session.
-    openPage(startId);
-  } else if (restored.length) {
-    // Restore the previous session's tabs + active tab.
+  if (restored.length) {
+    // Restore the previous session's tabs + active tab first — never let the hash
+    // (which we set on every navigation) collapse it back to a single tab.
     tabs.push(...restored);
     active = Math.min(Math.max(0, saved?.active ?? 0), tabs.length - 1);
-    void loadContent(tabs[active]!.id);
+    const openIdx = deepLink ? tabs.findIndex((t) => t.id === deepLink) : -1;
+    if (deepLink && openIdx === -1) {
+      openPage(deepLink, true); // a genuine deep link to a page not in the session
+    } else {
+      if (openIdx !== -1) active = openIdx; // focus the deep-linked tab if present
+      void loadContent(tabs[active]!.id);
+    }
+  } else if (deepLink) {
+    openPage(deepLink);
   } else {
-    openPage(pages.has(startId) ? startId : firstPageId);
+    openPage(firstPageId);
   }
 }
 
