@@ -1,6 +1,7 @@
 import "./styles/main.css";
 import { Collection } from "./data/collection";
 import type { TocNode } from "./data/docset";
+import { applyStatic, strings, type Strings } from "./i18n";
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -28,12 +29,34 @@ interface Manifest {
   docsets: ManifestEntry[];
 }
 
-async function loadCollection(language: string): Promise<Collection> {
+const LANG_KEY = "kdhelp.lang";
+
+function readSavedLang(): string | null {
+  try {
+    return localStorage.getItem(LANG_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function chooseLang(available: string[]): string {
+  const saved = readSavedLang();
+  if (saved && available.includes(saved)) return saved;
+  const nav = (navigator.language || "en").slice(0, 2);
+  if (available.includes(nav)) return nav;
+  return available.includes("en") ? "en" : (available[0] ?? "en");
+}
+
+async function bootstrap(): Promise<void> {
   const manifestRes = await fetch("docsets.json");
   const manifest = (await manifestRes.json()) as Manifest;
-  const entries = manifest.docsets.filter((d) => d.language === language);
-  if (!entries.length) throw new Error(`no docsets for language "${language}"`);
-  return Collection.load(entries, language);
+  const available = [...new Set(manifest.docsets.map((d) => d.language))];
+  const lang = chooseLang(available);
+  document.documentElement.lang = lang;
+  applyStatic(lang);
+  const entries = manifest.docsets.filter((d) => d.language === lang);
+  if (!entries.length) throw new Error(`no docsets for language "${lang}"`);
+  start(await Collection.load(entries, lang), lang, available);
 }
 
 // ---------------------------------------------------------------------------
@@ -47,7 +70,12 @@ interface PageInfo {
   hasChildren: boolean;
 }
 
-function start(collection: Collection): void {
+function start(
+  collection: Collection,
+  lang: string,
+  available: string[],
+): void {
+  const s: Strings = strings(lang);
   const leftBody = $("#left-body");
   const leftTitle = $("#left-title");
   const content = $("#content");
@@ -227,7 +255,7 @@ function start(collection: Collection): void {
     }
     leftBody.innerHTML = "";
     leftBody.appendChild(wrap);
-    statusCount.textContent = `${keys.length} keywords`;
+    statusCount.textContent = s.indexKeywords(keys.length);
   }
 
   // ---- Search ----
@@ -239,15 +267,14 @@ function start(collection: Collection): void {
   function runSearch(query: string): void {
     const q = query.trim();
     if (!q) {
-      leftBody.innerHTML =
-        '<div class="empty">Type words to search the documentation.</div>';
+      leftBody.innerHTML = `<div class="empty">${esc(s.searchPrompt)}</div>`;
       statusCount.textContent = "";
       return;
     }
     const results = collection.search(q, 40);
     if (!results.length) {
-      leftBody.innerHTML = `<div class="empty">No results for:<br><b>${esc(q)}</b></div>`;
-      statusCount.textContent = "0 results";
+      leftBody.innerHTML = `<div class="empty">${esc(s.noResults)}<br><b>${esc(q)}</b></div>`;
+      statusCount.textContent = s.searchResults(0);
       return;
     }
     const frag = document.createDocumentFragment();
@@ -263,14 +290,13 @@ function start(collection: Collection): void {
     }
     leftBody.innerHTML = "";
     leftBody.appendChild(frag);
-    statusCount.textContent = `${results.length} results`;
+    statusCount.textContent = s.searchResults(results.length);
   }
 
   // ---- Favorites ----
   function renderFavorites(): void {
     if (!favorites.size) {
-      leftBody.innerHTML =
-        '<div class="empty">No favorites yet.<br>Open a page and click <b>☆ Favorite</b>.</div>';
+      leftBody.innerHTML = `<div class="empty">${esc(s.favEmpty1)}<br>${esc(s.favEmpty2)}</div>`;
       return;
     }
     const frag = document.createDocumentFragment();
@@ -297,7 +323,7 @@ function start(collection: Collection): void {
 
   const updateFavBtn = (): void => {
     const on = favorites.has(currentId);
-    favToggle.innerHTML = (on ? "★" : "☆") + " Favorite";
+    favToggle.innerHTML = (on ? "★" : "☆") + " " + esc(s.favorite);
     favToggle.style.color = on ? "var(--swoosh)" : "";
   };
 
@@ -311,10 +337,10 @@ function start(collection: Collection): void {
     filterbar.style.display = next === "contents" ? "" : "none";
     searchBox.style.display = next === "search" ? "" : "none";
     leftTitle.textContent = {
-      contents: "Contents",
-      index: "Index",
-      search: "Search",
-      favorites: "Favorites",
+      contents: s.contents,
+      index: s.index,
+      search: s.search,
+      favorites: s.favorites,
     }[next];
     statusCount.textContent = "";
     if (next === "contents") renderTree();
@@ -374,7 +400,8 @@ function start(collection: Collection): void {
     if (kws?.length) {
       const kw = document.createElement("div");
       kw.className = "kw";
-      kw.innerHTML = "<b>Keywords:</b> " + kws.map(esc).join(", ");
+      kw.innerHTML =
+        `<b>${esc(s.keywordsLabel)}</b> ` + kws.map(esc).join(", ");
       d.appendChild(kw);
     }
     return d.innerHTML;
@@ -394,7 +421,7 @@ function start(collection: Collection): void {
     const title = page?.title ?? info?.title ?? id;
     content.innerHTML = page
       ? decorate(page.bodyHtml, id)
-      : `<h1>Topic not found</h1><p>No page with address <code>${esc(id)}</code>.</p>`;
+      : `<h1>${esc(s.notFoundTitle)}</h1><p>${s.notFoundBody(esc(id))}</p>`;
     contentWrap.scrollTop = 0;
     document.title = `${title} — kdhelp`;
     const { docsetId, localId } = collection.split(id);
@@ -404,7 +431,7 @@ function start(collection: Collection): void {
     if (mode === "contents") renderTree();
     else highlightTree();
     if (location.hash.slice(1) !== id) location.hash = id;
-    status.textContent = "Ready";
+    status.textContent = s.ready;
   }
 
   function openPage(id: string): void {
@@ -496,8 +523,8 @@ function start(collection: Collection): void {
       '<div style="width:420px;background:var(--chrome-top);border:1px solid #17335c;border-radius:3px;box-shadow:0 12px 40px rgba(0,0,0,.5);overflow:hidden">' +
       '<div style="background:linear-gradient(180deg,var(--title-top),var(--title-bot));color:#fff;font-weight:bold;padding:6px 10px">About kdhelp</div>' +
       '<div style="padding:16px 18px;line-height:1.6"><div style="font-size:15px;font-weight:bold;color:var(--content-h)">kdhelp</div>' +
-      "<div>A documentation reader in the spirit of Microsoft Document Explorer.</div>" +
-      `<p style="color:#5b6675;margin:.8em 0 0">Language: <b>${esc(collection.language)}</b></p></div>` +
+      `<div>${esc(s.aboutTagline)}</div>` +
+      `<p style="color:#5b6675;margin:.8em 0 0">${esc(s.aboutLanguage)} <b>${esc(collection.language)}</b></p></div>` +
       '<div style="padding:10px 16px;text-align:right;border-top:1px solid var(--chrome-border)"><button style="font-family:var(--font-ui);font-size:12px;padding:4px 16px;border:1px solid #16305a;border-radius:2px;background:linear-gradient(180deg,#eef4fd,#cbd9ec);cursor:pointer">OK</button></div></div>';
     const close = (): void => bg.remove();
     bg.addEventListener("click", (e) => {
@@ -517,6 +544,21 @@ function start(collection: Collection): void {
   filterSel.addEventListener("change", () => {
     filterCategory = filterSel.value;
     if (mode === "contents") renderTree();
+  });
+
+  // Language switcher: persist + reload (the content docset changes with the UI).
+  const langSel = $<HTMLSelectElement>("#lang-select");
+  langSel.value = lang;
+  for (const opt of Array.from(langSel.options)) {
+    opt.disabled = !available.includes(opt.value);
+  }
+  langSel.addEventListener("change", () => {
+    try {
+      localStorage.setItem(LANG_KEY, langSel.value);
+    } catch {
+      /* ignore storage errors */
+    }
+    location.reload();
   });
 
   let searchTimer = 0;
@@ -630,12 +672,10 @@ function start(collection: Collection): void {
 }
 
 // ---------------------------------------------------------------------------
-loadCollection("en")
-  .then(start)
-  .catch((err: unknown) => {
-    const content = document.querySelector("#content");
-    if (content)
-      content.innerHTML = `<h1>Failed to load</h1><pre>${String(err)}</pre>`;
-    // eslint-disable-next-line no-console
-    console.error(err);
-  });
+bootstrap().catch((err: unknown) => {
+  const content = document.querySelector("#content");
+  if (content)
+    content.innerHTML = `<h1>Failed to load</h1><pre>${String(err)}</pre>`;
+  // eslint-disable-next-line no-console
+  console.error(err);
+});

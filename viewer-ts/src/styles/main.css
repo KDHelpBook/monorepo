@@ -172,6 +172,16 @@ body {
   margin: 2px 4px;
   background: var(--chrome-border);
 }
+.lang-select {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  padding: 2px 4px;
+  border: 1px solid var(--chrome-border);
+  border-radius: 3px;
+  background: #fbfdff;
+  color: #12233d;
+  cursor: pointer;
+}
 
 /* Main area: two panes + splitter */
 .body {
