@@ -15,6 +15,14 @@ import {
   putDocset,
   removeRemote,
 } from "./data/library";
+import {
+  loadExpanded,
+  loadFavorites,
+  loadTabs,
+  saveExpanded,
+  saveFavorites,
+  saveTabs,
+} from "./data/uistate";
 import { applyStatic, strings, type Strings } from "./i18n";
 
 interface Config {
@@ -224,7 +232,13 @@ function start(
 
   const pages = new Map<string, PageInfo>();
   const pageKeywords = new Map<string, string[]>();
-  const favorites = new Set<string>();
+  const favorites = new Set<string>(loadFavorites());
+  // Expanded tree nodes (page ids + `@collection:…` folders). Persisted so several
+  // folders can stay open at once and the shape survives a reload — unlike the old
+  // behaviour that recomputed openness from the current page and collapsed the rest.
+  const expanded = new Set<string>(loadExpanded());
+  const persistTabs = (): void =>
+    saveTabs({ tabs: tabs.map((t) => ({ ...t })), active });
   // A tab is a docset page, or the full Search results page (id === SEARCH_ID,
   // which carries its query + the last scroll of scope/sort controls).
   const SEARCH_ID = "@search";
@@ -301,8 +315,28 @@ function start(
     '<svg class="ico" viewBox="0 0 16 16"><rect x="2.2" y="2.5" width="3.2" height="11" rx=".4" fill="#7fa8dd" stroke="#33608f"/><rect x="6.1" y="3" width="3.2" height="10.5" rx=".4" fill="#a9c6ea" stroke="#33608f"/><rect x="10" y="2.5" width="3.6" height="11" rx=".4" fill="#d6e5f7" stroke="#33608f"/></svg>';
 
   // ---- Contents tree ----
-  const isAncestorOfCurrent = (id: string): boolean =>
-    (pages.get(currentId)?.path ?? []).includes(id);
+  // Reveal the current page: expand the folders on its path (adding them to the
+  // persisted set — never collapsing others), then re-render only if that changed
+  // the shape, and scroll it into view. This is what replaces the old
+  // collapse-everything-but-the-current-branch behaviour.
+  function revealCurrent(): void {
+    const path = pages.get(currentId)?.path ?? [];
+    let changed = false;
+    for (const id of path)
+      if (!expanded.has(id)) {
+        expanded.add(id);
+        changed = true;
+      }
+    if (changed) {
+      saveExpanded(expanded);
+      renderTree();
+    } else {
+      highlightTree();
+    }
+    leftBody
+      .querySelector(`.node[data-id="${CSS.escape(currentId)}"]`)
+      ?.scrollIntoView({ block: "nearest" });
+  }
 
   function treeNode(n: TocNode, forceOpen = false): HTMLLIElement {
     const li = document.createElement("li");
@@ -310,8 +344,7 @@ function start(
     const row = document.createElement("div");
     row.className = "node" + (n.group ? " group" : "");
     row.dataset.id = n.pageId;
-    const open =
-      forceOpen || isAncestorOfCurrent(n.pageId) || n.pageId === currentId;
+    const open = forceOpen || expanded.has(n.pageId);
     row.innerHTML =
       `<span class="twisty ${kids ? "" : "leaf"}">${kids ? (open ? "−" : "+") : ""}</span>` +
       (n.group ? groupIcon() : pageIcon(kids)) +
@@ -327,6 +360,9 @@ function start(
         const showing = sub.style.display !== "none";
         sub.style.display = showing ? "none" : "";
         twistyEl.textContent = showing ? "+" : "−";
+        if (showing) expanded.delete(n.pageId);
+        else expanded.add(n.pageId);
+        saveExpanded(expanded);
       };
       twistyEl.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -402,22 +438,7 @@ function start(
     filterProduct = "";
     $<HTMLSelectElement>("#filter-product").value = "";
     showMode("contents");
-    const info = pages.get(currentId);
-    if (!info) return;
-    for (const id of [...info.path, currentId]) {
-      const row = leftBody.querySelector<HTMLElement>(
-        `.node[data-id="${CSS.escape(id)}"]`,
-      );
-      const sub = row?.parentElement?.querySelector<HTMLElement>(":scope > ul");
-      if (sub) {
-        sub.style.display = "";
-        const t = row?.querySelector(".twisty");
-        if (t) t.textContent = "−";
-      }
-    }
-    leftBody
-      .querySelector(`.node[data-id="${CSS.escape(currentId)}"]`)
-      ?.scrollIntoView({ block: "nearest" });
+    revealCurrent(); // expand the path to the current page + scroll it into view
   }
 
   // ---- Index ----
@@ -666,6 +687,7 @@ function start(
       const v = $<HTMLInputElement>("#sp-q").value;
       const t = tabs[active];
       if (t) t.query = v;
+      persistTabs(); // remember the Search tab's query across sessions
       address.value = `search:${v}`;
       rerun();
     });
@@ -707,6 +729,7 @@ function start(
       row.querySelector(".f-del")!.addEventListener("click", (e) => {
         e.stopPropagation();
         favorites.delete(id);
+        saveFavorites(favorites);
         renderFavorites();
         updateFavBtn();
       });
@@ -1013,6 +1036,7 @@ function start(
   async function loadContent(id: string): Promise<void> {
     currentId = id;
     const token = ++loadSeq;
+    persistTabs(); // tabs/active are settled by the caller before we render
     if (id === SEARCH_ID) {
       renderSearchPage(); // app UI, rendered into #content (not the sandbox)
       frame.style.display = "none";
@@ -1049,7 +1073,7 @@ function start(
     address.value = `ms-help://${docsetId}/${localId}.htm`;
     renderTabs();
     updateFavBtn();
-    if (mode === "contents") renderTree();
+    if (mode === "contents") revealCurrent();
     else highlightTree();
     if (location.hash.slice(1) !== id) location.hash = id;
     status.textContent = s.ready;
@@ -1414,6 +1438,7 @@ function start(
   favToggle.addEventListener("click", () => {
     if (favorites.has(currentId)) favorites.delete(currentId);
     else favorites.add(currentId);
+    saveFavorites(favorites);
     updateFavBtn();
     if (mode === "favorites") renderFavorites();
   });
@@ -1526,7 +1551,21 @@ function start(
   const startId = location.hash.slice(1);
   // The first real page (the toc roots may be family folders, which aren't pages).
   const firstPageId = pages.keys().next().value ?? "";
-  openPage(pages.has(startId) ? startId : firstPageId);
+  const validTab = (t: { id: string }): boolean =>
+    t.id === SEARCH_ID || pages.has(t.id);
+  const saved = loadTabs();
+  const restored = (saved?.tabs ?? []).filter(validTab);
+  if (startId && pages.has(startId)) {
+    // A deep link (address hash) wins over the restored session.
+    openPage(startId);
+  } else if (restored.length) {
+    // Restore the previous session's tabs + active tab.
+    tabs.push(...restored);
+    active = Math.min(Math.max(0, saved?.active ?? 0), tabs.length - 1);
+    void loadContent(tabs[active]!.id);
+  } else {
+    openPage(pages.has(startId) ? startId : firstPageId);
+  }
 }
 
 // ---------------------------------------------------------------------------
