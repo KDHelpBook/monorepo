@@ -324,25 +324,48 @@ function start(docset: Docset): void {
       setTimeout(() => searchInput.focus(), 0);
     } else renderFavorites();
   }
-  // ---- Collapse / drawer (unified `is-collapsed` state) ----
-  // Desktop: collapsed = panel hidden, vertical icon strip shown.
-  // Narrow (<=640px): collapsed = drawer closed; expanded = drawer + scrim shown.
+  // ---- Panel state machine (Visual Studio dock / auto-hide / close) ----
+  // Desktop states, driven by classes on `.window`:
+  //   docked   (default) — panel in flow, bottom tabs, no side strip.
+  //   autohide           — side strip is the switcher; the panel flies out OVER
+  //                        the content and retracts on mouse-leave / document click.
+  //   closed             — panel + strip hidden; reopen from the toolbar or menu.
+  // Narrow (<=640px): the panel is always a drawer overlay toggled by ☰ (`flyout`).
   const win = $("#window");
-  const narrow = (): boolean => window.matchMedia("(max-width: 640px)").matches;
-  const collapse = (): void => win.classList.add("is-collapsed");
-  const expand = (): void => win.classList.remove("is-collapsed");
-  const showMode = (m: Mode): void => {
-    expand();
-    setMode(m);
-  };
-
-  // Pushpin: when pinned (default) the panel stays docked; when unpinned it
-  // auto-hides after you pick a topic. The × button just closes the panel.
-  let pinned = true;
   const pinBtn = $("#left-pin");
-  const updatePin = (): void => {
+  const narrow = (): boolean => window.matchMedia("(max-width: 640px)").matches;
+
+  let pinned = true; // docked
+  let closed = false;
+
+  const renderPanel = (): void => {
+    win.classList.toggle("autohide", !pinned && !closed);
+    win.classList.toggle("closed", closed);
+    if (pinned || closed) win.classList.remove("flyout");
     pinBtn.classList.toggle("unpinned", !pinned);
     pinBtn.title = pinned ? "Auto-hide (unpin)" : "Dock (pin)";
+  };
+  // Reveal the fly-out panel (auto-hide on desktop, drawer on mobile).
+  const flyout = (): void => {
+    if (narrow()) {
+      closed = false; // the mobile drawer ignores the desktop "closed" state
+      win.classList.add("flyout");
+    } else if (!pinned && !closed) {
+      win.classList.add("flyout");
+    }
+  };
+  const retract = (): void => win.classList.remove("flyout");
+
+  const showMode = (m: Mode): void => {
+    if (closed) {
+      // Reopening from a toolbar/menu button re-docks the panel.
+      closed = false;
+      pinned = true;
+      renderPanel();
+    } else {
+      flyout();
+    }
+    setMode(m);
   };
 
   // ---- Content ----
@@ -399,8 +422,8 @@ function start(docset: Docset): void {
 
   function openPage(id: string): void {
     loadContent(id);
-    // Close the drawer (mobile) or auto-hide (unpinned) after picking a topic.
-    if (narrow() || !pinned) collapse();
+    // Close the drawer (mobile) or retract the auto-hide fly-out after a pick.
+    if (narrow() || (!pinned && !closed)) retract();
   }
 
   // ---- Actions (menu / toolbar / tabs) ----
@@ -572,24 +595,46 @@ function start(docset: Docset): void {
     });
   })();
 
-  // Collapse / expand wiring
+  // Panel wiring
+  // ☰ (mobile) toggles the drawer.
   $("#btn-pane").addEventListener("click", () =>
-    win.classList.toggle("is-collapsed"),
+    win.classList.contains("flyout") ? retract() : flyout(),
   );
+  // 📌 toggles dock <-> auto-hide.
   pinBtn.addEventListener("click", () => {
     pinned = !pinned;
-    updatePin();
-    if (pinned) expand();
-    else collapse(); // auto-hide immediately on unpin
+    renderPanel();
   });
-  updatePin();
-  $("#left-close").addEventListener("click", collapse); // × closes the panel
-  $("#strip-exp").addEventListener("click", expand);
-  $("#scrim").addEventListener("click", collapse);
+  // × closes the panel: on mobile just close the drawer; on desktop fully close
+  // (reopen from the toolbar/menu).
+  $("#left-close").addEventListener("click", () => {
+    if (narrow()) {
+      retract();
+      return;
+    }
+    closed = true;
+    renderPanel();
+  });
+  $("#scrim").addEventListener("click", retract);
+  // Strip » re-docks (pins) the panel.
+  $("#strip-exp").addEventListener("click", () => {
+    pinned = true;
+    closed = false;
+    renderPanel();
+  });
+
+  // Auto-hide fly-out: reveal on strip hover, retract on mouse-leave / doc click.
+  $("#left-strip").addEventListener("mouseenter", flyout);
+  $("#left-pane").addEventListener("mouseleave", () => {
+    if (!narrow()) retract();
+  });
+  contentWrap.addEventListener("mousedown", () => {
+    if (!pinned && !closed) retract();
+  });
+  renderPanel();
 
   // ---- Start ----
   setMode("contents");
-  if (narrow()) collapse(); // start with the drawer closed on small screens
   const startId = location.hash.slice(1);
   openPage(pages.has(startId) ? startId : (toc[0]?.pageId ?? ""));
 }

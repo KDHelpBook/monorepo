@@ -182,6 +182,7 @@ body {
   background: #8aa4c8;
   padding: 5px;
   gap: 0;
+  position: relative; /* anchor for the auto-hide / drawer overlay */
 }
 .pane {
   background: var(--panel);
@@ -764,15 +765,36 @@ body {
   border-left-color: transparent;
 }
 
-/* Collapsed: hide the panel + splitter, show the strip */
-.is-collapsed #left-pane {
+/* Auto-hide (desktop): side strip is the switcher; the panel flies out OVER the
+   content (absolute overlay) rather than pushing it, and the bottom tabs hide. */
+.autohide #splitter {
   display: none;
 }
-.is-collapsed #splitter {
-  display: none;
-}
-.is-collapsed #left-strip {
+.autohide #left-strip {
   display: flex;
+}
+.autohide .left-tabs {
+  display: none;
+}
+.autohide #left-pane {
+  position: absolute;
+  z-index: 30;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  box-shadow: 4px 0 26px rgba(0, 0, 0, 0.35);
+  transform: translateX(-102%);
+  transition: transform 0.18s ease;
+}
+.autohide.flyout #left-pane {
+  transform: translateX(0);
+}
+
+/* Closed: panel, splitter and strip all hidden (reopen from toolbar/menu). */
+.closed #left-pane,
+.closed #splitter,
+.closed #left-strip {
+  display: none;
 }
 
 /* Scrim behind the mobile drawer */
@@ -821,6 +843,7 @@ body {
   .body {
     position: relative;
   }
+  /* The panel is always a drawer overlay on mobile; `flyout` slides it in. */
   .left {
     position: absolute;
     z-index: 30;
@@ -830,18 +853,18 @@ body {
     width: 84%;
     max-width: 320px;
     box-shadow: 4px 0 26px rgba(0, 0, 0, 0.4);
+    transform: translateX(-102%);
     transition: transform 0.2s ease;
   }
-  /* Keep the drawer in the DOM (override the desktop hide) so it can slide. */
-  .is-collapsed #left-pane {
-    display: flex;
+  .flyout .left {
+    transform: translateX(0);
   }
-  /* Collapsed (default on mobile) = drawer slid out of view. */
-  .is-collapsed .left {
-    transform: translateX(-102%);
-  }
-  .window:not(.is-collapsed) .scrim {
+  .flyout .scrim {
     display: block;
+  }
+  /* The mobile drawer keeps its bottom tabs even if `autohide` got set. */
+  .autohide .left-tabs {
+    display: flex;
   }
   .content {
     padding: 16px 16px 50px;
