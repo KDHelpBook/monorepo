@@ -1,0 +1,75 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Requires: repo Settings → Pages → Source = "GitHub Actions".
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: compiler
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: viewer-ts/package-lock.json
+
+      - name: Build the CLI
+        run: cargo build --release -p kdhelp-cli
+        working-directory: compiler
+
+      - name: Compile the demo docsets
+        run: |
+          BIN=compiler/target/release/kdhelp
+          mkdir -p out
+          "$BIN" compile compiler/examples/en        -o out/en.khb
+          "$BIN" compile compiler/examples/extras-en -o out/extras-en.khb
+          "$BIN" compile compiler/examples/pl        -o out/pl.khb
+          "$BIN" compile compiler/examples/extras-pl -o out/extras-pl.khb
+
+      - name: Build the viewer
+        run: |
+          npm ci
+          npm run build
+        working-directory: viewer-ts
+
+      - name: Pack the distribution
+        run: |
+          BIN=compiler/target/release/kdhelp
+          "$BIN" pack --profile reader --viewer viewer-ts/dist \
+            --docset out/en.khb --docset out/extras-en.khb \
+            --docset out/pl.khb --docset out/extras-pl.khb \
+            -o publish
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: publish
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
