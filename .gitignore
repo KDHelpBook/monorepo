@@ -1,0 +1,27 @@
+# Rust
+/compiler/target/
+**/*.rs.bk
+
+# Node / Vite
+/viewer-ts/node_modules/
+/viewer-ts/dist/
+/viewer-ts/dev-dist/
+
+# wasm-pack output
+/compiler/wasm/pkg/
+/viewer-ts/src/wasm/
+
+# Publishable distributions (produced by `kdhelp pack`)
+/publish/
+/_site/
+
+# Generated demo docsets copied into the viewer (source lives in compiler/examples)
+/viewer-ts/public/docsets/*.khb
+/viewer-ts/public/docsets/*.khbc
+/viewer-ts/public/docsets/*.khbb
+
+# Misc
+.DS_Store
+*.log
+npm-debug.log*
+.claude/
