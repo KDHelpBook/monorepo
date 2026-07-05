@@ -57,7 +57,10 @@ that the TypeScript viewer reached parity; it lives in git history (commit
 - **FTS5 external-content** (single copy of text) + `bm25()` + `snippet()`.
   Tokenizer per docset from `meta.language` (EN: `porter unicode61`;
   PL: `unicode61 remove_diacritics`).
-- **Categories are a facet** (tags), independent of the TOC hierarchy.
+- **Categories are a facet** (tags, many-to-many), independent of the TOC hierarchy.
+- **"See also" (`related` frontmatter, `related` table)**: per-page curated links,
+  each a local page id or a cross-book `docsetId:localId`; the viewer renders a
+  footer and hides links to books that aren't loaded.
 - **Multiple docsets merge into one** TOC/index/search (MS Help 2 collections);
   ids namespaced `docsetId:pageId`. Docsets group by `language`.
 - **Families (`meta.collection`)**: books sharing a `collection` merge; several

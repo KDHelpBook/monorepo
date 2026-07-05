@@ -208,6 +208,19 @@ export class Docset {
     ).map((r) => String(r.page_id));
   }
 
+  /** A page's "See also" related ids, in author order (empty if none / v<4). */
+  related(id: string): string[] {
+    try {
+      return all(
+        this.db,
+        "SELECT related_id FROM related WHERE page_id = ? ORDER BY position",
+        [id],
+      ).map((r) => String(r.related_id));
+    } catch {
+      return []; // no `related` table (docset predates v4)
+    }
+  }
+
   close(): void {
     this.db.close();
     for (const db of this.attachmentsByPack.values()) db.close();

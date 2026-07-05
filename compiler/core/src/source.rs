@@ -66,6 +66,9 @@ struct Frontmatter {
     keywords: Vec<String>,
     #[serde(default)]
     categories: Vec<String>,
+    /// Ids of related pages (within this book) for a "See also" footer.
+    #[serde(default)]
+    related: Vec<String>,
 }
 
 /// Load a source directory into a [`SourceDocset`], ready for [`crate::build::build_khb`].
@@ -99,6 +102,20 @@ pub fn load_dir(dir: &Path) -> Result<SourceDocset> {
     let toc = load_toc(dir, &pages)?;
     let page_ids: BTreeSet<&str> = pages.iter().map(|p| p.id.as_str()).collect();
     validate_toc(&toc, &page_ids)?;
+    for page in &pages {
+        for related in &page.related {
+            // Cross-book links (`docsetId:localId`) can't be checked here — the other
+            // book is compiled separately; the viewer hides them if unresolved. Only
+            // validate within-book ids (no `:`), to catch typos.
+            if !related.contains(':') && !page_ids.contains(related.as_str()) {
+                bail!(
+                    "page `{}` lists unknown related page `{}`",
+                    page.id,
+                    related
+                );
+            }
+        }
+    }
     let assets = load_assets(dir)?;
 
     let collection = manifest.collection.unwrap_or_else(|| manifest.id.clone());
@@ -211,6 +228,7 @@ fn load_pages(dir: &Path) -> Result<Vec<SourcePage>> {
             markdown: body,
             keywords: frontmatter.keywords,
             categories: frontmatter.categories,
+            related: frontmatter.related,
         });
     }
     Ok(pages)

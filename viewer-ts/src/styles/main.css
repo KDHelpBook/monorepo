@@ -721,6 +721,21 @@ body {
   outline: 1px dashed #c0503a;
   opacity: 0.6;
 }
+/* "See also" — curated related links (may point at other books). */
+.content .see-also {
+  margin-top: 2em;
+  padding: 0.55em 12px;
+  background: #f2f7ff;
+  border-left: 3px solid #7fa8dd;
+  border-radius: 2px;
+  color: #2a3d55;
+}
+.content .see-also b {
+  color: var(--content-h);
+}
+.content .see-also a {
+  color: var(--link);
+}
 .content .kw {
   margin-top: 2.4em;
   padding-top: 0.7em;

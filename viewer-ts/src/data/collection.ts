@@ -198,6 +198,20 @@ export class Collection {
     );
   }
 
+  /**
+   * A page's "See also" related pages as fully-qualified ids. A stored id
+   * containing `:` is already a cross-book `docsetId:localId`; otherwise it is local
+   * to this page's book.
+   */
+  related(nsId: string): string[] {
+    const { docsetId, localId } = this.split(nsId);
+    const d = this.find(docsetId);
+    if (!d) return [];
+    return d
+      .related(localId)
+      .map((rid) => (rid.includes(SEP) ? rid : this.ns(docsetId, rid)));
+  }
+
   private ns(docsetId: string, localId: string): string {
     return `${docsetId}${SEP}${localId}`;
   }

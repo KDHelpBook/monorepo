@@ -52,6 +52,17 @@ CREATE TABLE keywords (
   PRIMARY KEY (term, page_id)
 );
 CREATE INDEX idx_keywords_term ON keywords(term);
+
+-- Curated "See also" links, ordered by `position`. `related_id` is a page id in
+-- this book, or a namespaced `docsetId:localId` for a cross-book link (so it has no
+-- foreign key — the target book may live in a different docset).
+CREATE TABLE related (
+  page_id    TEXT NOT NULL REFERENCES pages(id),
+  related_id TEXT NOT NULL,
+  position   INTEGER NOT NULL,
+  PRIMARY KEY (page_id, related_id)
+);
+CREATE INDEX idx_related_page ON related(page_id, position);
 "#;
 
 /// Binary attachments: images and downloadable files referenced by pages as

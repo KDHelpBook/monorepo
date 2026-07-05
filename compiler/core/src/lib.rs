@@ -19,9 +19,10 @@ pub use docset::{Attachments, Docset, KeywordEntry, Page, SearchHit, TocEntry};
 pub use model::{Asset, Category, RenderedDocset, RenderedPage, SourceDocset, SourcePage, TocNode};
 
 /// The on-disk `.khb`/`.khbb` format version this build reads and writes. Bumped to
-/// 2 for binary attachments (the `assets` table / sidecar `.khba`), and to 3 when
-/// family metadata (`collection`) was added to the rendered docset (`.khbb` layout).
-pub const FORMAT_VERSION: u32 = 3;
+/// 2 for binary attachments (the `assets` table / sidecar `.khba`), to 3 for family
+/// metadata (`collection`), and to 4 for the `related` ("See also") table — each
+/// changed the rendered-docset layout that `.khbb` encodes.
+pub const FORMAT_VERSION: u32 = 4;
 
 /// The crate version, surfaced in a docset's `meta.generator`.
 pub fn generator() -> String {
@@ -49,6 +50,7 @@ mod tests {
                             .into(),
                     keywords: vec!["intro".into(), "start".into()],
                     categories: vec!["basics".into()],
+                    related: vec!["adv".into(), "other-book:page".into()],
                 },
                 SourcePage {
                     id: "adv".into(),
@@ -56,6 +58,7 @@ mod tests {
                     markdown: "# Advanced\n\nAdvanced notes about foxes and searching.".into(),
                     keywords: vec!["advanced".into()],
                     categories: vec![],
+                    related: vec![],
                 },
             ],
             toc: vec![TocNode {
@@ -128,6 +131,14 @@ mod tests {
         assert!(kw
             .iter()
             .any(|k| k.term == "intro" && k.page_ids == vec!["intro".to_string()]));
+
+        // "See also" related links — within-book and a cross-book (`docsetId:id`)
+        // reference stored verbatim (no foreign key), in author order.
+        assert_eq!(
+            ds.related("intro").unwrap(),
+            vec!["adv".to_string(), "other-book:page".to_string()]
+        );
+        assert!(ds.related("adv").unwrap().is_empty());
 
         // Embedded asset + its rewritten link + routing index.
         assert_eq!(

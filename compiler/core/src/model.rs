@@ -22,6 +22,8 @@ pub struct SourcePage {
     pub keywords: Vec<String>,
     /// Category ids this page belongs to (the facet is many-to-many).
     pub categories: Vec<String>,
+    /// Ids of related pages (within this book) shown as a "See also" footer.
+    pub related: Vec<String>,
 }
 
 /// A complete docset with Markdown pages.
@@ -89,6 +91,9 @@ pub struct RenderedPage {
     pub plain: String,
     pub keywords: Vec<String>,
     pub categories: Vec<String>,
+    /// Ids of related pages (within this book), for a "See also" footer.
+    #[serde(default)]
+    pub related: Vec<String>,
 }
 
 /// A complete rendered docset — the pivot shared by `.khb` and `.khbb`.

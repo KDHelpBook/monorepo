@@ -227,6 +227,17 @@ impl Docset {
             .optional()?)
     }
 
+    /// The ids of a page's related ("See also") pages, in author order.
+    pub fn related(&self, page_id: &str) -> Result<Vec<String>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT related_id FROM related WHERE page_id = ?1 ORDER BY position")?;
+        let rows = stmt
+            .query_map(params![page_id], |r| r.get::<_, String>(0))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows)
+    }
+
     /// The ids of pages tagged with a category.
     pub fn pages_by_category(&self, category_id: &str) -> Result<Vec<String>> {
         let mut stmt = self.conn.prepare(
@@ -277,6 +288,19 @@ impl Docset {
             }
         }
 
+        let mut related_by_page: HashMap<String, Vec<String>> = HashMap::new();
+        {
+            let mut stmt = self
+                .conn
+                .prepare("SELECT page_id, related_id FROM related ORDER BY page_id, position")?;
+            let rows =
+                stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
+            for row in rows {
+                let (page_id, related_id) = row?;
+                related_by_page.entry(page_id).or_default().push(related_id);
+            }
+        }
+
         let mut pages = Vec::new();
         {
             let mut stmt = self
@@ -294,6 +318,7 @@ impl Docset {
                 let (id, title, body_html, plain) = row?;
                 let keywords = keywords_by_page.remove(&id).unwrap_or_default();
                 let categories = categories_by_page.remove(&id).unwrap_or_default();
+                let related = related_by_page.remove(&id).unwrap_or_default();
                 pages.push(RenderedPage {
                     id,
                     title,
@@ -301,6 +326,7 @@ impl Docset {
                     plain,
                     keywords,
                     categories,
+                    related,
                 });
             }
         }

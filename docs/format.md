@@ -25,8 +25,8 @@ can produce a valid `.khb`.
 
 ## SQLite schema
 
-`meta.format_version` identifies the schema version (currently `2`; the `assets`
-table was added in version 2).
+`meta.format_version` identifies the schema version (currently `4`: `assets` was
+added in v2, `meta.collection` in v3, and the `related` table in v4).
 
 ```sql
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -50,6 +50,10 @@ CREATE TABLE toc (
 CREATE TABLE categories (id TEXT PRIMARY KEY, title TEXT NOT NULL, position INTEGER NOT NULL);
 CREATE TABLE page_categories (page_id TEXT, category_id TEXT, PRIMARY KEY (page_id, category_id));
 CREATE TABLE keywords (term TEXT, page_id TEXT, PRIMARY KEY (term, page_id));
+
+-- Curated "See also" links. `related_id` is a page id in this book, or a
+-- namespaced `docsetId:localId` for a cross-book link (hence no foreign key).
+CREATE TABLE related (page_id TEXT, related_id TEXT, position INTEGER, PRIMARY KEY (page_id, related_id));
 
 -- Binary attachments: images and downloadable files referenced by pages as
 -- `asset:<path>`. Present (possibly empty) in every `.khb`; the sole content

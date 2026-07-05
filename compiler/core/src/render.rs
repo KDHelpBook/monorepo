@@ -22,6 +22,7 @@ pub fn render(src: &SourceDocset) -> RenderedDocset {
                 plain,
                 keywords: p.keywords.clone(),
                 categories: p.categories.clone(),
+                related: p.related.clone(),
             }
         })
         .collect();

@@ -34,6 +34,7 @@ pub fn build_khb(doc: &RenderedDocset, out_path: &Path) -> Result<()> {
     write_categories(&tx, doc)?;
     write_pages(&tx, doc)?;
     write_toc(&tx, &doc.toc, None)?;
+    write_related(&tx, doc)?; // after all pages exist (FK on both columns)
 
     // The `assets` table is always present; it stays empty when attachments are
     // shipped in a sidecar `.khba` instead of embedded here.
@@ -193,6 +194,19 @@ fn write_pages(tx: &Transaction, doc: &RenderedDocset) -> Result<()> {
                 "INSERT OR IGNORE INTO page_categories(page_id, category_id) VALUES(?1, ?2)",
                 params![page.id, category_id],
             )?;
+        }
+    }
+    Ok(())
+}
+
+fn write_related(tx: &Transaction, doc: &RenderedDocset) -> Result<()> {
+    for page in &doc.pages {
+        for (position, related_id) in page.related.iter().enumerate() {
+            tx.execute(
+                "INSERT OR IGNORE INTO related(page_id, related_id, position) VALUES(?1, ?2, ?3)",
+                params![page.id, related_id, position as i64],
+            )
+            .with_context(|| format!("relating {} -> {}", page.id, related_id))?;
         }
     }
     Ok(())

@@ -41,7 +41,8 @@ book is its own family.
 ---
 title: My page          # falls back to the first "# heading", then the file name
 keywords: [example, topic]
-categories: [basics]
+categories: [basics]                     # a page may be in several categories
+related: [another-id, other-book:page]   # "See also" links
 ---
 # My page
 
@@ -50,8 +51,12 @@ between pages with `#id`, e.g. [another page](#another-id).
 ```
 
 `id` defaults to the file name. `keywords` feed the F1 index; `categories` tag the
-page for the facet (a category referenced but not declared in `categories.yaml` is
-auto-registered).
+page for the facet (many-to-many — a page can be in several; a category referenced
+but not declared in `categories.yaml` is auto-registered). `related` renders a
+**"See also"** footer: each entry is a page id in this book, or a
+`docsetId:localId` for a cross-book link. Within-book ids are validated at compile
+time; cross-book ids are stored as-is and the viewer hides any whose book is not
+loaded.
 
 **`toc.yaml`** — the table-of-contents hierarchy, referencing pages by id:
 

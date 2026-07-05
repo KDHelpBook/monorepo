@@ -716,6 +716,22 @@ function start(
       el.className = "sub";
       el.innerHTML = (el.firstElementChild as HTMLElement).innerHTML;
     }
+    // "See also" — curated related pages (this book or, via a `docsetId:localId`
+    // id, another book). `data-rel` carries the full id; links to books that aren't
+    // loaded are dropped rather than shown broken.
+    const related = collection.related(id).filter((rid) => pages.has(rid));
+    if (related.length) {
+      const links = related
+        .map((rid) => {
+          const title = pages.get(rid)?.title ?? rid;
+          return `<a class="rel-link" data-rel="${esc(rid)}" href="#">${esc(title)}</a>`;
+        })
+        .join(", ");
+      const sa = document.createElement("div");
+      sa.className = "see-also";
+      sa.innerHTML = `<b>${esc(s.seeAlso)}</b> ${links}`;
+      d.appendChild(sa);
+    }
     const kws = pageKeywords.get(id);
     if (kws?.length) {
       const kw = document.createElement("div");
@@ -1153,28 +1169,28 @@ function start(
   // ＋ opens the current page in a new tab.
   $("#tab-new").addEventListener("click", () => openPage(currentId, true));
 
+  // Resolve a click on an in-content link to a fully-qualified page id, or null.
+  const contentLinkTarget = (e: MouseEvent): string | null => {
+    const el = e.target as HTMLElement;
+    // "See also" links carry a full id in data-rel (may be cross-book).
+    const rel = el.closest<HTMLElement>("a[data-rel]");
+    if (rel) return rel.getAttribute("data-rel");
+    // Other in-content links are `#localId`, relative to the current book.
+    const a = el.closest<HTMLAnchorElement>('a[href^="#"]');
+    return a ? collection.resolveLink(currentId, a.getAttribute("href")!.slice(1)) : null;
+  };
   content.addEventListener("click", (e) => {
-    const a = (e.target as HTMLElement).closest<HTMLAnchorElement>(
-      'a[href^="#"]',
-    );
-    if (!a) return;
+    const target = contentLinkTarget(e);
+    if (target === null) return;
     e.preventDefault();
-    // In-content links are `#localId`, relative to the current page's book.
-    openPage(
-      collection.resolveLink(currentId, a.getAttribute("href")!.slice(1)),
-      wantNew(e),
-    );
+    openPage(target, wantNew(e));
   });
   content.addEventListener("auxclick", (e) => {
-    const a = (e.target as HTMLElement).closest<HTMLAnchorElement>(
-      'a[href^="#"]',
-    );
-    if (!a || e.button !== 1) return;
+    if (e.button !== 1) return;
+    const target = contentLinkTarget(e);
+    if (target === null) return;
     e.preventDefault();
-    openPage(
-      collection.resolveLink(currentId, a.getAttribute("href")!.slice(1)),
-      true,
-    );
+    openPage(target, true);
   });
 
   window.addEventListener("hashchange", () => {

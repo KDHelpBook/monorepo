@@ -51,6 +51,7 @@ export interface Strings {
   showHidePanel: string;
   ready: string;
   keywordsLabel: string;
+  seeAlso: string;
   notFoundTitle: string;
   notFoundBody: (id: string) => string;
   // about
@@ -109,6 +110,7 @@ const en: Strings = {
   showHidePanel: "Show/hide panel",
   ready: "Ready",
   keywordsLabel: "Keywords:",
+  seeAlso: "See also:",
   notFoundTitle: "Topic not found",
   notFoundBody: (id) => `No page with address <code>${id}</code>.`,
   aboutTagline:
@@ -166,6 +168,7 @@ const pl: Strings = {
   showHidePanel: "Pokaż/ukryj panel",
   ready: "Gotowe",
   keywordsLabel: "Słowa kluczowe:",
+  seeAlso: "Zobacz też:",
   notFoundTitle: "Nie znaleziono tematu",
   notFoundBody: (id) => `Brak strony o adresie <code>${id}</code>.`,
   aboutTagline:
