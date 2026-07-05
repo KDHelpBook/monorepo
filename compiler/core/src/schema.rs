@@ -54,6 +54,32 @@ CREATE TABLE keywords (
 CREATE INDEX idx_keywords_term ON keywords(term);
 "#;
 
+/// Binary attachments: images and downloadable files referenced by pages as
+/// `asset:<path>`. Present (possibly empty) in every `.khb`, and the sole content
+/// table of a sidecar `.khba`. Kept separate from [`SCHEMA_SQL`] so the sidecar can
+/// reuse just this table.
+pub const ASSETS_SQL: &str = r#"
+CREATE TABLE assets (
+  path TEXT PRIMARY KEY,
+  mime TEXT NOT NULL,
+  data BLOB NOT NULL
+);
+"#;
+
+/// Structural tables of a sidecar `.khba` attachments file: a `meta` table (so the
+/// file can be validated and paired with its docset) plus the shared `assets` table.
+pub const ATTACHMENTS_SCHEMA_SQL: &str = r#"
+CREATE TABLE meta (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+CREATE TABLE assets (
+  path TEXT PRIMARY KEY,
+  mime TEXT NOT NULL,
+  data BLOB NOT NULL
+);
+"#;
+
 /// The FTS5 tokenizer for a docset's language. English gets the Porter stemmer so
 /// `fox` matches `foxes`; other languages fold diacritics without stemming (a safe
 /// default until per-language stemmers are added). The returned value comes from a

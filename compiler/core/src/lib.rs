@@ -5,6 +5,7 @@
 //! query API. It is compiled both natively (for the CLI and, later, Tauri) and to
 //! wasm (for the browser viewer). It must stay free of any DOM or JS assumptions.
 
+pub mod assets;
 pub mod binary;
 pub mod build;
 pub mod docset;
@@ -14,11 +15,12 @@ pub mod render;
 pub mod schema;
 pub mod source;
 
-pub use docset::{Docset, KeywordEntry, Page, SearchHit, TocEntry};
-pub use model::{Category, RenderedDocset, RenderedPage, SourceDocset, SourcePage, TocNode};
+pub use docset::{Attachments, Docset, KeywordEntry, Page, SearchHit, TocEntry};
+pub use model::{Asset, Category, RenderedDocset, RenderedPage, SourceDocset, SourcePage, TocNode};
 
-/// The on-disk `.khb` format version this build reads and writes.
-pub const FORMAT_VERSION: u32 = 1;
+/// The on-disk `.khb`/`.khbb` format version this build reads and writes. Bumped to
+/// 2 when binary attachments (the `assets` table / sidecar `.khba`) were added.
+pub const FORMAT_VERSION: u32 = 2;
 
 /// The crate version, surfaced in a docset's `meta.generator`.
 pub fn generator() -> String {
@@ -39,7 +41,9 @@ mod tests {
                 SourcePage {
                     id: "intro".into(),
                     title: "Introduction".into(),
-                    markdown: "# Introduction\n\nThe quick brown foxes jump over lazy dogs.".into(),
+                    markdown:
+                        "# Introduction\n\n![logo](assets/logo.svg)\n\nThe quick brown foxes jump over lazy dogs."
+                            .into(),
                     keywords: vec!["intro".into(), "start".into()],
                     categories: vec!["basics".into()],
                 },
@@ -63,6 +67,11 @@ mod tests {
             categories: vec![Category {
                 id: "basics".into(),
                 title: "Basics".into(),
+            }],
+            assets: vec![Asset {
+                path: "assets/logo.svg".into(),
+                mime: "image/svg+xml".into(),
+                data: b"<svg xmlns='http://www.w3.org/2000/svg'/>".to_vec(),
             }],
         }
     }
@@ -114,6 +123,50 @@ mod tests {
         assert!(kw
             .iter()
             .any(|k| k.term == "intro" && k.page_ids == vec!["intro".to_string()]));
+
+        // Embedded asset + its rewritten link.
+        assert_eq!(
+            ds.asset_paths().unwrap(),
+            vec!["assets/logo.svg".to_string()]
+        );
+        let (mime, data) = ds.asset("assets/logo.svg").unwrap().unwrap();
+        assert_eq!(mime, "image/svg+xml");
+        assert!(data.starts_with(b"<svg"));
+        assert!(page.body_html.contains("asset:assets/logo.svg"));
+        assert!(ds.asset("assets/missing.png").unwrap().is_none());
+    }
+
+    #[test]
+    fn khba_sidecar_holds_assets_kept_out_of_the_khb() {
+        let dir = tempfile::tempdir().unwrap();
+        let doc = render::render(&demo_source());
+
+        // Sidecar mode: a lean .khb (assets removed) + a .khba carrying them.
+        let khb = dir.path().join("demo.khb");
+        let khba = dir.path().join("demo.khba");
+        let mut lean = doc.clone();
+        let taken = std::mem::take(&mut lean.assets);
+        build::build_khb(&lean, &khb).unwrap();
+        build::build_khba(&doc.id, &taken, &khba).unwrap();
+
+        let ds = Docset::open(&khb).unwrap();
+        assert!(ds.asset_paths().unwrap().is_empty()); // not embedded
+        assert!(ds
+            .page("intro")
+            .unwrap()
+            .unwrap()
+            .body_html
+            .contains("asset:"));
+
+        let att = Attachments::open(&khba).unwrap();
+        assert_eq!(att.docset_id().unwrap().as_deref(), Some("demo"));
+        assert_eq!(
+            att.asset_paths().unwrap(),
+            vec!["assets/logo.svg".to_string()]
+        );
+        let (mime, data) = att.asset("assets/logo.svg").unwrap().unwrap();
+        assert_eq!(mime, "image/svg+xml");
+        assert!(!data.is_empty());
     }
 
     #[test]
@@ -138,6 +191,60 @@ mod tests {
         assert_eq!(back.pages.len(), doc.pages.len());
         assert_eq!(back.toc.len(), doc.toc.len());
         assert_eq!(back.categories.len(), doc.categories.len());
+    }
+
+    #[test]
+    fn several_khba_back_one_khb_resolved_in_order() {
+        let dir = tempfile::tempdir().unwrap();
+        let doc = render::render(&demo_source());
+
+        // A lean .khb with no embedded assets, plus two attachment packs.
+        let khb = dir.path().join("demo.khb");
+        let mut lean = doc.clone();
+        lean.assets.clear();
+        build::build_khb(&lean, &khb).unwrap();
+
+        let images = dir.path().join("demo.images.khba");
+        let samples = dir.path().join("demo.samples.khba");
+        build::build_khba(
+            &doc.id,
+            &[Asset {
+                path: "assets/logo.svg".into(),
+                mime: "image/svg+xml".into(),
+                data: b"<svg/>".to_vec(),
+            }],
+            &images,
+        )
+        .unwrap();
+        build::build_khba(
+            &doc.id,
+            &[Asset {
+                path: "assets/sample.txt".into(),
+                mime: "text/plain".into(),
+                data: b"hello".to_vec(),
+            }],
+            &samples,
+        )
+        .unwrap();
+
+        let ds = Docset::open(&khb).unwrap();
+        let packs = vec![
+            Attachments::open(&images).unwrap(),
+            Attachments::open(&samples).unwrap(),
+        ];
+        // Each pack contributes its own assets; both resolve for the one docset.
+        let (m1, _) = docset::resolve_asset(&ds, &packs, "assets/logo.svg")
+            .unwrap()
+            .unwrap();
+        assert_eq!(m1, "image/svg+xml");
+        let (m2, d2) = docset::resolve_asset(&ds, &packs, "assets/sample.txt")
+            .unwrap()
+            .unwrap();
+        assert_eq!(m2, "text/plain");
+        assert_eq!(d2, b"hello");
+        assert!(docset::resolve_asset(&ds, &packs, "assets/nope.png")
+            .unwrap()
+            .is_none());
     }
 
     #[test]

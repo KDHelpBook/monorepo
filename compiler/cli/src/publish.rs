@@ -19,6 +19,10 @@ struct ManifestEntry {
     title: String,
     language: String,
     mode: String,
+    /// Sidecar `.khba` attachment packs backing this docset (zero or more). The
+    /// viewer opens them alongside the docset and resolves assets in order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    attachments: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -129,13 +133,55 @@ fn add_docset(khb: &Path, docsets_dir: &Path, compact: bool) -> Result<ManifestE
         (format!("docsets/{name}"), "khb")
     };
 
+    let attachments = copy_attachments(khb, docsets_dir)?;
+
     Ok(ManifestEntry {
         file,
         id,
         title,
         language,
         mode: mode.to_string(),
+        attachments,
     })
+}
+
+/// Copy every sidecar `.khba` attachment pack that belongs to `khb` into `docsets/`,
+/// returning their manifest paths. A docset `foo.khb` owns `foo.khba` **and** any
+/// `foo.<tag>.khba` (so several packs can back one docset). Attachments are copied
+/// verbatim regardless of the docset's compact mode (their bytes are already binary).
+fn copy_attachments(khb: &Path, docsets_dir: &Path) -> Result<Vec<String>> {
+    let parent = match khb.parent() {
+        Some(p) if !p.as_os_str().is_empty() => p.to_path_buf(),
+        _ => PathBuf::from("."),
+    };
+    let stem = match khb.file_stem().and_then(|s| s.to_str()) {
+        Some(s) => s,
+        None => return Ok(Vec::new()),
+    };
+    let prefix = format!("{stem}.");
+
+    let mut paths: Vec<PathBuf> = fs::read_dir(&parent)
+        .with_context(|| format!("reading {}", parent.display()))?
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.starts_with(&prefix) && n.ends_with(".khba"))
+        })
+        .collect();
+    paths.sort();
+
+    let mut out = Vec::new();
+    for path in paths {
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .expect("filtered filename is valid utf-8");
+        fs::copy(&path, docsets_dir.join(name))?;
+        out.push(format!("docsets/{name}"));
+    }
+    Ok(out)
 }
 
 fn gzip(data: &[u8]) -> Result<Vec<u8>> {

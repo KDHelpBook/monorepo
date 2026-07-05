@@ -8,7 +8,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 
-use crate::model::{Category, RenderedDocset, RenderedPage, TocNode};
+use crate::model::{Asset, Category, RenderedDocset, RenderedPage, TocNode};
 
 /// A page's renderable content.
 #[derive(Debug, Clone)]
@@ -185,6 +185,18 @@ impl Docset {
         Ok(rows)
     }
 
+    /// Fetch an embedded asset's MIME type and bytes by path. Returns `None` if the
+    /// docset has no such asset (including when attachments are shipped in a sidecar
+    /// `.khba` instead — see [`Attachments`]).
+    pub fn asset(&self, path: &str) -> Result<Option<(String, Vec<u8>)>> {
+        query_asset(&self.conn, path)
+    }
+
+    /// The paths of all embedded assets.
+    pub fn asset_paths(&self) -> Result<Vec<String>> {
+        query_asset_paths(&self.conn)
+    }
+
     /// The ids of pages tagged with a category.
     pub fn pages_by_category(&self, category_id: &str) -> Result<Vec<String>> {
         let mut stmt = self.conn.prepare(
@@ -271,8 +283,119 @@ impl Docset {
             pages,
             toc: self.toc_tree()?,
             categories: self.categories()?,
+            assets: query_assets(&self.conn)?,
         })
     }
+}
+
+/// A read-only handle to a sidecar `.khba` attachments file. Same `assets` table as
+/// an embedded docset, opened separately so a lean `.khb` can pair with its bytes.
+pub struct Attachments {
+    conn: Connection,
+}
+
+impl Attachments {
+    /// Open a `.khba` file read-only.
+    pub fn open(path: &Path) -> Result<Self> {
+        let conn = Connection::open_with_flags(
+            path,
+            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )
+        .with_context(|| format!("opening {}", path.display()))?;
+        Ok(Self { conn })
+    }
+
+    /// The owning docset id (`meta.docset_id`), if recorded.
+    pub fn docset_id(&self) -> Result<Option<String>> {
+        Ok(self
+            .conn
+            .query_row("SELECT value FROM meta WHERE key = 'docset_id'", [], |r| {
+                r.get::<_, String>(0)
+            })
+            .optional()?)
+    }
+
+    /// Fetch an asset's MIME type and bytes by path.
+    pub fn asset(&self, path: &str) -> Result<Option<(String, Vec<u8>)>> {
+        query_asset(&self.conn, path)
+    }
+
+    /// The paths of all attachments.
+    pub fn asset_paths(&self) -> Result<Vec<String>> {
+        query_asset_paths(&self.conn)
+    }
+}
+
+/// Resolve an asset for a docset that may be backed by **several** sidecar `.khba`
+/// files: try the docset's own embedded table first, then each attachment pack in
+/// order (first match wins). This is the native mirror of the viewer's resolution.
+pub fn resolve_asset(
+    docset: &Docset,
+    attachments: &[Attachments],
+    path: &str,
+) -> Result<Option<(String, Vec<u8>)>> {
+    if let Some(hit) = docset.asset(path)? {
+        return Ok(Some(hit));
+    }
+    for pack in attachments {
+        if let Some(hit) = pack.asset(path)? {
+            return Ok(Some(hit));
+        }
+    }
+    Ok(None)
+}
+
+/// True if `assets` exists in this database (a v1 `.khb` predates it).
+fn has_assets_table(conn: &Connection) -> Result<bool> {
+    Ok(conn
+        .query_row(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='assets'",
+            [],
+            |_| Ok(()),
+        )
+        .optional()?
+        .is_some())
+}
+
+fn query_asset(conn: &Connection, path: &str) -> Result<Option<(String, Vec<u8>)>> {
+    if !has_assets_table(conn)? {
+        return Ok(None);
+    }
+    Ok(conn
+        .query_row(
+            "SELECT mime, data FROM assets WHERE path = ?1",
+            params![path],
+            |r| Ok((r.get::<_, String>(0)?, r.get::<_, Vec<u8>>(1)?)),
+        )
+        .optional()?)
+}
+
+fn query_asset_paths(conn: &Connection) -> Result<Vec<String>> {
+    if !has_assets_table(conn)? {
+        return Ok(Vec::new());
+    }
+    let mut stmt = conn.prepare("SELECT path FROM assets ORDER BY path")?;
+    let rows = stmt
+        .query_map([], |r| r.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows)
+}
+
+fn query_assets(conn: &Connection) -> Result<Vec<Asset>> {
+    if !has_assets_table(conn)? {
+        return Ok(Vec::new());
+    }
+    let mut stmt = conn.prepare("SELECT path, mime, data FROM assets ORDER BY path")?;
+    let rows = stmt
+        .query_map([], |r| {
+            Ok(Asset {
+                path: r.get(0)?,
+                mime: r.get(1)?,
+                data: r.get(2)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows)
 }
 
 /// Rebuild the nested TOC tree from the flat `toc` rows.

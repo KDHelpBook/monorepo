@@ -18,8 +18,8 @@ use anyhow::{bail, Context, Result};
 use serde::Deserialize;
 use walkdir::WalkDir;
 
-use crate::markdown;
-use crate::model::{Category, SourceDocset, SourcePage, TocNode};
+use crate::model::{Asset, Category, SourceDocset, SourcePage, TocNode};
+use crate::{assets, markdown};
 
 #[derive(Deserialize)]
 struct DocsetToml {
@@ -93,6 +93,7 @@ pub fn load_dir(dir: &Path) -> Result<SourceDocset> {
     let toc = load_toc(dir, &pages)?;
     let page_ids: BTreeSet<&str> = pages.iter().map(|p| p.id.as_str()).collect();
     validate_toc(&toc, &page_ids)?;
+    let assets = load_assets(dir)?;
 
     Ok(SourceDocset {
         id: manifest.id,
@@ -102,7 +103,43 @@ pub fn load_dir(dir: &Path) -> Result<SourceDocset> {
         pages,
         toc,
         categories,
+        assets,
     })
+}
+
+/// Collect every file under `assets/` into an [`Asset`], keyed by its docset-relative
+/// path (`assets/…`). Both inline images and downloadable attachments live here.
+fn load_assets(dir: &Path) -> Result<Vec<Asset>> {
+    let base = dir.join(assets::ASSETS_DIR);
+    if !base.is_dir() {
+        return Ok(Vec::new());
+    }
+    let mut out = Vec::new();
+    for entry in WalkDir::new(&base).sort_by_file_name() {
+        let entry = entry?;
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        let rel = entry
+            .path()
+            .strip_prefix(dir)
+            .expect("asset under source dir");
+        // Store forward-slash paths regardless of host separator.
+        let path = rel
+            .components()
+            .map(|c| c.as_os_str().to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("/");
+        let data = fs::read(entry.path())
+            .with_context(|| format!("reading asset {}", entry.path().display()))?;
+        out.push(Asset {
+            mime: assets::guess_mime(&path).to_string(),
+            path,
+            data,
+        });
+    }
+    out.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(out)
 }
 
 fn load_categories(dir: &Path) -> Result<Vec<Category>> {

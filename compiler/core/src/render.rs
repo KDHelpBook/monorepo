@@ -2,8 +2,8 @@
 //!
 //! This is where Markdown is turned into HTML, **once**, at build time.
 
-use crate::markdown;
 use crate::model::{RenderedDocset, RenderedPage, SourceDocset};
+use crate::{assets, markdown};
 
 /// Render every page's Markdown to HTML and derive its plain-text form.
 pub fn render(src: &SourceDocset) -> RenderedDocset {
@@ -11,7 +11,9 @@ pub fn render(src: &SourceDocset) -> RenderedDocset {
         .pages
         .iter()
         .map(|p| {
-            let body_html = markdown::render_html(&p.markdown);
+            // Rewrite `assets/…` image/link targets to the `asset:` scheme so the
+            // viewer resolves them from the docset's attachment store.
+            let body_html = assets::rewrite_asset_urls(&markdown::render_html(&p.markdown));
             let plain = markdown::html_to_plain(&body_html);
             RenderedPage {
                 id: p.id.clone(),
@@ -32,5 +34,6 @@ pub fn render(src: &SourceDocset) -> RenderedDocset {
         pages,
         toc: src.toc.clone(),
         categories: src.categories.clone(),
+        assets: src.assets.clone(),
     }
 }

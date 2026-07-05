@@ -35,12 +35,59 @@ pub fn build_khb(doc: &RenderedDocset, out_path: &Path) -> Result<()> {
     write_pages(&tx, doc)?;
     write_toc(&tx, &doc.toc, None)?;
 
+    // The `assets` table is always present; it stays empty when attachments are
+    // shipped in a sidecar `.khba` instead of embedded here.
+    tx.execute_batch(schema::ASSETS_SQL)?;
+    write_assets(&tx, &doc.assets)?;
+
     tx.execute_batch(&schema::create_fts_sql(tokenizer))?;
     // Populate the external-content index from the `pages` table.
     tx.execute_batch("INSERT INTO pages_fts(pages_fts) VALUES('rebuild');")?;
 
     tx.commit()?;
     conn.execute_batch("VACUUM;")?;
+    Ok(())
+}
+
+/// Write a sidecar `.khba` attachments file: a small SQLite database holding just
+/// `meta` (format version + owning docset id) and the shared `assets` table. Used
+/// when a docset is compiled with attachments kept out of the `.khb`.
+pub fn build_khba(docset_id: &str, assets: &[crate::model::Asset], out_path: &Path) -> Result<()> {
+    if out_path.exists() {
+        std::fs::remove_file(out_path)
+            .with_context(|| format!("removing existing {}", out_path.display()))?;
+    }
+    let mut conn =
+        Connection::open(out_path).with_context(|| format!("opening {}", out_path.display()))?;
+    conn.execute_batch("PRAGMA page_size = 4096;")?;
+
+    let tx = conn.transaction()?;
+    tx.execute_batch(schema::ATTACHMENTS_SCHEMA_SQL)?;
+    for (key, value) in [
+        ("format_version", crate::FORMAT_VERSION.to_string()),
+        ("kind", "attachments".to_string()),
+        ("docset_id", docset_id.to_string()),
+        ("generator", crate::generator()),
+    ] {
+        tx.execute(
+            "INSERT INTO meta(key, value) VALUES(?1, ?2)",
+            params![key, value],
+        )?;
+    }
+    write_assets(&tx, assets)?;
+    tx.commit()?;
+    conn.execute_batch("VACUUM;")?;
+    Ok(())
+}
+
+fn write_assets(tx: &Transaction, assets: &[crate::model::Asset]) -> Result<()> {
+    for asset in assets {
+        tx.execute(
+            "INSERT OR REPLACE INTO assets(path, mime, data) VALUES(?1, ?2, ?3)",
+            params![asset.path, asset.mime, asset.data],
+        )
+        .with_context(|| format!("inserting asset {}", asset.path))?;
+    }
     Ok(())
 }
 

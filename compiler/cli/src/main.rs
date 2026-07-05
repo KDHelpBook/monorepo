@@ -29,6 +29,14 @@ enum Format {
 }
 
 #[derive(Copy, Clone, PartialEq, ValueEnum)]
+enum AssetsMode {
+    /// Store attachments inside the `.khb`.
+    Embed,
+    /// Store attachments in a sibling `.khba` file (leaner `.khb`).
+    Sidecar,
+}
+
+#[derive(Copy, Clone, PartialEq, ValueEnum)]
 enum PackMode {
     /// Copy the `.khb` as-is.
     Khb,
@@ -56,6 +64,9 @@ enum Command {
         /// Output format.
         #[arg(long, value_enum, default_value = "khb")]
         format: Format,
+        /// Where attachments go: embedded in the `.khb`, or a sibling `.khba`.
+        #[arg(long = "assets", value_enum, default_value = "embed")]
+        assets: AssetsMode,
     },
     /// Convert between `.khb` and `.khbb` (direction inferred from file extensions).
     Convert {
@@ -103,7 +114,12 @@ enum Command {
 
 fn main() -> Result<()> {
     match Cli::parse().command {
-        Command::Compile { src, out, format } => compile(&src, &out, format),
+        Command::Compile {
+            src,
+            out,
+            format,
+            assets,
+        } => compile(&src, &out, format, assets),
         Command::Convert { input, out } => convert(&input, &out),
         Command::Pack {
             viewer,
@@ -143,7 +159,7 @@ fn main() -> Result<()> {
     }
 }
 
-fn compile(src: &Path, out: &Path, format: Format) -> Result<()> {
+fn compile(src: &Path, out: &Path, format: Format, assets: AssetsMode) -> Result<()> {
     let docset =
         source::load_dir(src).with_context(|| format!("loading source {}", src.display()))?;
     let (id, language, pages) = (
@@ -151,11 +167,27 @@ fn compile(src: &Path, out: &Path, format: Format) -> Result<()> {
         docset.language.clone(),
         docset.pages.len(),
     );
-    let rendered = render::render(&docset);
+    let mut rendered = render::render(&docset);
     match format {
-        Format::Khb => build::build_khb(&rendered, out)
-            .with_context(|| format!("writing {}", out.display()))?,
+        Format::Khb => {
+            if assets == AssetsMode::Sidecar && !rendered.assets.is_empty() {
+                // Peel attachments out of the .khb and into a sibling .khba.
+                let khba = out.with_extension("khba");
+                let sidecar = std::mem::take(&mut rendered.assets);
+                build::build_khb(&rendered, out)
+                    .with_context(|| format!("writing {}", out.display()))?;
+                build::build_khba(&id, &sidecar, &khba)
+                    .with_context(|| format!("writing {}", khba.display()))?;
+                println!("  + {} attachment(s) -> {}", sidecar.len(), khba.display());
+            } else {
+                build::build_khb(&rendered, out)
+                    .with_context(|| format!("writing {}", out.display()))?;
+            }
+        }
         Format::Khbb => {
+            if assets == AssetsMode::Sidecar {
+                bail!("--assets sidecar is only valid for --format khb (khbb is a single file)");
+            }
             let bytes = binary::to_khbb(&rendered)?;
             std::fs::write(out, bytes).with_context(|| format!("writing {}", out.display()))?;
         }

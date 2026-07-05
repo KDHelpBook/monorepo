@@ -34,6 +34,8 @@ pub struct SourceDocset {
     pub pages: Vec<SourcePage>,
     pub toc: Vec<TocNode>,
     pub categories: Vec<Category>,
+    /// Binary attachments (images, downloadable files) collected from `assets/`.
+    pub assets: Vec<Asset>,
 }
 
 // ---------------------------------------------------------------------------
@@ -55,6 +57,17 @@ pub struct TocNode {
 pub struct Category {
     pub id: String,
     pub title: String,
+}
+
+/// A binary attachment — an image or downloadable file referenced by pages. Stored
+/// either embedded in the `.khb` or in a sidecar `.khba`; either way the bytes live
+/// inside a self-contained SQLite container. `path` is the docset-relative path
+/// authors reference (e.g. `assets/diagram.svg`); pages link to it as `asset:<path>`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Asset {
+    pub path: String,
+    pub mime: String,
+    pub data: Vec<u8>,
 }
 
 // ---------------------------------------------------------------------------
@@ -82,4 +95,6 @@ pub struct RenderedDocset {
     pub pages: Vec<RenderedPage>,
     pub toc: Vec<TocNode>,
     pub categories: Vec<Category>,
+    #[serde(default)]
+    pub assets: Vec<Asset>,
 }
