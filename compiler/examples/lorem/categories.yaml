@@ -1,0 +1,12 @@
+- id: intro
+  title: Introduction
+- id: concepts
+  title: Concepts
+- id: guides
+  title: Guides
+- id: reference
+  title: Reference
+- id: gallery
+  title: Gallery
+- id: appendix
+  title: Appendix

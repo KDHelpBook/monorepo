@@ -1,0 +1,40 @@
+- page: ch-intro
+  children:
+    - page: overview
+    - page: getting-started
+    - page: philosophy
+- page: ch-concepts
+  children:
+    - page: architecture
+    - page: data-model
+    - page: rendering
+    - page: indexing
+    - page: streaming
+- page: ch-guides
+  children:
+    - page: installation
+    - page: configuration
+    - page: first-project
+    - page: styling
+    - page: deployment
+    - page: troubleshooting
+- page: ch-reference
+  children:
+    - page: cli
+    - page: format
+    - page: api
+    - page: schema
+    - page: glossary
+- page: ch-gallery
+  children:
+    - page: figures
+    - page: charts
+    - page: diagrams
+    - page: photos
+    - page: mosaics
+- page: ch-appendix
+  children:
+    - page: changelog
+    - page: faq
+    - page: credits
+    - page: license

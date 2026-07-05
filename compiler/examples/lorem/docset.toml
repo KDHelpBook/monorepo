@@ -1,0 +1,6 @@
+id = "lorem-en"
+title = "Lorem Ipsum — Test Docset"
+version = "1.0.0"
+language = "en"
+collection = "lorem"
+collection_title = "Lorem Ipsum"
