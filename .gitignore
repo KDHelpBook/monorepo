@@ -19,6 +19,7 @@
 /viewer-ts/public/docsets/*.khb
 /viewer-ts/public/docsets/*.khbc
 /viewer-ts/public/docsets/*.khbb
+/viewer-ts/public/docsets/*.khba
 
 # Misc
 .DS_Store

@@ -11,6 +11,8 @@ export interface StoredDocset {
   language: string;
   title: string;
   bytes: Uint8Array;
+  /** Sidecar `.khba` attachment packs uploaded alongside the docset. */
+  attachments?: Uint8Array[];
 }
 
 function openDb(): Promise<IDBDatabase> {

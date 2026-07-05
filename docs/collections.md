@@ -35,7 +35,10 @@ The viewer loads, per language:
 }
 ```
 
-`mode` is `khb` (plain) or `compact` (a gzip'd `.khbc`, decompressed in-browser).
+`mode` is `khb` (plain) or `compact` (a gzip'd `.khbc`, decompressed in-browser). An
+optional `attachments` array lists a docset's sidecar `.khba` packs (see
+[the format spec](format.md#attachments-assets--khba)); the viewer opens them beside
+the docset and resolves assets in order.
 
 ## Languages
 

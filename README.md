@@ -35,6 +35,9 @@ see [`docs/desktop.md`](docs/desktop.md).
   in-browser with the native `DecompressionStream`).
 - **`.khbb`** — a minimal binary (no prebuilt indexes) that the viewer rebuilds
   into a `.khb` in the browser (via wasm) and caches. Smallest download.
+- **`.khba`** — a sidecar attachments file (images and downloads) for a `.khb`.
+  Attachments can also be embedded directly in the `.khb`; one docset may have
+  several `.khba` packs.
 
 ## Quick start
 

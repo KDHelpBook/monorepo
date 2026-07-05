@@ -42,7 +42,8 @@ jobs:
           mkdir -p out
           "$BIN" compile compiler/examples/en        -o out/en.khb
           "$BIN" compile compiler/examples/extras-en -o out/extras-en.khb
-          "$BIN" compile compiler/examples/pl        -o out/pl.khb
+          # PL docs ship their attachments in a sidecar out/pl.khba (pack picks it up).
+          "$BIN" compile compiler/examples/pl        -o out/pl.khb --assets sidecar
           "$BIN" compile compiler/examples/extras-pl -o out/extras-pl.khb
 
       - name: Build the viewer

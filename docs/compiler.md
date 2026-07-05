@@ -16,6 +16,7 @@ docset.toml        # id, title, version, language
 categories.yaml    # optional: [{ id, title }, …]
 toc.yaml           # optional: nested [{ page, title?, children }, …]
 pages/*.md         # pages with YAML frontmatter
+assets/*           # optional: images & downloadable files (any depth)
 ```
 
 **`docset.toml`**
@@ -58,6 +59,19 @@ Order in the file is order in the tree. If `toc.yaml` is omitted, a flat table o
 contents in file-name order is produced (numeric filename prefixes such as
 `01-intro.md` therefore control ordering).
 
+**Attachments** — drop images and downloadable files under `assets/` (any depth)
+and reference them from Markdown by their `assets/…` path:
+
+```markdown
+![architecture](assets/diagram.svg)
+[Download the sample](assets/sample.zip)
+```
+
+Every file under `assets/` is stored (so downloadable attachments need not be
+inline-referenced). Images render inline in the viewer; other types become download
+links. By default attachments are embedded in the `.khb`; `--assets sidecar` puts
+them in a sibling `.khba` instead (see below).
+
 ## Commands
 
 ### `compile` — source → docset
@@ -65,7 +79,13 @@ contents in file-name order is produced (numeric filename prefixes such as
 ```bash
 kdhelp compile <src-dir> -o out.khb            # SQLite docset (default)
 kdhelp compile <src-dir> -o out.khbb --format khbb
+kdhelp compile <src-dir> -o out.khb --assets sidecar   # attachments -> out.khba
 ```
+
+`--assets embed` (default) stores attachments inside the `.khb`; `--assets sidecar`
+writes them to a sibling `out.khba` and leaves the `.khb` lean. A docset may be
+backed by several `.khba` packs — `pack`/`patch` pick up `out.khba` and any
+`out.<tag>.khba` next to the `.khb`.
 
 ### `convert` — `.khb` ⇄ `.khbb`
 
@@ -79,7 +99,9 @@ kdhelp convert out.khbb -o out.khb     # rebuild the SQLite docset
 ### `pack` — assemble a publishable distribution
 
 Copies a built viewer, bundles docsets into `docsets/`, and writes `docsets.json`
-(metadata read from each docset) and `config.json`.
+(metadata read from each docset) and `config.json`. For each `foo.khb` it also
+copies any sibling attachment packs (`foo.khba`, `foo.<tag>.khba`) and records them
+in the docset's `attachments` array.
 
 ```bash
 kdhelp pack --viewer viewer-ts/dist \

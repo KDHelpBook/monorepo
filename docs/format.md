@@ -4,13 +4,14 @@ A **`.khb`** ("Help Book") is an ordinary **SQLite** database. Everything the
 viewer needs is precomputed at build time, so search is instant and works offline.
 Because it is plain SQLite, anything that reads SQLite can open it.
 
-Two smaller delivery variants exist:
+Two smaller delivery variants and one attachments sidecar exist:
 
 | Extension | What it is | Read by |
 |-----------|------------|---------|
 | `.khb`  | the SQLite docset (the canonical, queried form) | native SQLite / sql.js |
 | `.khbc` | gzip of a `.khb` (smaller download) | decompressed in-browser, then as `.khb` |
 | `.khbb` | a minimal binary (no indexes) | rebuilt into a `.khb` before use |
+| `.khba` | a sidecar SQLite file of attachments (images, downloads) | opened beside its `.khb` |
 
 The format is **independent of the source format**: a `.khb` stores rendered HTML,
 never Markdown. The bundled compiler happens to take Markdown, but any front end
@@ -18,7 +19,8 @@ can produce a valid `.khb`.
 
 ## SQLite schema
 
-`meta.format_version` identifies the schema version (currently `1`).
+`meta.format_version` identifies the schema version (currently `2`; the `assets`
+table was added in version 2).
 
 ```sql
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -42,6 +44,11 @@ CREATE TABLE toc (
 CREATE TABLE categories (id TEXT PRIMARY KEY, title TEXT NOT NULL, position INTEGER NOT NULL);
 CREATE TABLE page_categories (page_id TEXT, category_id TEXT, PRIMARY KEY (page_id, category_id));
 CREATE TABLE keywords (term TEXT, page_id TEXT, PRIMARY KEY (term, page_id));
+
+-- Binary attachments: images and downloadable files referenced by pages as
+-- `asset:<path>`. Present (possibly empty) in every `.khb`; the sole content
+-- table of a sidecar `.khba`.
+CREATE TABLE assets (path TEXT PRIMARY KEY, mime TEXT NOT NULL, data BLOB NOT NULL);
 
 -- External-content FTS5: the index holds only the inverted index, not a second
 -- copy of the text (which lives once in `pages`).
@@ -86,10 +93,30 @@ ORDER BY score DESC;
 > searches the stored `plain` column in JS instead. Native (CLI/Tauri) uses the
 > real FTS5 index. Keep the two query paths in sync.
 
+## Attachments (`assets` + `.khba`)
+
+Images and downloadable files live in the `assets` table, keyed by a docset-relative
+path (e.g. `assets/diagram.svg`). Pages reference them via the **`asset:<path>`**
+scheme, which the compiler rewrites from ordinary `assets/…` image/link targets; the
+viewer resolves each `asset:` URL to a blob URL at load time (images render inline,
+other types become download links). Plain text and the FTS index are unaffected.
+
+Attachments can be stored two ways:
+
+- **Embedded** — the `assets` table is populated inside the `.khb` itself.
+- **Sidecar `.khba`** — a small separate SQLite file (a `meta` table plus the same
+  `assets` table) shipped next to a lean `.khb` whose own `assets` table is empty.
+
+A single `.khb` may be backed by **several** `.khba` packs. The viewer resolves an
+asset by checking the docset's embedded table first, then each sidecar in order
+(first match wins). In a packed distribution, `docsets.json` lists a docset's
+attachment packs in an `attachments` array; `kdhelp pack`/`patch` auto-detect the
+sibling files `foo.khba` and `foo.<tag>.khba` next to `foo.khb`.
+
 ## `.khbb` (binary)
 
 `.khbb` is a compact [postcard](https://docs.rs/postcard) encoding of the rendered
-docset (pages as HTML + plain text, the TOC, categories and keywords) — **no
-SQLite container and no FTS index**. It is the smallest way to ship a docset; the
-consumer rebuilds a real `.khb` from it. It is a versioned wrapper so it can be
-validated before use.
+docset (pages as HTML + plain text, the TOC, categories, keywords **and embedded
+assets**) — **no SQLite container and no FTS index**. It is the smallest way to ship
+a docset; the consumer rebuilds a real `.khb` from it. It is a versioned wrapper so
+it can be validated before use.

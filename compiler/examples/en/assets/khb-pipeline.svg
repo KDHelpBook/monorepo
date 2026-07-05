@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 660 150" width="660" height="150" font-family="Tahoma, Segoe UI, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#1f4d8f"/>
+    </marker>
+    <style>
+      .box { fill: #eef3fa; stroke: #1f4d8f; stroke-width: 1.5; rx: 6; }
+      .t { fill: #16325b; font-size: 13px; font-weight: bold; text-anchor: middle; }
+      .s { fill: #5b6675; font-size: 10.5px; text-anchor: middle; }
+      .a { stroke: #1f4d8f; stroke-width: 1.5; marker-end: url(#arrow); }
+    </style>
+  </defs>
+  <rect class="box" x="8"   y="45" width="132" height="60" rx="6"/>
+  <text class="t" x="74"  y="72">Markdown</text>
+  <text class="s" x="74"  y="90">+ assets/</text>
+
+  <rect class="box" x="182" y="45" width="132" height="60" rx="6"/>
+  <text class="t" x="248" y="72">kdhelp</text>
+  <text class="s" x="248" y="90">compiler (Rust)</text>
+
+  <rect class="box" x="356" y="45" width="132" height="60" rx="6"/>
+  <text class="t" x="422" y="72">.khb</text>
+  <text class="s" x="422" y="90">SQLite + FTS5</text>
+
+  <rect class="box" x="524" y="45" width="128" height="60" rx="6"/>
+  <text class="t" x="588" y="72">viewer</text>
+  <text class="s" x="588" y="90">browser / Tauri</text>
+
+  <line class="a" x1="142" y1="75" x2="180" y2="75"/>
+  <line class="a" x1="316" y1="75" x2="354" y2="75"/>
+  <line class="a" x1="490" y1="75" x2="522" y2="75"/>
+
+  <text class="s" x="422" y="128" font-size="10">images &amp; downloads travel inside the docset (or a sidecar .khba)</text>
+</svg>

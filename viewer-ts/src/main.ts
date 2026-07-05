@@ -30,6 +30,8 @@ interface ManifestEntry {
   title: string;
   language: string;
   mode: string;
+  /** Sidecar `.khba` attachment packs (paths relative to the dist root). */
+  attachments?: string[];
 }
 interface Manifest {
   docsets: ManifestEntry[];
@@ -82,10 +84,18 @@ async function bootstrap(): Promise<void> {
 
   const bundled: DocsetSource[] = manifest.docsets
     .filter((d) => d.language === lang)
-    .map((d) => ({ file: d.file, mode: d.mode }));
+    .map((d) => ({
+      file: d.file,
+      mode: d.mode,
+      // Attachment packs are copied verbatim by `pack` (never gzipped).
+      attachments: (d.attachments ?? []).map((file) => ({ file })),
+    }));
   const uploaded: DocsetSource[] = uploadedAll
     .filter((d) => d.language === lang)
-    .map((d) => ({ bytes: d.bytes }));
+    .map((d) => ({
+      bytes: d.bytes,
+      attachments: (d.attachments ?? []).map((bytes) => ({ bytes })),
+    }));
   const sources = [...bundled, ...uploaded];
   if (!sources.length) throw new Error(`no docsets for language "${lang}"`);
 
@@ -156,6 +166,8 @@ function start(
   // Terms to highlight in the opened page — set when a search result is clicked,
   // persisted across navigation (like MS Document Explorer) until explicitly cleared.
   let highlightTerms: string[] = [];
+  // Object URLs minted for the current page's attachments; revoked on navigation.
+  let assetUrls: string[] = [];
 
   const escapeRe = (t: string): string => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const queryTerms = (q: string): string[] => [
@@ -511,6 +523,32 @@ function start(
     return d.innerHTML;
   }
 
+  // Resolve `asset:<path>` references in the loaded page against the docset's
+  // attachment store (embedded table or sidecar `.khba`). Images render inline;
+  // other files become download links. Object URLs are tracked for revocation.
+  function resolveAssets(pageId: string): void {
+    const rewrite = (el: Element, attr: "src" | "href"): void => {
+      const raw = el.getAttribute(attr);
+      if (!raw || !raw.startsWith("asset:")) return;
+      const blob = collection.asset(pageId, raw.slice("asset:".length));
+      if (!blob) {
+        el.setAttribute("data-asset-missing", "");
+        return;
+      }
+      const url = URL.createObjectURL(
+        new Blob([blob.data as BlobPart], { type: blob.mime }),
+      );
+      assetUrls.push(url);
+      el.setAttribute(attr, url);
+      if (attr === "href") {
+        const name = raw.slice("asset:".length).split("/").pop() ?? "download";
+        (el as HTMLAnchorElement).download = name;
+      }
+    };
+    content.querySelectorAll("img[src^='asset:']").forEach((el) => rewrite(el, "src"));
+    content.querySelectorAll("a[href^='asset:']").forEach((el) => rewrite(el, "href"));
+  }
+
   // Wrap every occurrence of the active search terms in the content in <mark>,
   // skipping script/style and our keyword footer. Runs after each page load.
   function applyHighlight(): void {
@@ -596,12 +634,16 @@ function start(
 
   function loadContent(id: string): void {
     currentId = id;
+    // Release the previous page's attachment object URLs before rendering the next.
+    for (const u of assetUrls) URL.revokeObjectURL(u);
+    assetUrls = [];
     const info = pages.get(id);
     const page = collection.page(id);
     const title = page?.title ?? info?.title ?? id;
     content.innerHTML = page
       ? decorate(page.bodyHtml, id)
       : `<h1>${esc(s.notFoundTitle)}</h1><p>${s.notFoundBody(esc(id))}</p>`;
+    resolveAssets(id);
     applyHighlight();
     const firstHit = content.querySelector<HTMLElement>("mark.hl");
     if (firstHit) firstHit.scrollIntoView({ block: "center", inline: "nearest" });
@@ -735,23 +777,35 @@ function start(
   function pickDocset(): void {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = ".khb";
+    input.accept = ".khb,.khba";
+    input.multiple = true; // a .khb plus any number of sidecar .khba packs
     input.addEventListener("change", () => {
-      const file = input.files?.[0];
-      if (file) void uploadDocset(file);
+      const files = [...(input.files ?? [])];
+      const khb = files.find((f) => f.name.toLowerCase().endsWith(".khb"));
+      const khba = files.filter((f) => f.name.toLowerCase().endsWith(".khba"));
+      if (khb) void uploadDocset(khb, khba);
     });
     input.click();
   }
 
-  async function uploadDocset(file: File): Promise<void> {
+  async function uploadDocset(
+    file: File,
+    attachmentFiles: File[] = [],
+  ): Promise<void> {
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
-      const ds = await Docset.open(bytes); // validates + reads meta
+      const attachments = await Promise.all(
+        attachmentFiles.map(
+          async (f) => new Uint8Array(await f.arrayBuffer()),
+        ),
+      );
+      const ds = await Docset.open(bytes, attachments); // validates + reads meta
       await putDocset({
         id: ds.id,
         language: ds.language,
         title: ds.title,
         bytes,
+        attachments,
       });
       if (ds.language !== lang) {
         try {

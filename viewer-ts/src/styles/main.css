@@ -704,6 +704,15 @@ body {
   border-top: 1px solid var(--rule);
   margin: 1.4em 0;
 }
+.content img {
+  max-width: 100%;
+  height: auto;
+}
+/* An attachment whose bytes were not found in the docset. */
+.content [data-asset-missing] {
+  outline: 1px dashed #c0503a;
+  opacity: 0.6;
+}
 .content .kw {
   margin-top: 2.4em;
   padding-top: 0.7em;

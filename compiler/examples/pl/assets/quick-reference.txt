@@ -1,0 +1,19 @@
+kdhelp — ściąga
+===============
+
+Kompilacja docsetu:
+  kdhelp compile <katalog> -o out.khb
+  kdhelp compile <katalog> -o out.khb --assets sidecar   (załączniki -> out.khba)
+
+Konwersja:
+  kdhelp convert out.khb  -o out.khbb
+  kdhelp convert out.khbb -o out.khb
+
+Publikacja:
+  kdhelp pack  --viewer viewer-ts/dist --docset out.khb -o publish/
+  kdhelp patch publish/ --docset new.khb
+
+Załączniki:
+  Umieść pliki w katalogu assets/ i linkuj jako assets/<nazwa>.
+  Obrazy wyświetlają się w treści; inne pliki stają się linkami do pobrania.
+  Jeden .khb może mieć kilka plików .khba obok.

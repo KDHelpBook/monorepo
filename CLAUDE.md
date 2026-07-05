@@ -39,6 +39,10 @@ that the TypeScript viewer reached parity; it lives in git history (commit
 - `.khbc` — gzip-compressed `.khb` (transfer; `DecompressionStream('gzip')`).
 - `.khbb` — minimal binary (no indexes); rebuilt into `.khb` in-browser by wasm,
   cached in IndexedDB.
+- `.khba` — sidecar SQLite file of attachments (images/downloads) for a `.khb`.
+  Attachments may instead be **embedded** in the `.khb` (`assets` table, format v2);
+  one `.khb` can have several `.khba` packs. Pages link assets as `asset:<path>`;
+  the viewer resolves them to blob URLs (`compiler/core/src/assets.rs`).
 
 ## Key decisions & conventions
 - **Rust `core` is the engine for CLI + Tauri.** The browser mirrors its SQL via

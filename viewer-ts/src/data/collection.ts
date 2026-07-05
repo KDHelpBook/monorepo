@@ -1,5 +1,6 @@
 import {
   Docset,
+  type AssetBlob,
   type Category,
   type KeywordEntry,
   type Page,
@@ -9,9 +10,17 @@ import {
 
 const SEP = ":";
 
-/** A docset to load: either already-in-memory bytes or a URL (optionally gzip'd). */
-export type DocsetSource =
-  { bytes: Uint8Array } | { file: string; mode?: string };
+/** A sidecar `.khba` attachment pack: in-memory bytes or a URL (always plain). */
+export type AttachmentSource = { bytes: Uint8Array } | { file: string };
+
+/**
+ * A docset to load: either already-in-memory bytes or a URL (optionally gzip'd),
+ * with zero or more `.khba` attachment packs.
+ */
+export type DocsetSource = (
+  | { bytes: Uint8Array }
+  | { file: string; mode?: string }
+) & { attachments?: AttachmentSource[] };
 
 /** Decompress gzip bytes (a `.khbc` docset) via the native DecompressionStream. */
 async function gunzip(bytes: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
@@ -46,9 +55,23 @@ export class Collection {
         bytes = new Uint8Array(await res.arrayBuffer());
         if (src.mode === "compact") bytes = await gunzip(bytes); // .khbc
       }
-      docsets.push(await Docset.open(bytes));
+      const attachmentBytes: Uint8Array[] = [];
+      for (const a of src.attachments ?? []) {
+        if ("bytes" in a) {
+          attachmentBytes.push(a.bytes);
+        } else {
+          const res = await fetch(a.file);
+          attachmentBytes.push(new Uint8Array(await res.arrayBuffer()));
+        }
+      }
+      docsets.push(await Docset.open(bytes, attachmentBytes));
     }
     return new Collection(language, docsets);
+  }
+
+  /** Resolve an attachment (`asset:<path>`) referenced by a page in `fromNsId`. */
+  asset(fromNsId: string, path: string): AssetBlob | null {
+    return this.find(this.split(fromNsId).docsetId)?.asset(path) ?? null;
   }
 
   /** Split a namespaced id into its docset id and the local page id. */

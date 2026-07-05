@@ -1,0 +1,19 @@
+kdhelp — quick reference card
+=============================
+
+Compile a docset:
+  kdhelp compile <src-dir> -o out.khb
+  kdhelp compile <src-dir> -o out.khb --assets sidecar   (attachments -> out.khba)
+
+Convert:
+  kdhelp convert out.khb  -o out.khbb
+  kdhelp convert out.khbb -o out.khb
+
+Publish:
+  kdhelp pack  --viewer viewer-ts/dist --docset out.khb -o publish/
+  kdhelp patch publish/ --docset new.khb
+
+Assets:
+  Put files under assets/ and link them as assets/<name>.
+  Images render inline; other files become download links.
+  A .khb may be backed by several sidecar .khba packs.

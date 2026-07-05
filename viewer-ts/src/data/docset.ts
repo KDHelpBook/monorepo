@@ -19,6 +19,10 @@ export interface Page {
   title: string;
   bodyHtml: string;
 }
+export interface AssetBlob {
+  mime: string;
+  data: Uint8Array;
+}
 export interface SearchHit {
   pageId: string;
   title: string;
@@ -36,6 +40,9 @@ export class Docset {
     readonly id: string,
     readonly language: string,
     readonly title: string,
+    // Sidecar `.khba` attachment packs (zero or more), consulted in order after
+    // the docset's own embedded `assets` table.
+    private readonly attachments: Database[] = [],
   ) {}
 
   // sql.js is built without FTS5, so the prebuilt `pages_fts` index is unusable
@@ -45,13 +52,30 @@ export class Docset {
     { id: string; title: string; plain: string; keywords: string }[] | null =
     null;
 
-  static async open(bytes: Uint8Array): Promise<Docset> {
+  static async open(
+    bytes: Uint8Array,
+    attachmentBytes: Uint8Array[] = [],
+  ): Promise<Docset> {
     const SQL = await getSqlJs();
     const db = new SQL.Database(bytes);
     const id = metaValue(db, "docset_id") ?? "docset";
     const language = metaValue(db, "language") ?? "en";
     const title = metaValue(db, "title") ?? id;
-    return new Docset(db, id, language, title);
+    const attachments = attachmentBytes.map((b) => new SQL.Database(b));
+    return new Docset(db, id, language, title, attachments);
+  }
+
+  /**
+   * Resolve an attachment (image or downloadable file) by path. Checks the
+   * docset's embedded `assets` table first, then each sidecar `.khba` in order.
+   * Tolerant of a v1 docset that predates the `assets` table.
+   */
+  asset(path: string): AssetBlob | null {
+    for (const db of [this.db, ...this.attachments]) {
+      const hit = queryAsset(db, path);
+      if (hit) return hit;
+    }
+    return null;
   }
 
   meta(key: string): string | null {
@@ -175,6 +199,19 @@ export class Docset {
 
   close(): void {
     this.db.close();
+    for (const db of this.attachments) db.close();
+  }
+}
+
+/** Query one database's `assets` table, tolerating its absence (a v1 docset). */
+function queryAsset(db: Database, path: string): AssetBlob | null {
+  try {
+    const rows = all(db, "SELECT mime, data FROM assets WHERE path = ?", [path]);
+    const r = rows[0];
+    if (!r) return null;
+    return { mime: String(r.mime), data: r.data as Uint8Array };
+  } catch {
+    return null; // no `assets` table in this database
   }
 }
 

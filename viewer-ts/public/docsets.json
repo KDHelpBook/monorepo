@@ -19,7 +19,8 @@
       "id": "kdhelp-docs-pl",
       "title": "kdhelp — Dokumentacja",
       "language": "pl",
-      "mode": "khb"
+      "mode": "khb",
+      "attachments": ["docsets/examples.pl.khba"]
     },
     {
       "file": "docsets/examples.extras-pl.khb",
