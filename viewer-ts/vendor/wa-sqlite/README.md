@@ -15,6 +15,7 @@ touches. See [`docs/streaming.md`](../../../docs/streaming.md).
 |------|--------|
 | `src/*.js` | wa-sqlite 1.1.1 JS API (unmodified) — `sqlite-api.js`, `VFS.js`, `FacadeVFS.js`, … |
 | `dist/wa-sqlite-async.mjs` + `.wasm` | **our** build: SQLite 3.53 + FTS5, Asyncify |
+| `build/build-wasqlite.sh` | one-command reproducible build (Docker only) |
 | `build/extension-functions.stub.c` | build-time stub (see below) |
 | `LICENSE` | wa-sqlite's MIT license |
 
@@ -31,30 +32,28 @@ compatible with this wasm).
 - Verified: this build reports FTS5 present and returns bm25-ranked hits; the npm
   one does not.
 
-## How it was built (reproducible)
+## How to rebuild / update
 
-Needs Docker only — no local Emscripten. From a clone of
-`github.com/rhashimoto/wa-sqlite` at tag **v1.1.1**:
+Everything is scripted. Needs **Docker only** — no local Emscripten:
 
 ```sh
-# 1. Drop in the no-op extension-functions stub (see below) so the build needs
-#    no network for the optional sqlite.org/contrib extras download:
-cp build/extension-functions.stub.c <wa-sqlite>/src/extension-functions.c
-
-# 2. Build the Asyncify target WITH FTS5, in the pinned toolchain image
-#    (wa-sqlite 1.1.1's CI uses Emscripten 3.1.61):
-docker run --rm -v "$PWD/<wa-sqlite>:/work" -w /work emscripten/emsdk:3.1.61 \
-  bash -lc 'make WASQLITE_EXTRA_DEFINES="-DSQLITE_ENABLE_FTS5" dist/wa-sqlite-async.mjs'
-
-# 3. Copy the result here:
-cp <wa-sqlite>/dist/wa-sqlite-async.{mjs,wasm} dist/
-cp <wa-sqlite>/src/*.js src/
+viewer-ts/vendor/wa-sqlite/build/build-wasqlite.sh
 ```
 
-The key flag is **`WASQLITE_EXTRA_DEFINES=-DSQLITE_ENABLE_FTS5`**. wa-sqlite builds
-its amalgamation with SQLite's `configure --enable-all` (which *includes* the FTS5
-source), but its emcc `WASQLITE_DEFINES` do **not** define `SQLITE_ENABLE_FTS5`, so
-the FTS5 code is compiled out unless this flag is added.
+It clones the pinned wa-sqlite commit, applies the stub, builds the async+FTS5
+wasm in `emscripten/emsdk:3.1.61`, copies the artifacts back here, and checks that
+FTS5 landed. **To update** wa-sqlite or SQLite, bump `WA_SQLITE_REF` (and
+`EMSDK_IMAGE`) at the top of the script — the SQLite version is pinned inside
+wa-sqlite's own Makefile.
+
+The key flag the script passes is **`WASQLITE_EXTRA_DEFINES=-DSQLITE_ENABLE_FTS5`**.
+wa-sqlite builds its amalgamation with SQLite's `configure --enable-all` (which
+*includes* the FTS5 source), but its emcc `WASQLITE_DEFINES` do **not** define
+`SQLITE_ENABLE_FTS5`, so the FTS5 code is compiled out unless this flag is added.
+
+Pins live at the top of `build/build-wasqlite.sh`: the wa-sqlite commit
+(`c4d54d3…`, the 1.1.1 line), the toolchain image (`emscripten/emsdk:3.1.61`,
+matching wa-sqlite 1.1.1's CI), and SQLite 3.53 (from wa-sqlite's Makefile).
 
 ### The extension-functions stub
 
