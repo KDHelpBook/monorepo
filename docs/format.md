@@ -139,19 +139,26 @@ and `foo.<tag>.khba` next to `foo.khb` and rebuild `asset_index` to cover them a
 
 A `.khb` can come from anywhere (a user opens/uploads one), so its stored `body_html`
 is **untrusted**. The viewer renders every page body in a **sandboxed `<iframe>`**
-with neither `allow-scripts` nor `allow-same-origin`, so the frame is an isolated,
-opaque origin:
+with `sandbox="allow-scripts"` — crucially **without `allow-same-origin`**, so the
+frame is an isolated, opaque origin. Origin isolation (not script-blocking) is the
+security boundary:
 
-- No JavaScript runs — `<script>`, inline `on*` handlers and `javascript:` URLs are
-  all inert.
-- Being a different origin, the frame **cannot reach the app**: no access to the
-  parent DOM, `localStorage`, or the IndexedDB where other docsets live. Content CSS
-  is likewise confined to the frame and can't spoof the app chrome.
+- Untrusted JS may run, but in a different origin it **cannot reach the app**: no
+  access to the parent DOM, `localStorage`, or the IndexedDB where other docsets
+  live; content CSS is confined to the frame and can't spoof the app chrome. It also
+  gets **no other sandbox tokens** (no popups/modals/forms/top-navigation), so it
+  can't even navigate or open a window.
+- A small **trusted bridge** injected into the frame is the *only* channel across
+  the boundary: it `postMessage`s link intents out (open page id / external URL,
+  with the click's modifier for new-tab) and applies display-only messages in (font
+  size), and scrolls the first search hit into view. The app side treats every
+  inbound message as untrusted — it checks the source is the frame, requires a known
+  shape, and keeps each action safe-by-design (an `open` just routes; unknown ids →
+  "not found"; `ext` only opens vetted URL schemes).
 - Attachments are inlined as `data:` URLs (self-contained, so they load in the
-  isolated frame). In-content links navigate the top window's hash (→ the router);
-  external links open in a new tab with `rel="noopener"`.
+  isolated frame). `javascript:` and other unknown link schemes are stripped.
 - The bundled compiler additionally renders Markdown with raw HTML **escaped**, so
-  first-party docsets never contain markup to sanitise in the first place.
+  first-party docsets never contain markup to neutralise in the first place.
 
 App-generated UI (the Search page) renders in the normal document, not the frame.
 

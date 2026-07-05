@@ -23,6 +23,27 @@ const esc = (s: string): string =>
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c] ?? c,
   );
 
+/**
+ * Trusted bridge injected into the sandboxed content frame. It is the *only*
+ * channel across the isolation boundary: it posts link intents to the app
+ * (`{t:'kdhelp', …}`) and applies display-only messages from it (`kdhelp-app`).
+ * It runs alongside any (contained, origin-isolated) untrusted content JS, so the
+ * app side validates every inbound message by source and shape.
+ */
+const FRAME_BRIDGE = `(function(){
+var P=parent;
+function post(m){try{P.postMessage(m,'*')}catch(e){}}
+function link(e,mid){var a=e.target&&e.target.closest&&e.target.closest('a');if(!a)return;
+ if(a.hasAttribute('data-target')){e.preventDefault();post({t:'kdhelp',a:'open',id:a.getAttribute('data-target'),newTab:!!(mid||e.ctrlKey||e.metaKey)})}
+ else if(a.hasAttribute('data-ext')){e.preventDefault();post({t:'kdhelp',a:'ext',url:a.getAttribute('data-ext')})}}
+addEventListener('click',function(e){link(e,false)},true);
+addEventListener('auxclick',function(e){if(e.button===1)link(e,true)},true);
+addEventListener('message',function(e){var d=e.data;if(!d||d.t!=='kdhelp-app')return;
+ if(d.a==='font'&&typeof d.size==='number'){document.documentElement.style.setProperty('--content-size',d.size+'px')}});
+function ready(){var m=document.querySelector('mark.hl');if(m)m.scrollIntoView({block:'center'})}
+if(document.readyState!=='loading')ready();else addEventListener('DOMContentLoaded',ready);
+})();`;
+
 // ---------------------------------------------------------------------------
 // Manifest loading (single docset for now; collections come later)
 // ---------------------------------------------------------------------------
@@ -794,39 +815,39 @@ function start(
     });
   }
 
-  // Retarget links for the sandboxed frame: internal (`#local` / see-also) links
-  // navigate the top window's hash (→ our router); external links open a new tab;
-  // anything else is neutralised.
+  // Tag links for the frame bridge: internal (`#local` / see-also) links carry the
+  // full page id in `data-target`; external links keep their href + `data-ext`. The
+  // bridge intercepts clicks and posts them to the app. `javascript:` etc. are
+  // neutralised (href removed) so they never run even with scripts enabled.
   function rewriteFrameLinks(root: ParentNode, fromId: string): void {
     root.querySelectorAll<HTMLAnchorElement>("a").forEach((a) => {
       const rel = a.getAttribute("data-rel");
       if (rel) {
-        a.setAttribute("href", `#${rel}`);
-        a.setAttribute("target", "_top");
+        a.setAttribute("data-target", rel);
+        a.setAttribute("href", "#");
         a.removeAttribute("data-rel");
         a.classList.remove("rel-link");
         return;
       }
       const href = a.getAttribute("href") ?? "";
       if (href.startsWith("#")) {
-        a.setAttribute("href", `#${collection.resolveLink(fromId, href.slice(1))}`);
-        a.setAttribute("target", "_top");
+        a.setAttribute("data-target", collection.resolveLink(fromId, href.slice(1)));
+        a.setAttribute("href", "#");
       } else if (/^(https?:|mailto:|tel:)/i.test(href)) {
-        a.setAttribute("target", "_blank");
-        a.setAttribute("rel", "noopener noreferrer");
+        a.setAttribute("data-ext", href);
       } else if (!href.startsWith("data:")) {
-        a.removeAttribute("href"); // e.g. javascript: — inert in the sandbox anyway
+        a.removeAttribute("href");
       }
     });
   }
 
-  // Wrap page-body HTML into a full document for the sandboxed frame, injecting the
-  // theme CSS (the frame is isolated and can't see the app stylesheet).
+  // Wrap page-body HTML into a full document for the sandboxed frame: the theme CSS
+  // (the frame can't see the app stylesheet) + our trusted bridge script.
   const frameDoc = (bodyHtml: string): string =>
     `<!doctype html><html><head><meta charset="utf-8">` +
     `<meta name="referrer" content="no-referrer">` +
     `<style>${contentCss}\n:root{--content-size:${fontSize}px}</style>` +
-    `</head><body class="content">${bodyHtml}</body></html>`;
+    `</head><body class="content">${bodyHtml}<script>${FRAME_BRIDGE}</script></body></html>`;
 
   // Wrap every occurrence of the active search terms in the content in <mark>,
   // skipping script/style and our keyword footer. Runs after each page load.
@@ -991,11 +1012,11 @@ function start(
         break;
       case "font-up":
         fontSize = Math.min(20, fontSize + 1);
-        if (currentId !== SEARCH_ID) loadContent(currentId); // re-inject frame CSS
+        setFrameFont();
         break;
       case "font-down":
         fontSize = Math.max(11, fontSize - 1);
-        if (currentId !== SEARCH_ID) loadContent(currentId);
+        setFrameFont();
         break;
       case "print":
         window.print();
@@ -1229,8 +1250,40 @@ function start(
   // ＋ opens the current page in a new tab.
   $("#tab-new").addEventListener("click", () => openPage(currentId, true));
 
-  // Page-body links live inside the sandboxed frame and navigate the top window's
-  // hash (see rewriteFrameLinks) — handled by the hashchange listener below.
+  // Live font size — a display-only message to the frame (no srcdoc rebuild).
+  const setFrameFont = (): void => {
+    frame.contentWindow?.postMessage(
+      { t: "kdhelp-app", a: "font", size: fontSize },
+      "*",
+    );
+  };
+
+  // The only inbound channel from the sandboxed frame. Everything here is treated
+  // as untrusted (a hostile docset's JS could also post): verify the source is our
+  // frame, require a known shape, and keep every action safe-by-design — `open`
+  // just routes (unknown id → "not found"); `ext` only opens vetted URL schemes.
+  window.addEventListener("message", (e) => {
+    if (e.source !== frame.contentWindow) return;
+    const d = e.data as {
+      t?: unknown;
+      a?: unknown;
+      id?: unknown;
+      url?: unknown;
+      newTab?: unknown;
+    };
+    if (!d || d.t !== "kdhelp") return;
+    if (d.a === "open" && typeof d.id === "string") {
+      openPage(d.id, d.newTab === true);
+    } else if (
+      d.a === "ext" &&
+      typeof d.url === "string" &&
+      /^(https?:|mailto:|tel:)/i.test(d.url)
+    ) {
+      window.open(d.url, "_blank", "noopener,noreferrer");
+    }
+  });
+
+  // Page-body links live inside the sandboxed frame; the bridge posts clicks here.
   window.addEventListener("hashchange", () => {
     const id = location.hash.slice(1);
     if (id && id !== currentId) openPage(id);

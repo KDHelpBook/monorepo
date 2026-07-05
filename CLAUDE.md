@@ -51,10 +51,13 @@ that the TypeScript viewer reached parity; it lives in git history (commit
 
 ## Security (untrusted docsets)
 - Page bodies (`body_html`) are **untrusted** and rendered in a **sandboxed `<iframe>`**
-  (no `allow-scripts`/`allow-same-origin`) → JS inert, origin-isolated from the app
-  (no parent DOM / IndexedDB / chrome access). Assets inline as `data:`; in-content
-  links drive the top hash (router), external links `target=_blank rel=noopener`. The
-  Search page (app UI) stays in the normal `#content` div. See `docs/format.md` §Security.
+  with `allow-scripts` but **without `allow-same-origin`** — origin isolation is the
+  boundary: untrusted JS may run but can't reach the app (no parent DOM / localStorage
+  / IndexedDB / chrome), and gets no other tokens (no popups/top-nav). A trusted
+  **bridge** (`FRAME_BRIDGE` in `main.ts`) is the only channel: it `postMessage`s link
+  clicks (with modifiers → new tab) + scroll; the app validates every message by
+  source + shape (`open`/`ext`, safe-by-design). Assets inline as `data:`. The Search
+  page (app UI) stays in the normal `#content` div. See `docs/format.md` §Security.
 
 ## Key decisions & conventions
 - **Rust `core` is the engine for CLI + Tauri.** The browser mirrors its SQL via
