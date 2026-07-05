@@ -751,8 +751,9 @@ body {
   background: #fbfdff;
   border-left-color: var(--swoosh);
 }
-/* Active mode gets highlighted in the strip too. */
-.left-strip button.on {
+/* Highlight the active mode in the strip only while the fly-out is open —
+   a retracted strip has no "current" tab. */
+.flyout .left-strip button.on {
   background: var(--panel);
   border-left-color: var(--swoosh);
   color: var(--content-h);
