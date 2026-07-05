@@ -1,0 +1,11 @@
+{
+  "docsets": [
+    {
+      "file": "docsets/examples.en.khb",
+      "id": "kdhelp-docs-en",
+      "title": "kdhelp — Documentation",
+      "language": "en",
+      "mode": "khb"
+    }
+  ]
+}
