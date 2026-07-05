@@ -50,6 +50,11 @@ CREATE TABLE keywords (term TEXT, page_id TEXT, PRIMARY KEY (term, page_id));
 -- table of a sidecar `.khba`.
 CREATE TABLE assets (path TEXT PRIMARY KEY, mime TEXT NOT NULL, data BLOB NOT NULL);
 
+-- Asset routing: which store holds each asset. `pack` is '' for an asset embedded
+-- in this .khb, otherwise the owning sidecar's `meta.pack` id. Lets resolution go
+-- straight to one store instead of probing every attachment pack.
+CREATE TABLE asset_index (path TEXT PRIMARY KEY, pack TEXT NOT NULL);
+
 -- External-content FTS5: the index holds only the inverted index, not a second
 -- copy of the text (which lives once in `pages`).
 CREATE VIRTUAL TABLE pages_fts USING fts5(
@@ -106,12 +111,19 @@ Attachments can be stored two ways:
 - **Embedded** — the `assets` table is populated inside the `.khb` itself.
 - **Sidecar `.khba`** — a small separate SQLite file (a `meta` table plus the same
   `assets` table) shipped next to a lean `.khb` whose own `assets` table is empty.
+  Each sidecar carries a stable id in `meta.pack` (its filename).
 
-A single `.khb` may be backed by **several** `.khba` packs. The viewer resolves an
-asset by checking the docset's embedded table first, then each sidecar in order
-(first match wins). In a packed distribution, `docsets.json` lists a docset's
-attachment packs in an `attachments` array; `kdhelp pack`/`patch` auto-detect the
-sibling files `foo.khba` and `foo.<tag>.khba` next to `foo.khb`.
+A single `.khb` may be backed by **several** `.khba` packs. Rather than probe every
+store, resolution uses the `.khb`'s `asset_index`: look up the path once to learn its
+`pack`, then read only that store — the embedded `assets` table (`pack = ''`) or the
+sidecar whose `meta.pack` matches. Routing by id (not position) means the packs can
+be opened in any order — e.g. re-uploaded by the user — and still resolve. This also
+keeps resolution cheap when packs are **streamed** over HTTP: one lookup, one ranged
+read of the right file, instead of N probes (see [streaming.md](streaming.md)).
+
+In a packed distribution, `docsets.json` lists a docset's attachment packs in an
+`attachments` array; `kdhelp pack`/`patch` auto-detect the sibling files `foo.khba`
+and `foo.<tag>.khba` next to `foo.khb` and rebuild `asset_index` to cover them all.
 
 ## `.khbb` (binary)
 

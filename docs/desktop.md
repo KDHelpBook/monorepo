@@ -14,6 +14,9 @@ Two things are worth knowing:
   from disk with native SQLite (via `tauri-plugin-sql` or by exposing `core`'s
   `Docset` over Tauri commands) — dropping sql.js on the desktop and getting the
   real FTS5 index. That is a follow-up, not required for a working app.
+- **Streamed & remote content** (including a `khb-asset://` protocol for streamed
+  images/media, and online/hybrid docsets over HTTP Range) is a further step, sketched
+  in [streaming.md](streaming.md).
 
 ## Wiring it up
 
