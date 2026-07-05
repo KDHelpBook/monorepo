@@ -324,7 +324,17 @@ function start(docset: Docset): void {
       setTimeout(() => searchInput.focus(), 0);
     } else renderFavorites();
   }
-  const showMode = (m: Mode): void => setMode(m);
+  // ---- Collapse / drawer (unified `is-collapsed` state) ----
+  // Desktop: collapsed = panel hidden, vertical icon strip shown.
+  // Narrow (<=640px): collapsed = drawer closed; expanded = drawer + scrim shown.
+  const win = $("#window");
+  const narrow = (): boolean => window.matchMedia("(max-width: 640px)").matches;
+  const collapse = (): void => win.classList.add("is-collapsed");
+  const expand = (): void => win.classList.remove("is-collapsed");
+  const showMode = (m: Mode): void => {
+    expand();
+    setMode(m);
+  };
 
   // ---- Content ----
   function decorate(html: string, id: string): string {
@@ -380,8 +390,7 @@ function start(docset: Docset): void {
 
   function openPage(id: string): void {
     loadContent(id);
-    if (window.matchMedia("(max-width: 640px)").matches)
-      $("#window").classList.remove("drawer-open");
+    if (narrow()) collapse(); // close the drawer after picking a topic
   }
 
   // ---- Actions (menu / toolbar / tabs) ----
@@ -553,12 +562,18 @@ function start(docset: Docset): void {
     });
   })();
 
+  // Collapse / expand wiring
   $("#btn-pane").addEventListener("click", () =>
-    $("#window").classList.toggle("drawer-open"),
+    win.classList.toggle("is-collapsed"),
   );
+  $("#left-pin").addEventListener("click", collapse);
+  $("#left-close").addEventListener("click", collapse);
+  $("#strip-exp").addEventListener("click", expand);
+  $("#scrim").addEventListener("click", collapse);
 
   // ---- Start ----
   setMode("contents");
+  if (narrow()) collapse(); // start with the drawer closed on small screens
   const startId = location.hash.slice(1);
   openPage(pages.has(startId) ? startId : (toc[0]?.pageId ?? ""));
 }

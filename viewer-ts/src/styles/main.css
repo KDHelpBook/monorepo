@@ -26,9 +26,9 @@
   --code-bg: #f4f7fb;
   --code-border: #d7e0ee;
   --rule: #c9d4e4;
-  --font-ui: Tahoma, 'Segoe UI', Verdana, sans-serif;
-  --font-body: Verdana, 'Segoe UI', Tahoma, sans-serif;
-  --font-mono: Consolas, 'Lucida Console', 'Courier New', monospace;
+  --font-ui: Tahoma, "Segoe UI", Verdana, sans-serif;
+  --font-body: Verdana, "Segoe UI", Tahoma, sans-serif;
+  --font-mono: Consolas, "Lucida Console", "Courier New", monospace;
 
   /* Single source of truth for the responsive breakpoint (also in @media). */
   --narrow: 640px;
@@ -352,7 +352,7 @@ body {
   background: var(--hover);
 }
 .idx-key.multi::after {
-  content: ' …';
+  content: " …";
   color: var(--muted);
 }
 .idx-sub {
@@ -711,6 +711,74 @@ body {
   display: none;
 }
 
+/* Auto-hide: when the panel is collapsed it becomes a vertical icon strip */
+.left-strip {
+  display: none;
+  width: 30px;
+  flex: none;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+  padding: 6px 0;
+  background: linear-gradient(180deg, #e7eef8, #cdd9ea);
+  border: 1px solid #7d93b3;
+  border-right: none;
+}
+.left-strip button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 2px;
+  border: none;
+  border-left: 3px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  color: #20344f;
+}
+.left-strip button:hover {
+  background: #fbfdff;
+  border-left-color: var(--swoosh);
+}
+.left-strip button svg {
+  width: 15px;
+  height: 15px;
+}
+.left-strip button .vlabel {
+  writing-mode: vertical-rl;
+  font-size: 11px;
+  letter-spacing: 0.4px;
+}
+.left-strip .strip-exp {
+  font-weight: bold;
+  font-size: 15px;
+  color: #1f4d8f;
+  padding: 4px 2px;
+}
+.left-strip .strip-exp:hover {
+  border-left-color: transparent;
+}
+
+/* Collapsed: hide the panel + splitter, show the strip */
+.is-collapsed #left-pane {
+  display: none;
+}
+.is-collapsed #splitter {
+  display: none;
+}
+.is-collapsed #left-strip {
+  display: flex;
+}
+
+/* Scrim behind the mobile drawer */
+.scrim {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 25;
+  background: rgba(20, 35, 60, 0.32);
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;
@@ -718,7 +786,7 @@ body {
   }
 }
 
-/* Narrow screens: the left pane becomes a slide-in drawer */
+/* Narrow screens: the left pane becomes a slide-in drawer over the content */
 @media (max-width: 640px) {
   body {
     padding: 0;
@@ -737,9 +805,38 @@ body {
   .splitter {
     display: none;
   }
+  /* No desktop icon strip on mobile — the ☰ button drives the drawer instead. */
+  .left-strip {
+    display: none !important;
+  }
   .toolbar {
     flex-wrap: nowrap;
     overflow-x: auto;
+  }
+  .body {
+    position: relative;
+  }
+  .left {
+    position: absolute;
+    z-index: 30;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 84%;
+    max-width: 320px;
+    box-shadow: 4px 0 26px rgba(0, 0, 0, 0.4);
+    transition: transform 0.2s ease;
+  }
+  /* Keep the drawer in the DOM (override the desktop hide) so it can slide. */
+  .is-collapsed #left-pane {
+    display: flex;
+  }
+  /* Collapsed (default on mobile) = drawer slid out of view. */
+  .is-collapsed .left {
+    transform: translateX(-102%);
+  }
+  .window:not(.is-collapsed) .scrim {
+    display: block;
   }
   .content {
     padding: 16px 16px 50px;
