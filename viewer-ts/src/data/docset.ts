@@ -5,6 +5,8 @@ export interface TocNode {
   pageId: string;
   title: string;
   children: TocNode[];
+  /** True for a synthetic family/product folder node (not a real page). */
+  group?: boolean;
 }
 export interface Category {
   id: string;
@@ -40,6 +42,8 @@ export class Docset {
     readonly id: string,
     readonly language: string,
     readonly title: string,
+    readonly collection: string,
+    readonly collectionTitle: string,
     // Sidecar `.khba` packs keyed by their `meta.pack` id, so the routing index
     // can address one directly (no ordering assumptions — survives re-upload).
     private readonly attachmentsByPack: Map<string, Database> = new Map(),
@@ -61,13 +65,15 @@ export class Docset {
     const id = metaValue(db, "docset_id") ?? "docset";
     const language = metaValue(db, "language") ?? "en";
     const title = metaValue(db, "title") ?? id;
+    const collection = metaValue(db, "collection") ?? id;
+    const collectionTitle = metaValue(db, "collection_title") ?? title;
     const byPack = new Map<string, Database>();
     for (const b of attachmentBytes) {
       const adb = new SQL.Database(b);
       const pack = metaValue(adb, "pack");
       if (pack != null) byPack.set(pack, adb);
     }
-    return new Docset(db, id, language, title, byPack);
+    return new Docset(db, id, language, title, collection, collectionTitle, byPack);
   }
 
   /**

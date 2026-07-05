@@ -82,6 +82,22 @@ impl Docset {
         Ok(self.meta("language")?.unwrap_or_else(|| "en".to_string()))
     }
 
+    /// The product/family id (`meta.collection`), defaulting to the docset id.
+    pub fn collection(&self) -> Result<String> {
+        match self.meta("collection")? {
+            Some(c) => Ok(c),
+            None => self.id(),
+        }
+    }
+
+    /// The family display title (`meta.collection_title`), defaulting to the title.
+    pub fn collection_title(&self) -> Result<String> {
+        Ok(self
+            .meta("collection_title")?
+            .or(self.meta("title")?)
+            .unwrap_or_default())
+    }
+
     /// The full table of contents, ordered by parent then position.
     pub fn toc(&self) -> Result<Vec<TocEntry>> {
         let mut stmt = self.conn.prepare(
@@ -294,6 +310,8 @@ impl Docset {
             title: self.meta("title")?.unwrap_or_default(),
             version: self.meta("version")?.unwrap_or_default(),
             language: self.language()?,
+            collection: self.collection()?,
+            collection_title: self.collection_title()?,
             pages,
             toc: self.toc_tree()?,
             categories: self.categories()?,

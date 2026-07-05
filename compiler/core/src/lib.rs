@@ -19,8 +19,9 @@ pub use docset::{Attachments, Docset, KeywordEntry, Page, SearchHit, TocEntry};
 pub use model::{Asset, Category, RenderedDocset, RenderedPage, SourceDocset, SourcePage, TocNode};
 
 /// The on-disk `.khb`/`.khbb` format version this build reads and writes. Bumped to
-/// 2 when binary attachments (the `assets` table / sidecar `.khba`) were added.
-pub const FORMAT_VERSION: u32 = 2;
+/// 2 for binary attachments (the `assets` table / sidecar `.khba`), and to 3 when
+/// family metadata (`collection`) was added to the rendered docset (`.khbb` layout).
+pub const FORMAT_VERSION: u32 = 3;
 
 /// The crate version, surfaced in a docset's `meta.generator`.
 pub fn generator() -> String {
@@ -37,6 +38,8 @@ mod tests {
             title: "Demo".into(),
             version: "1.0".into(),
             language: "en".into(),
+            collection: "demo-family".into(),
+            collection_title: "Demo Family".into(),
             pages: vec![
                 SourcePage {
                     id: "intro".into(),
@@ -86,6 +89,8 @@ mod tests {
         let ds = Docset::open(&path).unwrap();
         assert_eq!(ds.id().unwrap(), "demo");
         assert_eq!(ds.language().unwrap(), "en");
+        assert_eq!(ds.collection().unwrap(), "demo-family");
+        assert_eq!(ds.collection_title().unwrap(), "Demo Family");
         assert_eq!(
             ds.meta("tokenizer").unwrap().unwrap(),
             "porter unicode61 remove_diacritics 2"

@@ -359,6 +359,14 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Product/family folder rows (shown when >1 family is loaded). */
+.node.group {
+  cursor: default;
+}
+.node.group > .label {
+  font-weight: bold;
+  color: #1a3d6b;
+}
 
 /* Index */
 .index-list {

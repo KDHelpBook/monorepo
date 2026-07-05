@@ -29,6 +29,12 @@ struct DocsetToml {
     version: String,
     #[serde(default = "default_language")]
     language: String,
+    /// Optional product/family this book belongs to (defaults to `id`).
+    #[serde(default)]
+    collection: Option<String>,
+    /// Optional family display title (defaults to `title`).
+    #[serde(default)]
+    collection_title: Option<String>,
 }
 fn default_version() -> String {
     "0.1.0".to_string()
@@ -95,11 +101,17 @@ pub fn load_dir(dir: &Path) -> Result<SourceDocset> {
     validate_toc(&toc, &page_ids)?;
     let assets = load_assets(dir)?;
 
+    let collection = manifest.collection.unwrap_or_else(|| manifest.id.clone());
+    let collection_title = manifest
+        .collection_title
+        .unwrap_or_else(|| manifest.title.clone());
     Ok(SourceDocset {
         id: manifest.id,
         title: manifest.title,
         version: manifest.version,
         language: manifest.language,
+        collection,
+        collection_title,
         pages,
         toc,
         categories,

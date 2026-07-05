@@ -31,6 +31,8 @@ pub fn render(src: &SourceDocset) -> RenderedDocset {
         title: src.title.clone(),
         version: src.version.clone(),
         language: src.language.clone(),
+        collection: src.collection.clone(),
+        collection_title: src.collection_title.clone(),
         pages,
         toc: src.toc.clone(),
         categories: src.categories.clone(),

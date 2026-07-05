@@ -31,6 +31,12 @@ pub struct SourceDocset {
     pub title: String,
     pub version: String,
     pub language: String,
+    /// The product/family this book belongs to. Books sharing a `collection` merge
+    /// seamlessly; different collections are shown as separate folders. Defaults to
+    /// the docset id (each book its own singleton family).
+    pub collection: String,
+    /// Display title for the family (defaults to the docset title).
+    pub collection_title: String,
     pub pages: Vec<SourcePage>,
     pub toc: Vec<TocNode>,
     pub categories: Vec<Category>,
@@ -92,6 +98,10 @@ pub struct RenderedDocset {
     pub title: String,
     pub version: String,
     pub language: String,
+    /// Product/family id (see [`SourceDocset::collection`]).
+    pub collection: String,
+    /// Product/family display title.
+    pub collection_title: String,
     pub pages: Vec<RenderedPage>,
     pub toc: Vec<TocNode>,
     pub categories: Vec<Category>,

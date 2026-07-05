@@ -198,11 +198,15 @@ function start(
   const toc = collection.tocTree();
   (function buildPages(nodes: TocNode[], path: string[]) {
     for (const n of nodes) {
-      pages.set(n.pageId, {
-        title: n.title,
-        path: [...path],
-        hasChildren: n.children.length > 0,
-      });
+      // Family folders are not pages; keep them out of the page map but include
+      // them in descendants' path so the tree can auto-expand to the current page.
+      if (!n.group) {
+        pages.set(n.pageId, {
+          title: n.title,
+          path: [...path],
+          hasChildren: n.children.length > 0,
+        });
+      }
       if (n.children.length) buildPages(n.children, [...path, n.pageId]);
     }
   })(toc, []);
@@ -219,6 +223,9 @@ function start(
     hasKids
       ? '<svg class="ico" viewBox="0 0 16 16"><path d="M1.5 4.5h4l1.2 1.2h7.8v8H1.5z" fill="#ffd98a" stroke="#c98a12"/></svg>'
       : '<svg class="ico" viewBox="0 0 16 16"><path d="M3 1.5h6l4 4v9H3z" fill="#fff" stroke="#5b6675"/><path d="M9 1.5v4h4" fill="none" stroke="#5b6675"/><path d="M5 8h6M5 10.5h6M5 5.5h2" stroke="#3d75bd" stroke-width="1" stroke-linecap="round"/></svg>';
+  // A stack of books for a product/family folder.
+  const groupIcon = (): string =>
+    '<svg class="ico" viewBox="0 0 16 16"><rect x="2.2" y="2.5" width="3.2" height="11" rx=".4" fill="#7fa8dd" stroke="#33608f"/><rect x="6.1" y="3" width="3.2" height="10.5" rx=".4" fill="#a9c6ea" stroke="#33608f"/><rect x="10" y="2.5" width="3.6" height="11" rx=".4" fill="#d6e5f7" stroke="#33608f"/></svg>';
 
   // ---- Contents tree ----
   const isAncestorOfCurrent = (id: string): boolean =>
@@ -228,12 +235,12 @@ function start(
     const li = document.createElement("li");
     const kids = n.children.length > 0;
     const row = document.createElement("div");
-    row.className = "node";
+    row.className = "node" + (n.group ? " group" : "");
     row.dataset.id = n.pageId;
     const open = isAncestorOfCurrent(n.pageId) || n.pageId === currentId;
     row.innerHTML =
       `<span class="twisty ${kids ? "" : "leaf"}">${kids ? (open ? "−" : "+") : ""}</span>` +
-      pageIcon(kids) +
+      (n.group ? groupIcon() : pageIcon(kids)) +
       `<span class="label">${esc(n.title)}</span>`;
     li.appendChild(row);
     if (kids) {
@@ -241,14 +248,20 @@ function start(
       sub.style.display = open ? "" : "none";
       for (const c of n.children) sub.appendChild(treeNode(c));
       li.appendChild(sub);
-      row.querySelector(".twisty")!.addEventListener("click", (e) => {
-        e.stopPropagation();
+      const twistyEl = row.querySelector(".twisty")!;
+      const toggle = (): void => {
         const showing = sub.style.display !== "none";
         sub.style.display = showing ? "none" : "";
-        row.querySelector(".twisty")!.textContent = showing ? "+" : "−";
+        twistyEl.textContent = showing ? "+" : "−";
+      };
+      twistyEl.addEventListener("click", (e) => {
+        e.stopPropagation();
+        toggle();
       });
+      // A family folder has no page — clicking its row just expands/collapses.
+      if (n.group) row.addEventListener("click", toggle);
     }
-    linkOpen(row, n.pageId);
+    if (!n.group) linkOpen(row, n.pageId);
     return li;
   }
 
@@ -1184,7 +1197,9 @@ function start(
   // ---- Start ----
   setMode("contents");
   const startId = location.hash.slice(1);
-  openPage(pages.has(startId) ? startId : (toc[0]?.pageId ?? ""));
+  // The first real page (the toc roots may be family folders, which aren't pages).
+  const firstPageId = pages.keys().next().value ?? "";
+  openPage(pages.has(startId) ? startId : firstPageId);
 }
 
 // ---------------------------------------------------------------------------

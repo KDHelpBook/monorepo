@@ -106,13 +106,54 @@ export class Collection {
     return this.docsets.map((d) => ({ id: d.id, title: d.title }));
   }
 
+  /**
+   * The product families in this collection — docsets grouped by `collection`, in
+   * load order. Books sharing a family merge; different families are separate.
+   */
+  families(): { id: string; title: string; docsetIds: string[] }[] {
+    const byId = new Map<
+      string,
+      { id: string; title: string; docsetIds: string[] }
+    >();
+    const order: string[] = [];
+    for (const d of this.docsets) {
+      let fam = byId.get(d.collection);
+      if (!fam) {
+        fam = { id: d.collection, title: d.collectionTitle, docsetIds: [] };
+        byId.set(d.collection, fam);
+        order.push(d.collection);
+      }
+      fam.docsetIds.push(d.id);
+    }
+    return order.map((id) => byId.get(id)!);
+  }
+
+  /** The family (collection) id a page's book belongs to. */
+  collectionOf(nsId: string): string {
+    return this.find(this.split(nsId).docsetId)?.collection ?? "";
+  }
+
   tocTree(): TocNode[] {
     const nsNode = (docsetId: string, n: TocNode): TocNode => ({
       pageId: this.ns(docsetId, n.pageId),
       title: n.title,
       children: n.children.map((c) => nsNode(docsetId, c)),
     });
-    return this.docsets.flatMap((d) => d.tocTree().map((n) => nsNode(d.id, n)));
+    const rootsFor = (docsetId: string): TocNode[] =>
+      this.find(docsetId)?.tocTree().map((n) => nsNode(docsetId, n)) ?? [];
+
+    const fams = this.families();
+    // One family (or one book) → seamless flat merge, no wrapper folder.
+    if (fams.length <= 1) {
+      return this.docsets.flatMap((d) => rootsFor(d.id));
+    }
+    // Several products → each family is a collapsible top-level folder.
+    return fams.map((f) => ({
+      pageId: `@collection:${f.id}`,
+      title: f.title,
+      group: true,
+      children: f.docsetIds.flatMap((id) => rootsFor(id)),
+    }));
   }
 
   categories(): Category[] {

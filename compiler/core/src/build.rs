@@ -149,6 +149,8 @@ fn write_meta(tx: &Transaction, doc: &RenderedDocset, tokenizer: &str) -> Result
         ("title", doc.title.clone()),
         ("version", doc.version.clone()),
         ("language", doc.language.clone()),
+        ("collection", doc.collection.clone()),
+        ("collection_title", doc.collection_title.clone()),
         ("tokenizer", tokenizer.to_string()),
         ("generator", crate::generator()),
     ];
