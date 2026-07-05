@@ -66,6 +66,17 @@ CREATE TABLE assets (
 );
 "#;
 
+/// The asset routing index, in every `.khb`: which store holds each asset path, so
+/// resolution goes straight to the right file instead of probing every attachment
+/// pack (essential once packs are streamed over HTTP). `pack` is `''` for an asset
+/// embedded in this `.khb`, otherwise the owning sidecar's `meta.pack` id.
+pub const ASSET_INDEX_SQL: &str = r#"
+CREATE TABLE asset_index (
+  path TEXT PRIMARY KEY,
+  pack TEXT NOT NULL
+);
+"#;
+
 /// Structural tables of a sidecar `.khba` attachments file: a `meta` table (so the
 /// file can be validated and paired with its docset) plus the shared `assets` table.
 pub const ATTACHMENTS_SCHEMA_SQL: &str = r#"

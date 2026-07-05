@@ -40,9 +40,9 @@ export class Docset {
     readonly id: string,
     readonly language: string,
     readonly title: string,
-    // Sidecar `.khba` attachment packs (zero or more), consulted in order after
-    // the docset's own embedded `assets` table.
-    private readonly attachments: Database[] = [],
+    // Sidecar `.khba` packs keyed by their `meta.pack` id, so the routing index
+    // can address one directly (no ordering assumptions — survives re-upload).
+    private readonly attachmentsByPack: Map<string, Database> = new Map(),
   ) {}
 
   // sql.js is built without FTS5, so the prebuilt `pages_fts` index is unusable
@@ -61,21 +61,26 @@ export class Docset {
     const id = metaValue(db, "docset_id") ?? "docset";
     const language = metaValue(db, "language") ?? "en";
     const title = metaValue(db, "title") ?? id;
-    const attachments = attachmentBytes.map((b) => new SQL.Database(b));
-    return new Docset(db, id, language, title, attachments);
+    const byPack = new Map<string, Database>();
+    for (const b of attachmentBytes) {
+      const adb = new SQL.Database(b);
+      const pack = metaValue(adb, "pack");
+      if (pack != null) byPack.set(pack, adb);
+    }
+    return new Docset(db, id, language, title, byPack);
   }
 
   /**
-   * Resolve an attachment (image or downloadable file) by path. Checks the
-   * docset's embedded `assets` table first, then each sidecar `.khba` in order.
-   * Tolerant of a v1 docset that predates the `assets` table.
+   * Resolve an attachment (image or downloadable file) by path. Uses the routing
+   * index to go straight to the owning store — the embedded `assets` table
+   * (`pack === ""`) or the sidecar `.khba` whose `meta.pack` matches — with no
+   * probing of the other packs.
    */
   asset(path: string): AssetBlob | null {
-    for (const db of [this.db, ...this.attachments]) {
-      const hit = queryAsset(db, path);
-      if (hit) return hit;
-    }
-    return null;
+    const pack = assetPack(this.db, path);
+    if (pack == null) return null;
+    const db = pack === "" ? this.db : this.attachmentsByPack.get(pack);
+    return db ? queryAsset(db, path) : null;
   }
 
   meta(key: string): string | null {
@@ -199,7 +204,18 @@ export class Docset {
 
   close(): void {
     this.db.close();
-    for (const db of this.attachments) db.close();
+    for (const db of this.attachmentsByPack.values()) db.close();
+  }
+}
+
+/** The store id holding `path` per the routing index, or null if unknown. */
+function assetPack(db: Database, path: string): string | null {
+  try {
+    const rows = all(db, "SELECT pack FROM asset_index WHERE path = ?", [path]);
+    const r = rows[0];
+    return r ? String(r.pack) : null;
+  } catch {
+    return null; // no `asset_index` table
   }
 }
 

@@ -124,16 +124,25 @@ mod tests {
             .iter()
             .any(|k| k.term == "intro" && k.page_ids == vec!["intro".to_string()]));
 
-        // Embedded asset + its rewritten link.
+        // Embedded asset + its rewritten link + routing index.
         assert_eq!(
             ds.asset_paths().unwrap(),
             vec!["assets/logo.svg".to_string()]
         );
-        let (mime, data) = ds.asset("assets/logo.svg").unwrap().unwrap();
+        assert_eq!(
+            ds.asset_pack("assets/logo.svg").unwrap().as_deref(),
+            Some("")
+        );
+        assert!(ds.asset_pack("assets/missing.png").unwrap().is_none());
+        let (mime, data) = docset::resolve_asset(&ds, &[], "assets/logo.svg")
+            .unwrap()
+            .unwrap();
         assert_eq!(mime, "image/svg+xml");
         assert!(data.starts_with(b"<svg"));
         assert!(page.body_html.contains("asset:assets/logo.svg"));
-        assert!(ds.asset("assets/missing.png").unwrap().is_none());
+        assert!(docset::resolve_asset(&ds, &[], "assets/missing.png")
+            .unwrap()
+            .is_none());
     }
 
     #[test]
@@ -141,16 +150,24 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let doc = render::render(&demo_source());
 
-        // Sidecar mode: a lean .khb (assets removed) + a .khba carrying them.
+        // Sidecar mode: a lean .khb (assets removed) + a .khba carrying them, with
+        // the .khb's routing index pointing at that pack (as the CLI does).
         let khb = dir.path().join("demo.khb");
         let khba = dir.path().join("demo.khba");
         let mut lean = doc.clone();
         let taken = std::mem::take(&mut lean.assets);
         build::build_khb(&lean, &khb).unwrap();
         build::build_khba(&doc.id, &taken, &khba).unwrap();
+        let pack = build::khba_pack_id(&khba);
+        build::rebuild_asset_index(&khb, &[(pack.clone(), vec!["assets/logo.svg".into()])])
+            .unwrap();
 
         let ds = Docset::open(&khb).unwrap();
         assert!(ds.asset_paths().unwrap().is_empty()); // not embedded
+        assert_eq!(
+            ds.asset_pack("assets/logo.svg").unwrap(),
+            Some(pack.clone())
+        );
         assert!(ds
             .page("intro")
             .unwrap()
@@ -160,11 +177,11 @@ mod tests {
 
         let att = Attachments::open(&khba).unwrap();
         assert_eq!(att.docset_id().unwrap().as_deref(), Some("demo"));
-        assert_eq!(
-            att.asset_paths().unwrap(),
-            vec!["assets/logo.svg".to_string()]
-        );
-        let (mime, data) = att.asset("assets/logo.svg").unwrap().unwrap();
+        assert_eq!(att.pack_id().unwrap(), Some(pack));
+        // Resolution routes through the index straight to the sidecar.
+        let (mime, data) = docset::resolve_asset(&ds, &[att], "assets/logo.svg")
+            .unwrap()
+            .unwrap();
         assert_eq!(mime, "image/svg+xml");
         assert!(!data.is_empty());
     }
@@ -194,7 +211,7 @@ mod tests {
     }
 
     #[test]
-    fn several_khba_back_one_khb_resolved_in_order() {
+    fn several_khba_back_one_khb_routed_by_index() {
         let dir = tempfile::tempdir().unwrap();
         let doc = render::render(&demo_source());
 
@@ -226,13 +243,24 @@ mod tests {
             &samples,
         )
         .unwrap();
+        build::rebuild_asset_index(
+            &khb,
+            &[
+                (build::khba_pack_id(&images), vec!["assets/logo.svg".into()]),
+                (
+                    build::khba_pack_id(&samples),
+                    vec!["assets/sample.txt".into()],
+                ),
+            ],
+        )
+        .unwrap();
 
         let ds = Docset::open(&khb).unwrap();
+        // Pass packs in REVERSED order: routing is by pack id, not position.
         let packs = vec![
-            Attachments::open(&images).unwrap(),
             Attachments::open(&samples).unwrap(),
+            Attachments::open(&images).unwrap(),
         ];
-        // Each pack contributes its own assets; both resolve for the one docset.
         let (m1, _) = docset::resolve_asset(&ds, &packs, "assets/logo.svg")
             .unwrap()
             .unwrap();

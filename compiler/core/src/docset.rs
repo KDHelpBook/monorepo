@@ -197,6 +197,20 @@ impl Docset {
         query_asset_paths(&self.conn)
     }
 
+    /// Which store holds `path`, per this docset's routing index: `Some("")` means
+    /// embedded in this `.khb`, `Some(id)` names the sidecar whose `meta.pack` is
+    /// `id`, and `None` means the asset is unknown to this docset.
+    pub fn asset_pack(&self, path: &str) -> Result<Option<String>> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT pack FROM asset_index WHERE path = ?1",
+                params![path],
+                |r| r.get::<_, String>(0),
+            )
+            .optional()?)
+    }
+
     /// The ids of pages tagged with a category.
     pub fn pages_by_category(&self, category_id: &str) -> Result<Vec<String>> {
         let mut stmt = self.conn.prepare(
@@ -315,6 +329,16 @@ impl Attachments {
             .optional()?)
     }
 
+    /// This pack's stable id (`meta.pack`), referenced by a `.khb`'s routing index.
+    pub fn pack_id(&self) -> Result<Option<String>> {
+        Ok(self
+            .conn
+            .query_row("SELECT value FROM meta WHERE key = 'pack'", [], |r| {
+                r.get::<_, String>(0)
+            })
+            .optional()?)
+    }
+
     /// Fetch an asset's MIME type and bytes by path.
     pub fn asset(&self, path: &str) -> Result<Option<(String, Vec<u8>)>> {
         query_asset(&self.conn, path)
@@ -327,19 +351,24 @@ impl Attachments {
 }
 
 /// Resolve an asset for a docset that may be backed by **several** sidecar `.khba`
-/// files: try the docset's own embedded table first, then each attachment pack in
-/// order (first match wins). This is the native mirror of the viewer's resolution.
+/// packs, using the docset's routing index: look up which store owns `path`, then
+/// read only from that store — no probing every pack. `''` is the embedded store;
+/// any other id names the sidecar whose `meta.pack` matches. Returns `None` if the
+/// asset is unknown or its pack is not among `attachments`.
 pub fn resolve_asset(
     docset: &Docset,
     attachments: &[Attachments],
     path: &str,
 ) -> Result<Option<(String, Vec<u8>)>> {
-    if let Some(hit) = docset.asset(path)? {
-        return Ok(Some(hit));
+    let Some(pack) = docset.asset_pack(path)? else {
+        return Ok(None);
+    };
+    if pack.is_empty() {
+        return docset.asset(path);
     }
-    for pack in attachments {
-        if let Some(hit) = pack.asset(path)? {
-            return Ok(Some(hit));
+    for att in attachments {
+        if att.pack_id()?.as_deref() == Some(pack.as_str()) {
+            return att.asset(path);
         }
     }
     Ok(None)

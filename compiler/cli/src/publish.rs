@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use flate2::{write::GzEncoder, Compression};
-use kdhelp_core::Docset;
+use kdhelp_core::{build, Attachments, Docset};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
@@ -29,6 +29,10 @@ struct ManifestEntry {
 struct Manifest {
     docsets: Vec<ManifestEntry>,
 }
+
+/// Routing for a docset's attachment packs: each pack's stable id (`meta.pack`)
+/// paired with the asset paths it holds.
+type PackRouting = Vec<(String, Vec<String>)>;
 
 #[derive(Serialize)]
 struct Config {
@@ -123,17 +127,27 @@ fn add_docset(khb: &Path, docsets_dir: &Path, compact: bool) -> Result<ManifestE
         .context("docset path has no file name")?
         .to_string();
 
+    // Copy the .khb into the dist (plain), gather its attachment packs, and rewrite
+    // its routing index so it covers the full set of packs we are bundling — then
+    // materialize the shipped form (optionally gzip'd).
+    let dest_khb = docsets_dir.join(&name);
+    fs::copy(khb, &dest_khb)?;
+    let (attachments, mut entries) = collect_attachments(khb, docsets_dir)?;
+    entries.insert(0, (String::new(), ds.asset_paths()?)); // embedded store, first
+    if entries.iter().any(|(_, paths)| !paths.is_empty()) {
+        build::rebuild_asset_index(&dest_khb, &entries)
+            .with_context(|| format!("indexing assets in {}", dest_khb.display()))?;
+    }
+
     let (file, mode) = if compact {
-        let gz = gzip(&fs::read(khb)?)?;
+        let gz = gzip(&fs::read(&dest_khb)?)?;
         let compact_name = format!("{name}c"); // foo.khb -> foo.khbc
         fs::write(docsets_dir.join(&compact_name), gz)?;
+        fs::remove_file(&dest_khb)?;
         (format!("docsets/{compact_name}"), "compact")
     } else {
-        fs::copy(khb, docsets_dir.join(&name))?;
         (format!("docsets/{name}"), "khb")
     };
-
-    let attachments = copy_attachments(khb, docsets_dir)?;
 
     Ok(ManifestEntry {
         file,
@@ -145,18 +159,19 @@ fn add_docset(khb: &Path, docsets_dir: &Path, compact: bool) -> Result<ManifestE
     })
 }
 
-/// Copy every sidecar `.khba` attachment pack that belongs to `khb` into `docsets/`,
-/// returning their manifest paths. A docset `foo.khb` owns `foo.khba` **and** any
-/// `foo.<tag>.khba` (so several packs can back one docset). Attachments are copied
-/// verbatim regardless of the docset's compact mode (their bytes are already binary).
-fn copy_attachments(khb: &Path, docsets_dir: &Path) -> Result<Vec<String>> {
+/// Copy every sidecar `.khba` attachment pack that belongs to `khb` into `docsets/`.
+/// A docset `foo.khb` owns `foo.khba` **and** any `foo.<tag>.khba` (so several packs
+/// can back one docset). Returns their manifest paths and, per pack, its stable id
+/// (`meta.pack`) with the asset paths it holds — the routing the `.khb` index needs.
+/// Attachments are copied verbatim regardless of compact mode (already binary).
+fn collect_attachments(khb: &Path, docsets_dir: &Path) -> Result<(Vec<String>, PackRouting)> {
     let parent = match khb.parent() {
         Some(p) if !p.as_os_str().is_empty() => p.to_path_buf(),
         _ => PathBuf::from("."),
     };
     let stem = match khb.file_stem().and_then(|s| s.to_str()) {
         Some(s) => s,
-        None => return Ok(Vec::new()),
+        None => return Ok((Vec::new(), Vec::new())),
     };
     let prefix = format!("{stem}.");
 
@@ -172,16 +187,21 @@ fn copy_attachments(khb: &Path, docsets_dir: &Path) -> Result<Vec<String>> {
         .collect();
     paths.sort();
 
-    let mut out = Vec::new();
+    let mut manifest = Vec::new();
+    let mut entries = Vec::new();
     for path in paths {
         let name = path
             .file_name()
             .and_then(|n| n.to_str())
             .expect("filtered filename is valid utf-8");
         fs::copy(&path, docsets_dir.join(name))?;
-        out.push(format!("docsets/{name}"));
+        manifest.push(format!("docsets/{name}"));
+        let att =
+            Attachments::open(&path).with_context(|| format!("opening {}", path.display()))?;
+        let pack = att.pack_id()?.unwrap_or_else(|| name.to_string());
+        entries.push((pack, att.asset_paths()?));
     }
-    Ok(out)
+    Ok((manifest, entries))
 }
 
 fn gzip(data: &[u8]) -> Result<Vec<u8>> {

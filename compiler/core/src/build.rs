@@ -40,6 +40,17 @@ pub fn build_khb(doc: &RenderedDocset, out_path: &Path) -> Result<()> {
     tx.execute_batch(schema::ASSETS_SQL)?;
     write_assets(&tx, &doc.assets)?;
 
+    // The routing index maps each embedded asset to pack '' (this .khb). When a
+    // docset also has sidecar packs, `rebuild_asset_index` overwrites this with the
+    // full routing (see the CLI's compile --assets sidecar / pack).
+    tx.execute_batch(schema::ASSET_INDEX_SQL)?;
+    for asset in &doc.assets {
+        tx.execute(
+            "INSERT OR IGNORE INTO asset_index(path, pack) VALUES(?1, '')",
+            params![asset.path],
+        )?;
+    }
+
     tx.execute_batch(&schema::create_fts_sql(tokenizer))?;
     // Populate the external-content index from the `pages` table.
     tx.execute_batch("INSERT INTO pages_fts(pages_fts) VALUES('rebuild');")?;
@@ -61,12 +72,21 @@ pub fn build_khba(docset_id: &str, assets: &[crate::model::Asset], out_path: &Pa
         Connection::open(out_path).with_context(|| format!("opening {}", out_path.display()))?;
     conn.execute_batch("PRAGMA page_size = 4096;")?;
 
+    // Stable pack id (the .khb's asset_index routes to this), derived from the file
+    // name so it is self-describing regardless of load order.
+    let pack = out_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("attachments")
+        .to_string();
+
     let tx = conn.transaction()?;
     tx.execute_batch(schema::ATTACHMENTS_SCHEMA_SQL)?;
     for (key, value) in [
         ("format_version", crate::FORMAT_VERSION.to_string()),
         ("kind", "attachments".to_string()),
         ("docset_id", docset_id.to_string()),
+        ("pack", pack),
         ("generator", crate::generator()),
     ] {
         tx.execute(
@@ -77,6 +97,37 @@ pub fn build_khba(docset_id: &str, assets: &[crate::model::Asset], out_path: &Pa
     write_assets(&tx, assets)?;
     tx.commit()?;
     conn.execute_batch("VACUUM;")?;
+    Ok(())
+}
+
+/// The pack id `build_khba` stamps into a sidecar for a given output path.
+pub fn khba_pack_id(out_path: &Path) -> String {
+    out_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("attachments")
+        .to_string()
+}
+
+/// Overwrite a `.khb`'s `asset_index` with the full routing across all its stores.
+/// `entries` is `(pack_id, paths)` — `""` for the embedded store, otherwise a
+/// sidecar's `meta.pack`; earlier entries win on duplicate paths (pass the embedded
+/// store first for embedded precedence). Used once the complete set of packs backing
+/// a docset is known (compile with a sidecar, or `pack`/`patch`).
+pub fn rebuild_asset_index(khb_path: &Path, entries: &[(String, Vec<String>)]) -> Result<()> {
+    let mut conn =
+        Connection::open(khb_path).with_context(|| format!("opening {}", khb_path.display()))?;
+    let tx = conn.transaction()?;
+    tx.execute_batch("DELETE FROM asset_index;")?;
+    for (pack, paths) in entries {
+        for path in paths {
+            tx.execute(
+                "INSERT OR IGNORE INTO asset_index(path, pack) VALUES(?1, ?2)",
+                params![path, pack],
+            )?;
+        }
+    }
+    tx.commit()?;
     Ok(())
 }
 

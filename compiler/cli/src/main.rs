@@ -171,13 +171,18 @@ fn compile(src: &Path, out: &Path, format: Format, assets: AssetsMode) -> Result
     match format {
         Format::Khb => {
             if assets == AssetsMode::Sidecar && !rendered.assets.is_empty() {
-                // Peel attachments out of the .khb and into a sibling .khba.
+                // Peel attachments out of the .khb and into a sibling .khba, then
+                // point the .khb's routing index at that pack.
                 let khba = out.with_extension("khba");
                 let sidecar = std::mem::take(&mut rendered.assets);
                 build::build_khb(&rendered, out)
                     .with_context(|| format!("writing {}", out.display()))?;
                 build::build_khba(&id, &sidecar, &khba)
                     .with_context(|| format!("writing {}", khba.display()))?;
+                let pack = build::khba_pack_id(&khba);
+                let paths = sidecar.iter().map(|a| a.path.clone()).collect();
+                build::rebuild_asset_index(out, &[(pack, paths)])
+                    .with_context(|| format!("indexing assets in {}", out.display()))?;
                 println!("  + {} attachment(s) -> {}", sidecar.len(), khba.display());
             } else {
                 build::build_khb(&rendered, out)
