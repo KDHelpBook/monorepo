@@ -60,6 +60,10 @@ that the TypeScript viewer reached parity; it lives in git history (commit
 - **Categories are a facet** (tags), independent of the TOC hierarchy.
 - **Multiple docsets merge into one** TOC/index/search (MS Help 2 collections);
   ids namespaced `docsetId:pageId`. Docsets group by `language`.
+- **Families (`meta.collection`)**: books sharing a `collection` merge; several
+  families each render as a top-level folder in the TOC (only when >1 family loaded).
+  Index/search union across products, with a "Filter by product:" scope to narrow.
+  Category filter prunes the tree (keeps structure), doesn't flatten it.
 - **i18n from the start** (EN default + PL): UI strings in locale files; content
   is one docset per language.
 - **No single-file build.** Distribution: static multi-file (Pages) or Tauri.

@@ -9,12 +9,36 @@ MS Help 2 collections.
 Page ids are namespaced as **`docsetId:localId`** so books never collide. A few
 consequences:
 
-- The table of contents concatenates each book's top-level nodes.
 - The keyword index and category facet union across books (a term or category can
   point at pages in several books).
 - Search runs over every book and merges the ranked results.
 - In-content `#localId` links resolve **within the same book**.
 - The address bar reads `ms-help://docsetId/localId.htm`.
+
+## Families — one product vs. many
+
+To reconcile "merge my books" with "keep different products apart", each docset
+declares a **family** via `collection` (an id; default = the docset id) and
+`collection_title` (see [compiler.md](compiler.md)). The viewer groups loaded books
+by family:
+
+- **One family (or one book)** → its books merge into a single, seamless table of
+  contents — no wrapper.
+- **Several families** → each becomes a **collapsible top-level folder** (labelled by
+  `collection_title`), so different products stay visually separate. The active
+  family auto-expands.
+
+So books of one product (Guide + API + Tutorials, all `collection = "myapp"`) read as
+one book, while a second product loaded alongside gets its own folder.
+
+## Scope — union with a product filter
+
+The index and search **union across all products by default** (cross-product
+discovery). To focus one product, a **"Filter by product:"** selector (Contents and
+Index) and a **Product** scope on the Search page narrow to a single family without
+losing the merged default. The category facet composes with it, and — like the
+product scope — filtering by category **prunes the tree while keeping its folder
+structure** rather than flattening it to a list.
 
 ## Where docsets come from
 

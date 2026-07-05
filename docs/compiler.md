@@ -25,8 +25,15 @@ assets/*           # optional: images & downloadable files (any depth)
 id = "my-docs"
 title = "My Documentation"
 version = "0.1.0"
-language = "en"        # selects the FTS tokenizer
+language = "en"                 # selects the FTS tokenizer
+collection = "my-product"       # optional: product/family (default = id)
+collection_title = "My Product" # optional: family display title (default = title)
 ```
+
+`collection` groups books into a **product/family**: books sharing one merge
+seamlessly, while different families show as separate top-level folders in the
+viewer's table of contents (see [collections.md](collections.md)). Omit it and each
+book is its own family.
 
 **Pages** — Markdown with an optional YAML frontmatter block:
 
