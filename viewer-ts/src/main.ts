@@ -1035,7 +1035,9 @@ function start(
 
   const updateFavBtn = (): void => {
     const on = favorites.has(currentId);
-    favToggle.innerHTML = (on ? "★" : "☆") + " " + esc(s.favorite);
+    // The star always shows; the word is wrapped so compact/phone CSS can hide it.
+    favToggle.innerHTML =
+      (on ? "★" : "☆") + ` <span class="fav-label">${esc(s.favorite)}</span>`;
     favToggle.style.color = on ? "var(--swoosh)" : "";
   };
 
