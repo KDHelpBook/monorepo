@@ -1653,6 +1653,10 @@ function start(
       if (id === SEARCH_ID) renderSearchPage();
       else renderManagePage();
       content.style.display = "";
+      // Repaint the strip so the clicked tab highlights — activateTab reaches this
+      // branch too, and the page path's renderTabs() below is skipped by the return.
+      renderTabs();
+      updateFavBtn();
       return;
     }
     const info = pages.get(id);
