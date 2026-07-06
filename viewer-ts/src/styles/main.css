@@ -904,4 +904,94 @@ textarea {
   .content {
     padding: 16px 16px 50px;
   }
+  /* The ⋯ overflow button surfaces the (hidden) menubar actions on phones.
+     `.tbtn.more-btn` outranks the base `.more-btn { display:none }` regardless of
+     source order. */
+  .tbtn.more-btn {
+    display: inline-flex;
+  }
+}
+
+/* ---- Mobile overflow (⋯) menu ---- */
+.more-btn {
+  display: none; /* desktop uses the menubar instead */
+  font-size: 18px;
+  line-height: 1;
+}
+.more-menu {
+  position: fixed; /* fixed so the toolbar's overflow-x never clips it */
+  z-index: 60;
+  min-width: 210px;
+  max-width: 82vw;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  background: var(--chrome-top);
+  border: 1px solid var(--chrome-border);
+  border-radius: 3px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+.more-menu[hidden] {
+  display: none;
+}
+.more-item {
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: 2px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  padding: 11px 12px;
+  cursor: pointer;
+}
+.more-item:hover,
+.more-item:active {
+  background: var(--hover);
+}
+.more-sep {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--chrome-border);
+}
+.more-lang {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--text);
+}
+.more-lang select {
+  font: inherit;
+  padding: 4px;
+}
+
+/* ---- Touch devices: larger tap targets + press feedback (no hover) ---- */
+@media (pointer: coarse) {
+  .tbtn {
+    min-height: 40px;
+  }
+  /* Enlarge the tree twisty's hit area without disturbing layout. */
+  .twisty {
+    min-width: 30px;
+    height: 30px;
+    margin: -6px 0;
+    line-height: 30px;
+  }
+  .node {
+    padding-top: 3px;
+    padding-bottom: 3px;
+  }
+  .doctab .dt-x {
+    padding: 6px;
+    margin: -4px -2px -4px 2px;
+  }
+  .node:active,
+  .doctab:active,
+  .left-tabs button:active,
+  .more-item:active {
+    background: var(--active, #cfe0f6);
+  }
 }

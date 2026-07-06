@@ -115,6 +115,10 @@
         >
           ☰
         </button>
+        <!-- Mobile-only overflow: the actions that live in the (hidden) menubar. -->
+        <button class="tbtn more-btn" id="btn-more" title="More" aria-label="More">
+          ⋯
+        </button>
         <button
           class="tbtn"
           data-action="back"
@@ -266,6 +270,41 @@
           <option value="en">English</option>
           <option value="pl">Polski</option>
         </select>
+        <!-- Mobile overflow menu (opened by the ⋯ button); actions reuse the same
+             data-action delegation and externalSources gating as the menubar. -->
+        <div class="more-menu" id="more-menu" hidden>
+          <button class="more-item" data-action="open-docset" data-i18n="openDocset">
+            Open docset…
+          </button>
+          <button class="more-item" data-action="open-url" data-i18n="openUrl">
+            Open from URL…
+          </button>
+          <button
+            class="more-item"
+            data-action="manage-docsets"
+            data-i18n="manageDocsets"
+          >
+            Manage docsets…
+          </button>
+          <button
+            class="more-item"
+            data-action="clear-highlight"
+            data-i18n="clearHighlight"
+          >
+            Clear search highlight
+          </button>
+          <div class="more-sep"></div>
+          <label class="more-lang">
+            <span data-i18n="languageLabel">Language</span>
+            <select class="lang-select" id="lang-select-m">
+              <option value="en">English</option>
+              <option value="pl">Polski</option>
+            </select>
+          </label>
+          <button class="more-item" data-action="about" data-i18n="about">
+            About kdhelp
+          </button>
+        </div>
       </div>
 
       <!-- Main area -->

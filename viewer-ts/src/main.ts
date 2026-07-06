@@ -270,6 +270,8 @@ function start(
   const tabs: Tab[] = [];
   let active = -1;
   const searchScope = { category: "", product: "", sort: "rank" };
+  // Touch device? Tree folder-pages then expand on a single tap (double-tap zooms).
+  const coarsePointer = window.matchMedia("(pointer: coarse)").matches;
   let currentId = "";
   // Monotonic tokens so a slow async load/search (streaming) that finishes after a
   // newer one has started is dropped instead of clobbering the newer result.
@@ -396,19 +398,25 @@ function start(
       if (n.group) {
         // A family folder has no page — clicking its row just expands/collapses.
         row.addEventListener("click", toggle);
+      } else if (coarsePointer) {
+        // Touch: one tap opens the chapter's page AND reveals its children (double
+        // tap would trigger zoom). It never collapses via the row — use the +/−.
+        row.addEventListener("click", () => {
+          if (!expanded.has(n.pageId)) toggle();
+          openPage(n.pageId);
+        });
       } else {
-        // A folder that is *also* a page (a chapter): single-click opens its page,
-        // double-click expands/collapses it (MS Help style). The +/- twisty toggles
-        // it too. Select text isn't lost since the row has none.
+        // Desktop folder-page: single-click opens its page, double-click expands
+        // (MS Help style); the +/− twisty toggles it too.
         row.addEventListener("dblclick", (e) => {
           e.preventDefault();
           toggle();
         });
       }
     }
-    // Leaf pages and folder-pages alike open on a single click (ctrl/⌘ or middle
-    // click → new tab); a folder-page additionally toggles on double click above.
-    if (!n.group) linkOpen(row, n.pageId);
+    // Leaf pages, and desktop folder-pages, open on a single click (ctrl/⌘ or middle
+    // click → new tab). Touch folder-pages are handled above.
+    if (!n.group && !(kids && coarsePointer)) linkOpen(row, n.pageId);
     return li;
   }
 
@@ -1456,27 +1464,51 @@ function start(
   });
 
   // Language switcher: persist + reload (the content docset changes with the UI).
-  const langSel = $<HTMLSelectElement>("#lang-select");
+  // Language selectors — the toolbar one and the mobile ⋯-menu one behave alike.
   const langNames: Record<string, string> = { en: "English", pl: "Polski" };
-  for (const l of available) {
-    if (![...langSel.options].some((o) => o.value === l)) {
-      const opt = document.createElement("option");
-      opt.value = l;
-      opt.textContent = langNames[l] ?? l;
-      langSel.appendChild(opt);
+  document.querySelectorAll<HTMLSelectElement>(".lang-select").forEach((sel) => {
+    for (const l of available) {
+      if (![...sel.options].some((o) => o.value === l)) {
+        const opt = document.createElement("option");
+        opt.value = l;
+        opt.textContent = langNames[l] ?? l;
+        sel.appendChild(opt);
+      }
     }
-  }
-  for (const opt of Array.from(langSel.options)) {
-    opt.disabled = !available.includes(opt.value);
-  }
-  langSel.value = lang;
-  langSel.addEventListener("change", () => {
-    try {
-      localStorage.setItem(LANG_KEY, langSel.value);
-    } catch {
-      /* ignore storage errors */
+    for (const opt of Array.from(sel.options)) {
+      opt.disabled = !available.includes(opt.value);
     }
-    location.reload();
+    sel.value = lang;
+    sel.addEventListener("change", () => {
+      try {
+        localStorage.setItem(LANG_KEY, sel.value);
+      } catch {
+        /* ignore storage errors */
+      }
+      location.reload();
+    });
+  });
+
+  // Mobile overflow (⋯) menu — the actions inside reuse the global data-action
+  // delegation; here we just toggle the dropdown and close it on outside click.
+  const moreBtn = $("#btn-more");
+  const moreMenu = $("#more-menu");
+  moreBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (moreMenu.hidden) {
+      const r = moreBtn.getBoundingClientRect();
+      moreMenu.style.top = `${Math.round(r.bottom + 2)}px`;
+      moreMenu.style.left = `${Math.round(r.left)}px`;
+    }
+    moreMenu.hidden = !moreMenu.hidden;
+  });
+  moreMenu.addEventListener("click", (e) => {
+    if ((e.target as HTMLElement).closest(".more-item")) moreMenu.hidden = true;
+  });
+  document.addEventListener("click", (e) => {
+    if (!moreMenu.hidden && !moreMenu.contains(e.target as Node)) {
+      moreMenu.hidden = true;
+    }
   });
 
   let searchTimer = 0;
