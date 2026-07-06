@@ -995,3 +995,52 @@ textarea {
     background: var(--active, #cfe0f6);
   }
 }
+
+/* Snappy taps: no 300ms delay / double-tap zoom on the chrome controls. */
+.tbtn,
+.node,
+.doctab,
+.left-tabs button,
+.menu-label,
+.more-item,
+.f-row,
+.result,
+.sp-hit,
+.idx-term {
+  touch-action: manipulation;
+}
+
+/* ---- Left-edge swipe catcher (opens the drawer over the content iframe) ---- */
+.edge-swipe {
+  display: none;
+}
+@media (max-width: 640px) {
+  .edge-swipe {
+    display: block;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 20px;
+    z-index: 20; /* above the content frame, below the drawer (30) + scrim */
+  }
+  /* Once the drawer is open the scrim handles gestures; get out of its way. */
+  .flyout .edge-swipe {
+    display: none;
+  }
+}
+
+/* ---- Installed PWA: keep the chrome clear of the notch / home indicator ---- */
+@media (display-mode: standalone) {
+  .toolbar {
+    padding-top: calc(3px + env(safe-area-inset-top));
+    padding-left: calc(6px + env(safe-area-inset-left));
+    padding-right: calc(6px + env(safe-area-inset-right));
+  }
+  .statusbar {
+    padding-bottom: calc(3px + env(safe-area-inset-bottom));
+  }
+  .left {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}

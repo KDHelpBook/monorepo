@@ -1618,6 +1618,51 @@ function start(
     renderPanel();
   });
   $("#scrim").addEventListener("click", retract);
+
+  // Touch swipes: open the drawer with a right-swipe from the left edge, close it
+  // with a left-swipe on the drawer or scrim. Only clearly-horizontal drags fire,
+  // so vertical scrolling in the tree/content is untouched.
+  const onSwipe = (
+    el: HTMLElement,
+    dir: "left" | "right",
+    action: () => void,
+  ): void => {
+    let x0 = 0;
+    let y0 = 0;
+    let live = false;
+    el.addEventListener(
+      "touchstart",
+      (e) => {
+        const t = e.touches[0];
+        if (!t) return;
+        x0 = t.clientX;
+        y0 = t.clientY;
+        live = true;
+      },
+      { passive: true },
+    );
+    el.addEventListener(
+      "touchmove",
+      (e) => {
+        const t = e.touches[0];
+        if (!live || !t) return;
+        const dx = t.clientX - x0;
+        const dy = t.clientY - y0;
+        if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy) * 1.3) return;
+        live = false;
+        if ((dir === "right" && dx > 0) || (dir === "left" && dx < 0)) action();
+      },
+      { passive: true },
+    );
+    el.addEventListener("touchend", () => {
+      live = false;
+    });
+  };
+  onSwipe($("#edge-swipe"), "right", () => {
+    if (narrow()) flyout();
+  });
+  onSwipe($("#left-pane"), "left", retract);
+  onSwipe($("#scrim"), "left", retract);
   // Strip » re-docks (pins) the panel.
   $("#strip-exp").addEventListener("click", () => {
     pinned = true;

@@ -2,7 +2,21 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#3c5f95" />
+    <!-- Installable to the phone home screen (uses the existing service worker). -->
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <meta name="apple-mobile-web-app-title" content="kdhelp" />
+    <link rel="apple-touch-icon" href="icons/icon-192.png" />
     <title>kdhelp</title>
   </head>
   <body>
@@ -311,6 +325,9 @@
       <div class="body">
         <!-- Scrim behind the mobile drawer -->
         <div class="scrim" id="scrim"></div>
+        <!-- Thin left-edge catcher: a right-swipe here opens the drawer (the content
+             iframe would otherwise swallow the gesture). Mobile-only, drawer-closed. -->
+        <div class="edge-swipe" id="edge-swipe"></div>
         <!-- Vertical strip shown when the panel is auto-hidden -->
         <div class="left-strip" id="left-strip">
           <button class="strip-exp" id="strip-exp" title="Expand panel">
