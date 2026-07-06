@@ -45,6 +45,9 @@ jobs:
           # PL docs ship their attachments in a sidecar out/pl.khba (pack picks it up).
           "$BIN" compile compiler/examples/pl        -o out/pl.khb --assets sidecar
           "$BIN" compile compiler/examples/extras-pl -o out/extras-pl.khb
+          # One product in two versions — demonstrates the Version switcher (V3).
+          "$BIN" compile compiler/examples/sample-sdk-v1 -o out/sample-sdk-v1.khb
+          "$BIN" compile compiler/examples/sample-sdk-v2 -o out/sample-sdk-v2.khb
 
       - name: Build the viewer
         run: |
@@ -58,6 +61,7 @@ jobs:
           "$BIN" pack --profile reader --viewer viewer-ts/dist \
             --docset out/en.khb --docset out/extras-en.khb \
             --docset out/pl.khb --docset out/extras-pl.khb \
+            --docset out/sample-sdk-v1.khb --docset out/sample-sdk-v2.khb \
             -o publish
 
       - uses: actions/configure-pages@v5

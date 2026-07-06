@@ -42,6 +42,22 @@
       "language": "en",
       "collection": "lorem",
       "version": "1.0.0"
+    },
+    {
+      "file": "docsets/sample-sdk-v1.khb",
+      "id": "sample-sdk-v1",
+      "title": "Sample SDK 1.0",
+      "language": "en",
+      "collection": "sample-sdk",
+      "version": "1.0.0"
+    },
+    {
+      "file": "docsets/sample-sdk-v2.khb",
+      "id": "sample-sdk-v2",
+      "title": "Sample SDK 2.0",
+      "language": "en",
+      "collection": "sample-sdk",
+      "version": "2.0.0"
     }
   ]
 }

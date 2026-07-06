@@ -111,6 +111,11 @@ language within it. So the same book never appears once per version in the merge
 table of contents, and a re-fetched remote that bumps its version is announced via a
 toast (see the update notice above).
 
+The bundled **Sample SDK** demo ships as two versions (`sample-sdk-v1` /
+`sample-sdk-v2`, sources in `compiler/examples/`) so the switcher is visible in the
+reader: 2.0 shows by default and adds a *Migrating from 1.0* page that disappears
+when you select 1.0.
+
 ## Distribution profiles
 
 `config.json` (written by `kdhelp pack`) drives two profiles:
