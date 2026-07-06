@@ -45,6 +45,8 @@ export interface IDocset {
   readonly title: string;
   readonly collection: string;
   readonly collectionTitle: string;
+  /** Content version (`meta.version`); "" if the docset declares none. */
+  readonly version: string;
   tocTree(): TocNode[];
   categories(): Category[];
   keywords(): KeywordEntry[];
@@ -68,6 +70,7 @@ export class Docset implements IDocset {
     readonly title: string,
     readonly collection: string,
     readonly collectionTitle: string,
+    readonly version: string,
     // Sidecar `.khba` packs keyed by their `meta.pack` id, so the routing index
     // can address one directly (no ordering assumptions — survives re-upload).
     private readonly attachmentsByPack: Map<string, Database> = new Map(),
@@ -91,13 +94,23 @@ export class Docset implements IDocset {
     const title = metaValue(db, "title") ?? id;
     const collection = metaValue(db, "collection") ?? id;
     const collectionTitle = metaValue(db, "collection_title") ?? title;
+    const version = metaValue(db, "version") ?? "";
     const byPack = new Map<string, Database>();
     for (const b of attachmentBytes) {
       const adb = new SQL.Database(b);
       const pack = metaValue(adb, "pack");
       if (pack != null) byPack.set(pack, adb);
     }
-    return new Docset(db, id, language, title, collection, collectionTitle, byPack);
+    return new Docset(
+      db,
+      id,
+      language,
+      title,
+      collection,
+      collectionTitle,
+      version,
+      byPack,
+    );
   }
 
   /**
@@ -265,7 +278,9 @@ function assetPack(db: Database, path: string): string | null {
 /** Query one database's `assets` table, tolerating its absence (a v1 docset). */
 function queryAsset(db: Database, path: string): AssetBlob | null {
   try {
-    const rows = all(db, "SELECT mime, data FROM assets WHERE path = ?", [path]);
+    const rows = all(db, "SELECT mime, data FROM assets WHERE path = ?", [
+      path,
+    ]);
     const r = rows[0];
     if (!r) return null;
     return { mime: String(r.mime), data: r.data as Uint8Array };

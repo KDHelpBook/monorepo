@@ -81,10 +81,13 @@ export class Collection {
         // Lazy-load the wa-sqlite streaming engine only when a streamed docset is
         // actually opened, so non-streaming sessions never fetch that chunk.
         const { StreamingDocset } = await import("./streaming-docset");
-        docsets.push(await StreamingDocset.open(src.url, src.attachments ?? []));
+        docsets.push(
+          await StreamingDocset.open(src.url, src.attachments ?? []),
+        );
         continue;
       }
-      const bytes = "bytes" in src ? src.bytes : await fetchDocsetBytes(src.file);
+      const bytes =
+        "bytes" in src ? src.bytes : await fetchDocsetBytes(src.file);
       const attachmentBytes: Uint8Array[] = [];
       for (const a of src.attachments ?? []) {
         attachmentBytes.push(
@@ -98,7 +101,9 @@ export class Collection {
 
   /** Resolve an attachment (`asset:<path>`) referenced by a page in `fromNsId`. */
   async asset(fromNsId: string, path: string): Promise<AssetBlob | null> {
-    return (await this.find(this.split(fromNsId).docsetId)?.asset(path)) ?? null;
+    return (
+      (await this.find(this.split(fromNsId).docsetId)?.asset(path)) ?? null
+    );
   }
 
   /** Split a namespaced id into its docset id and the local page id. */
@@ -120,9 +125,21 @@ export class Collection {
     return this.find(this.split(nsId).docsetId)?.title ?? "";
   }
 
-  /** The books (docsets) in this collection, for scope filters. */
-  books(): { id: string; title: string }[] {
-    return this.docsets.map((d) => ({ id: d.id, title: d.title }));
+  /** The books (docsets) in this collection, for scope filters + version display. */
+  books(): {
+    id: string;
+    title: string;
+    version: string;
+    language: string;
+    collection: string;
+  }[] {
+    return this.docsets.map((d) => ({
+      id: d.id,
+      title: d.title,
+      version: d.version,
+      language: d.language,
+      collection: d.collection,
+    }));
   }
 
   /**
@@ -159,7 +176,9 @@ export class Collection {
       children: n.children.map((c) => nsNode(docsetId, c)),
     });
     const rootsFor = (docsetId: string): TocNode[] =>
-      this.find(docsetId)?.tocTree().map((n) => nsNode(docsetId, n)) ?? [];
+      this.find(docsetId)
+        ?.tocTree()
+        .map((n) => nsNode(docsetId, n)) ?? [];
 
     const fams = this.families();
     // One family (or one book) → seamless flat merge, no wrapper folder.

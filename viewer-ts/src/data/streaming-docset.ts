@@ -29,6 +29,7 @@ export class StreamingDocset implements IDocset {
     readonly title: string,
     readonly collection: string,
     readonly collectionTitle: string,
+    readonly version: string,
     private readonly toc: TocNode[],
     private readonly cats: Category[],
     private readonly kws: KeywordEntry[],
@@ -45,14 +46,26 @@ export class StreamingDocset implements IDocset {
    * is a Range-served `.khb` and to learn its language for collection grouping,
    * without eager-loading the whole structure.
    */
-  static async peek(url: string): Promise<{ id: string; language: string }> {
+  static async peek(url: string): Promise<{
+    id: string;
+    language: string;
+    title: string;
+    collection: string;
+    version: string;
+  }> {
     const db = await StreamingDb.open(url);
     try {
-      const id = await db.one("SELECT value FROM meta WHERE key='docset_id'");
-      const language = await db.one("SELECT value FROM meta WHERE key='language'");
+      const val = async (k: string): Promise<string | null> => {
+        const v = await db.one("SELECT value FROM meta WHERE key = ?", [k]);
+        return v == null ? null : String(v);
+      };
+      const id = (await val("docset_id")) ?? "docset";
       return {
-        id: id == null ? "docset" : String(id),
-        language: language == null ? "en" : String(language),
+        id,
+        language: (await val("language")) ?? "en",
+        title: (await val("title")) ?? id,
+        collection: (await val("collection")) ?? id,
+        version: (await val("version")) ?? "",
       };
     } finally {
       db.close();
@@ -73,6 +86,7 @@ export class StreamingDocset implements IDocset {
     const title = (await meta("title")) ?? id;
     const collection = (await meta("collection")) ?? id;
     const collectionTitle = (await meta("collection_title")) ?? title;
+    const version = (await meta("version")) ?? "";
 
     // --- eager structure (all small tables) ---
     const toc = buildToc(
@@ -131,7 +145,9 @@ export class StreamingDocset implements IDocset {
     for (const sidecarUrl of sidecarUrls) {
       try {
         const pack = await StreamingDb.open(sidecarUrl);
-        const packId = await pack.one("SELECT value FROM meta WHERE key='pack'");
+        const packId = await pack.one(
+          "SELECT value FROM meta WHERE key='pack'",
+        );
         if (packId != null) byPack.set(String(packId), pack);
         else pack.close();
       } catch {
@@ -140,8 +156,20 @@ export class StreamingDocset implements IDocset {
     }
 
     return new StreamingDocset(
-      db, id, language, title, collection, collectionTitle,
-      toc, cats, kws, byCategory, relatedById, hasFts5, byPack,
+      db,
+      id,
+      language,
+      title,
+      collection,
+      collectionTitle,
+      version,
+      toc,
+      cats,
+      kws,
+      byCategory,
+      relatedById,
+      hasFts5,
+      byPack,
     );
   }
 
@@ -170,7 +198,11 @@ export class StreamingDocset implements IDocset {
     );
     const r = rows[0];
     return r
-      ? { id: String(r.id), title: String(r.title), bodyHtml: String(r.body_html) }
+      ? {
+          id: String(r.id),
+          title: String(r.title),
+          bodyHtml: String(r.body_html),
+        }
       : null;
   }
 
@@ -242,7 +274,11 @@ function buildToc(rows: Record<string, unknown>[]): TocNode[] {
   const build = (parent: number | null): TocNode[] =>
     (byParent.get(parent) ?? [])
       .sort((a, b) => a.position - b.position)
-      .map((e) => ({ pageId: e.pageId, title: e.title, children: build(e.id) }));
+      .map((e) => ({
+        pageId: e.pageId,
+        title: e.title,
+        children: build(e.id),
+      }));
   return build(null);
 }
 

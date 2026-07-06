@@ -20,6 +20,14 @@ struct ManifestEntry {
     id: String,
     title: String,
     language: String,
+    /// Product/family key (`meta.collection`). Books sharing it are the same product
+    /// across languages/versions — the viewer uses it to pick one language variant
+    /// per collection (preferring the UI language, else a fallback).
+    #[serde(default)]
+    collection: String,
+    /// Content version (`meta.version`), surfaced in the viewer. Empty if unset.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    version: String,
     /// Sidecar `.khba` attachment packs backing this docset (zero or more), each an
     /// optionally-`.gz` path. The viewer opens them alongside the docset.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -129,6 +137,8 @@ fn add_docset(khb: &Path, docsets_dir: &Path, compact: bool) -> Result<ManifestE
     let id = ds.id()?;
     let title = ds.meta("title")?.unwrap_or_else(|| id.clone());
     let language = ds.language()?;
+    let collection = ds.collection()?;
+    let version = ds.meta("version")?.unwrap_or_default();
     let name = khb
         .file_name()
         .and_then(|n| n.to_str())
@@ -162,6 +172,8 @@ fn add_docset(khb: &Path, docsets_dir: &Path, compact: bool) -> Result<ManifestE
         id,
         title,
         language,
+        collection,
+        version,
         attachments,
     })
 }

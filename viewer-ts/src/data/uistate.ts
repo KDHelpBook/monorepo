@@ -7,6 +7,7 @@ const K = {
   expanded: "kdhelp.expanded",
   tabs: "kdhelp.tabs",
   fontSize: "kdhelp.fontSize",
+  docsetLangs: "kdhelp.docsetLangs",
 } as const;
 
 function readStringArray(key: string): string[] {
@@ -42,6 +43,24 @@ export function loadExpanded(): string[] {
 }
 export function saveExpanded(ids: Iterable<string>): void {
   write(K.expanded, [...ids]);
+}
+
+// ---- per-collection display-language overrides ({ collection: language }) ----
+export function loadDocsetLangs(): Record<string, string> {
+  try {
+    const v: unknown = JSON.parse(localStorage.getItem(K.docsetLangs) ?? "{}");
+    if (!v || typeof v !== "object") return {};
+    const out: Record<string, string> = {};
+    for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+      if (typeof val === "string") out[k] = val;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+export function saveDocsetLangs(map: Record<string, string>): void {
+  write(K.docsetLangs, map);
 }
 
 // ---- reader font size (px) ----

@@ -11,6 +11,11 @@ export interface StoredDocset {
   language: string;
   title: string;
   bytes: Uint8Array;
+  /** Product/family key — used for per-collection language selection. Older
+   *  records predate this field; callers fall back to `id`. */
+  collection?: string;
+  /** Content version (`meta.version`); may be absent on older records. */
+  version?: string;
   /** Sidecar `.khba` attachment packs uploaded alongside the docset. */
   attachments?: Uint8Array[];
 }

@@ -82,6 +82,8 @@ export interface Strings {
   add: string;
   cancel: string;
   remotesTitle: string;
+  docsetLanguage: string;
+  versionLabel: string;
   streamOption: string;
   streamHint: string;
   streamSidecars: string;
@@ -161,6 +163,8 @@ const en: Strings = {
   add: "Add",
   cancel: "Cancel",
   remotesTitle: "Remote docsets",
+  docsetLanguage: "Display language",
+  versionLabel: "Version",
   streamOption: "Stream (don't download the whole file)",
   streamHint:
     "Reads pages on demand over HTTP Range, with real full-text search.",
@@ -242,6 +246,8 @@ const pl: Strings = {
   add: "Dodaj",
   cancel: "Anuluj",
   remotesTitle: "Zdalne docsety",
+  docsetLanguage: "Język wyświetlania",
+  versionLabel: "Wersja",
   streamOption: "Strumieniuj (nie pobieraj całego pliku)",
   streamHint:
     "Czyta strony na żądanie po HTTP Range, z prawdziwym wyszukiwaniem pełnotekstowym.",

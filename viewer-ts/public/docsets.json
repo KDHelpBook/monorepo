@@ -4,32 +4,44 @@
       "file": "docsets/examples.en.khb",
       "id": "kdhelp-docs-en",
       "title": "kdhelp — Documentation",
-      "language": "en"
+      "language": "en",
+      "collection": "kdhelp-docs",
+      "version": "0.1.0"
     },
     {
       "file": "docsets/examples.extras-en.khb",
       "id": "kdhelp-extras-en",
       "title": "kdhelp — Tips & FAQ",
-      "language": "en"
+      "language": "en",
+      "collection": "kdhelp-tips",
+      "version": "0.1.0"
     },
     {
       "file": "docsets/examples.pl.khb",
       "id": "kdhelp-docs-pl",
       "title": "kdhelp — Dokumentacja",
       "language": "pl",
-      "attachments": ["docsets/examples.pl.khba"]
+      "collection": "kdhelp-docs",
+      "version": "0.1.0",
+      "attachments": [
+        "docsets/examples.pl.khba"
+      ]
     },
     {
       "file": "docsets/examples.extras-pl.khb",
       "id": "kdhelp-extras-pl",
       "title": "kdhelp — Porady i FAQ",
-      "language": "pl"
+      "language": "pl",
+      "collection": "kdhelp-tips",
+      "version": "0.1.0"
     },
     {
       "file": "docsets/lorem-en.khb",
       "id": "lorem-en",
       "title": "Lorem Ipsum — Test Docset",
-      "language": "en"
+      "language": "en",
+      "collection": "lorem",
+      "version": "1.0.0"
     }
   ]
 }

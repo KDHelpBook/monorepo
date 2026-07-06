@@ -14,6 +14,7 @@ function stub(cfg: {
   id: string;
   collection?: string;
   collectionTitle?: string;
+  version?: string;
   title?: string;
   toc?: TocNode[];
   categories?: Category[];
@@ -29,13 +30,16 @@ function stub(cfg: {
     title: cfg.title ?? cfg.id,
     collection: cfg.collection ?? cfg.id,
     collectionTitle: cfg.collectionTitle ?? cfg.title ?? cfg.id,
+    version: cfg.version ?? "",
     tocTree: () => cfg.toc ?? [],
     categories: () => cfg.categories ?? [],
     keywords: () => cfg.keywords ?? [],
     pagesByCategory: (c) => cfg.pagesByCategory?.[c] ?? [],
     related: (id) => cfg.related?.[id] ?? [],
     page: async (id) =>
-      cfg.pages?.[id] != null ? { id, title: id, bodyHtml: cfg.pages[id]! } : null,
+      cfg.pages?.[id] != null
+        ? { id, title: id, bodyHtml: cfg.pages[id]! }
+        : null,
     asset: async () => null,
     search: async () => cfg.hits ?? [],
     close: () => {},
@@ -51,7 +55,10 @@ const leaf = (pageId: string, title = pageId): TocNode => ({
 describe("Collection namespacing", () => {
   const c = Collection.of([stub({ id: "book" })], "en");
   it("splits a namespaced id", () => {
-    expect(c.split("book:intro")).toEqual({ docsetId: "book", localId: "intro" });
+    expect(c.split("book:intro")).toEqual({
+      docsetId: "book",
+      localId: "intro",
+    });
   });
   it("resolves an in-book link relative to the source page's book", () => {
     expect(c.resolveLink("book:intro", "next")).toBe("book:next");
@@ -98,8 +105,18 @@ describe("Collection tocTree", () => {
   it("wraps several families in collapsible group folders", () => {
     const c = Collection.of(
       [
-        stub({ id: "a", collection: "x", collectionTitle: "X", toc: [leaf("i")] }),
-        stub({ id: "b", collection: "y", collectionTitle: "Y", toc: [leaf("j")] }),
+        stub({
+          id: "a",
+          collection: "x",
+          collectionTitle: "X",
+          toc: [leaf("i")],
+        }),
+        stub({
+          id: "b",
+          collection: "y",
+          collectionTitle: "Y",
+          toc: [leaf("j")],
+        }),
       ],
       "en",
     );
@@ -148,7 +165,10 @@ describe("Collection index & categories", () => {
 
 describe("Collection page & related", () => {
   it("namespaces a returned page id", async () => {
-    const c = Collection.of([stub({ id: "a", pages: { intro: "<h1>x</h1>" } })], "en");
+    const c = Collection.of(
+      [stub({ id: "a", pages: { intro: "<h1>x</h1>" } })],
+      "en",
+    );
     const p = await c.page("a:intro");
     expect(p).toMatchObject({ id: "a:intro", bodyHtml: "<h1>x</h1>" });
   });
@@ -198,7 +218,10 @@ describe("Collection.search score normalization", () => {
           score: 30 - i,
         })),
       });
-    const hits = await Collection.of([many("a"), many("b")], "en").search("x", 10);
+    const hits = await Collection.of([many("a"), many("b")], "en").search(
+      "x",
+      10,
+    );
     expect(hits).toHaveLength(10);
   });
 });

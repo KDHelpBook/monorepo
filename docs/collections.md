@@ -57,10 +57,14 @@ The viewer loads, per language:
 {
   "docsets": [
     { "file": "docsets/docs.khb.gz", "id": "my-docs", "title": "My Docs",
-      "language": "en", "attachments": ["docsets/docs.khba.gz"] }
+      "language": "en", "collection": "my-product", "version": "1.2.0",
+      "attachments": ["docsets/docs.khba.gz"] }
   ]
 }
 ```
+
+`collection` (the product/family key) and `version` come straight from the docset's
+`meta` and drive the language selection and version display below.
 
 A `file` (or an `attachments` entry) ending in `.gz` is gzip-compressed and gets
 decompressed after fetch — so any file can be compressed independently. An optional
@@ -70,12 +74,32 @@ the docset and routes assets through the `.khb`'s index.
 
 ## Languages
 
-Each docset carries a `language`. The viewer groups docsets by language and shows
-the set matching the active UI language; a toolbar selector switches language,
-which swaps **both** the UI strings and the content. The choice is remembered
-(localStorage) and otherwise inferred from `navigator.language`, falling back to
-English. Content is therefore authored as **one docset per language** (with a
+Each docset carries a `language`; the same product in several languages shares one
+`collection`. A toolbar selector sets the **UI language** (chrome strings), remembered
+in localStorage and otherwise inferred from `navigator.language`, falling back to
+English. Content is authored as **one docset per language** (with a
 language-appropriate FTS tokenizer).
+
+Which language of each product is shown is decided **per collection**, so a book
+present only in another language never vanishes on a language switch:
+
+1. the reader's explicit **override** for that collection (see below), if that
+   language exists; otherwise
+2. the **UI language**, if the collection offers it; otherwise
+3. a **fallback** — English, then `navigator.language`, then the collection's first
+   available language.
+
+Only one language per collection is shown (the same book is never merged twice into
+the TOC). Under *File → Manage docsets…*, every collection available in more than one
+language gets a **Display language** selector that pins it to a chosen language — even
+one other than the UI language. The choice persists (localStorage) and applies on the
+next load.
+
+## Versions
+
+Each docset's `meta.version` is surfaced read-only: in *Help → About* (every loaded
+book with its language + version), in *Manage docsets…*, and as a tooltip on each
+product folder in the table of contents.
 
 ## Distribution profiles
 

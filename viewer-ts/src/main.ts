@@ -16,15 +16,18 @@ import {
   removeRemote,
 } from "./data/library";
 import {
+  loadDocsetLangs,
   loadExpanded,
   loadFavorites,
   loadFontSize,
   loadTabs,
+  saveDocsetLangs,
   saveExpanded,
   saveFavorites,
   saveFontSize,
   saveTabs,
 } from "./data/uistate";
+import { languagesByCollection, pickLanguages } from "./data/langselect";
 import { applyStatic, strings, type Strings } from "./i18n";
 
 interface Config {
@@ -93,6 +96,10 @@ interface ManifestEntry {
   id: string;
   title: string;
   language: string;
+  /** Product/family key; older manifests omit it (fall back to `id`). */
+  collection?: string;
+  /** Content version (`meta.version`); may be absent. */
+  version?: string;
   /** Sidecar `.khba` attachment packs (paths relative to the dist root). */
   attachments?: string[];
 }
@@ -141,6 +148,9 @@ async function bootstrap(): Promise<void> {
     url: string;
     bytes?: Uint8Array;
     language: string;
+    title: string;
+    collection: string;
+    version: string;
     streaming: boolean;
     attachments?: string[];
   }[] = [];
@@ -149,10 +159,13 @@ async function bootstrap(): Promise<void> {
       try {
         if (entry.streaming) {
           const { StreamingDocset } = await import("./data/streaming-docset");
-          const { language } = await StreamingDocset.peek(entry.url);
+          const p = await StreamingDocset.peek(entry.url);
           remotes.push({
             url: entry.url,
-            language,
+            language: p.language,
+            title: p.title,
+            collection: p.collection,
+            version: p.version,
             streaming: true,
             attachments: entry.attachments,
           });
@@ -163,6 +176,9 @@ async function bootstrap(): Promise<void> {
             url: entry.url,
             bytes,
             language: ds.language,
+            title: ds.title,
+            collection: ds.collection,
+            version: ds.version,
             streaming: false,
           });
           ds.close();
@@ -172,42 +188,91 @@ async function bootstrap(): Promise<void> {
       }
     }
   }
-  const available = [
-    ...new Set([
-      ...manifest.docsets.map((d) => d.language),
-      ...uploadedAll.map((d) => d.language),
-      ...remotes.map((r) => r.language),
-    ]),
+
+  // Every available docset as a language "variant" of its collection, each paired
+  // with a ready-to-load source descriptor. We then pick one language per
+  // collection (override → UI language → fallback) so a book present only in
+  // another language stays visible instead of vanishing on a language switch.
+  const variants: {
+    collection: string;
+    language: string;
+    version: string;
+    title: string;
+    source: DocsetSource;
+  }[] = [
+    ...manifest.docsets.map((d) => ({
+      collection: d.collection ?? d.id,
+      language: d.language,
+      version: d.version ?? "",
+      title: d.title,
+      source: {
+        file: d.file,
+        // A `.gz` suffix (on the docset or a pack) decompresses on fetch.
+        attachments: (d.attachments ?? []).map((file) => ({ file })),
+      } as DocsetSource,
+    })),
+    ...uploadedAll.map((d) => ({
+      collection: d.collection ?? d.id,
+      language: d.language,
+      version: d.version ?? "",
+      title: d.title,
+      source: {
+        bytes: d.bytes,
+        attachments: (d.attachments ?? []).map((bytes) => ({ bytes })),
+      } as DocsetSource,
+    })),
+    ...remotes.map((r) => ({
+      collection: r.collection,
+      language: r.language,
+      version: r.version,
+      title: r.title,
+      source: (r.streaming
+        ? { url: r.url, mode: "streaming" as const, attachments: r.attachments }
+        : { bytes: r.bytes! }) as DocsetSource,
+    })),
   ];
+
+  const available = [...new Set(variants.map((v) => v.language))];
   const lang = chooseLang(available);
   document.documentElement.lang = lang;
   applyStatic(lang);
 
-  const bundled: DocsetSource[] = manifest.docsets
-    .filter((d) => d.language === lang)
-    .map((d) => ({
-      file: d.file,
-      // A `.gz` suffix (on the docset or a pack) triggers decompression on fetch.
-      attachments: (d.attachments ?? []).map((file) => ({ file })),
+  const overrides = loadDocsetLangs();
+  const navLang = (navigator.language || "en").slice(0, 2);
+  const fallbackOrder = [...new Set(["en", navLang])];
+  const shown = pickLanguages(variants, lang, overrides, fallbackOrder);
+  const sources = shown.map((v) => v.source);
+  if (!sources.length) throw new Error("no docsets to show");
+
+  // Per-collection language info for Manage docsets (only collections with a
+  // real choice — more than one language available).
+  const collLangs = languagesByCollection(variants);
+  const chosenByCol = new Map(shown.map((v) => [v.collection, v]));
+  const langInfo: CollectionLangInfo[] = [...collLangs.entries()]
+    .filter(([, langs]) => langs.length > 1)
+    .map(([collection, langs]) => ({
+      collection,
+      title: chosenByCol.get(collection)?.title ?? collection,
+      langs,
+      chosen: chosenByCol.get(collection)?.language ?? langs[0]!,
     }));
-  const uploaded: DocsetSource[] = uploadedAll
-    .filter((d) => d.language === lang)
-    .map((d) => ({
-      bytes: d.bytes,
-      attachments: (d.attachments ?? []).map((bytes) => ({ bytes })),
-    }));
-  const remote: DocsetSource[] = remotes
-    .filter((r) => r.language === lang)
-    .map((r) =>
-      r.streaming
-        ? { url: r.url, mode: "streaming" as const, attachments: r.attachments }
-        : { bytes: r.bytes! },
-    );
-  const sources = [...bundled, ...uploaded, ...remote];
-  if (!sources.length) throw new Error(`no docsets for language "${lang}"`);
 
   if (config.pwa) registerServiceWorker(strings(lang));
-  start(await Collection.load(sources, lang), lang, available, config);
+  start(
+    await Collection.load(sources, lang),
+    lang,
+    available,
+    config,
+    langInfo,
+  );
+}
+
+/** Per-collection language availability for the Manage docsets override UI. */
+interface CollectionLangInfo {
+  collection: string;
+  title: string;
+  langs: string[];
+  chosen: string;
 }
 
 function registerServiceWorker(s: Strings): void {
@@ -297,6 +362,7 @@ function start(
   lang: string,
   available: string[],
   config: Config,
+  langInfo: CollectionLangInfo[],
 ): void {
   const s: Strings = strings(lang);
   // Locked (bundled) builds hide the "open other docsets" affordances.
@@ -454,6 +520,18 @@ function start(
       ?.scrollIntoView({ block: "nearest" });
   }
 
+  // Version(s) per family (collection), for the folder tooltip.
+  const famVersions = ((): Map<string, string[]> => {
+    const m = new Map<string, string[]>();
+    for (const b of collection.books()) {
+      if (!b.version) continue;
+      const vs =
+        m.get(b.collection) ?? m.set(b.collection, []).get(b.collection)!;
+      if (!vs.includes(b.version)) vs.push(b.version);
+    }
+    return m;
+  })();
+
   function treeNode(n: TocNode, forceOpen = false): HTMLLIElement {
     const li = document.createElement("li");
     const kids = n.children.length > 0;
@@ -465,6 +543,10 @@ function start(
       `<span class="twisty ${kids ? "" : "leaf"}">${kids ? (open ? "−" : "+") : ""}</span>` +
       (n.group ? groupIcon() : pageIcon(kids)) +
       `<span class="label">${esc(n.title)}</span>`;
+    if (n.group && n.pageId.startsWith("@collection:")) {
+      const vs = famVersions.get(n.pageId.slice("@collection:".length));
+      if (vs?.length) row.title = `${s.versionLabel} ${vs.join(", ")}`;
+    }
     li.appendChild(row);
     if (kids) {
       const sub = document.createElement("ul");
@@ -1412,12 +1494,22 @@ function start(
     const bg = document.createElement("div");
     bg.style.cssText =
       "position:fixed;inset:0;background:rgba(20,35,60,.35);display:grid;place-items:center;z-index:50";
+    // Loaded docsets with their versions (language shown too, since a fallback book
+    // may differ from the UI language).
+    const bookLines = collection
+      .books()
+      .map(
+        (b) =>
+          `<div>${esc(b.title)} <span style="color:var(--muted)">· ${esc(b.language)}${b.version ? ` · ${esc(s.versionLabel)} ${esc(b.version)}` : ""}</span></div>`,
+      )
+      .join("");
     bg.innerHTML =
       '<div style="width:420px;background:var(--chrome-top);border:1px solid #17335c;border-radius:3px;box-shadow:0 12px 40px rgba(0,0,0,.5);overflow:hidden">' +
       '<div style="background:linear-gradient(180deg,var(--title-top),var(--title-bot));color:#fff;font-weight:bold;padding:6px 10px">About kdhelp</div>' +
       '<div style="padding:16px 18px;line-height:1.6"><div style="font-size:15px;font-weight:bold;color:var(--content-h)">kdhelp</div>' +
       `<div>${esc(s.aboutTagline)}</div>` +
-      `<p style="color:#5b6675;margin:.8em 0 0">${esc(s.aboutLanguage)} <b>${esc(collection.language)}</b></p></div>` +
+      `<p style="color:#5b6675;margin:.8em 0 .3em">${esc(s.aboutLanguage)} <b>${esc(collection.language)}</b></p>` +
+      `<div style="font-size:11px;color:#5b6675">${bookLines}</div></div>` +
       '<div style="padding:10px 16px;text-align:right;border-top:1px solid var(--chrome-border)"><button style="font-family:var(--font-ui);font-size:12px;padding:4px 16px;border:1px solid #16305a;border-radius:2px;background:linear-gradient(180deg,#eef4fd,#cbd9ec);cursor:pointer">OK</button></div></div>';
     const close = (): void => bg.remove();
     bg.addEventListener("click", (e) => {
@@ -1530,6 +1622,8 @@ function start(
         id: ds.id,
         language: ds.language,
         title: ds.title,
+        collection: ds.collection,
+        version: ds.version,
         bytes,
         attachments,
       });
@@ -1556,7 +1650,7 @@ function start(
       ? uploaded
           .map((d) =>
             row(
-              `${esc(d.title)} <span style="color:var(--muted)">(${esc(d.language)})</span>`,
+              `${esc(d.title)} <span style="color:var(--muted)">(${esc(d.language)}${d.version ? `, ${esc(s.versionLabel)} ${esc(d.version)}` : ""})</span>`,
               `data-remove="${esc(d.id)}"`,
             ),
           )
@@ -1574,10 +1668,33 @@ function start(
         ),
       )
       .join("");
+    // Per-collection display-language override — a select per product that has more
+    // than one language available, so the reader can pin a product to a language
+    // (even one other than the UI language). Persisted; a change reloads.
+    const langLabel = (l: string): string =>
+      ({ en: "English", pl: "Polski" })[l] ?? l;
+    const langRows = langInfo
+      .map((c) => {
+        const opts = c.langs
+          .map(
+            (l) =>
+              `<option value="${esc(l)}"${l === c.chosen ? " selected" : ""}>${esc(langLabel(l))}</option>`,
+          )
+          .join("");
+        return (
+          '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--rule)">' +
+          `<span style="flex:1;overflow:hidden;text-overflow:ellipsis">${esc(c.title)}</span>` +
+          `<select data-lang-col="${esc(c.collection)}" style="font-family:var(--font-ui);font-size:12px;padding:2px 4px">${opts}</select></div>`
+        );
+      })
+      .join("");
     const rows =
       uploadedRows +
       (remoteList.length
         ? `<div style="margin-top:12px;color:var(--content-h);font-weight:bold">${esc(s.remotesTitle)}</div>${remoteRows}`
+        : "") +
+      (langInfo.length
+        ? `<div style="margin-top:12px;color:var(--content-h);font-weight:bold">${esc(s.docsetLanguage)}</div>${langRows}`
         : "");
     const bg = document.createElement("div");
     bg.style.cssText =
@@ -1600,6 +1717,18 @@ function start(
         bg.remove();
       }
     });
+    bg.querySelectorAll<HTMLSelectElement>("select[data-lang-col]").forEach(
+      (sel) => {
+        sel.addEventListener("change", () => {
+          const col = sel.getAttribute("data-lang-col");
+          if (!col) return;
+          const map = loadDocsetLangs();
+          map[col] = sel.value;
+          saveDocsetLangs(map);
+          location.reload();
+        });
+      },
+    );
     document.body.appendChild(bg);
   }
 
