@@ -169,9 +169,9 @@ const en: Strings = {
   docsetLanguage: "Display language",
   versionLabel: "Version",
   changeVersionLang: "Change version / language",
-  streamOption: "Stream (don't download the whole file)",
+  streamOption: "Stream when the host supports it",
   streamHint:
-    "Reads pages on demand over HTTP Range, with real full-text search.",
+    "Reads pages on demand over HTTP Range (real full-text search), and falls back to a full download if the host has no Range support.",
   streamSidecars: "Attachment packs (.khba URLs, one per line — optional):",
   streamingBadge: "· streaming",
 };
@@ -255,9 +255,9 @@ const pl: Strings = {
   docsetLanguage: "Język wyświetlania",
   versionLabel: "Wersja",
   changeVersionLang: "Zmień wersję / język",
-  streamOption: "Strumieniuj (nie pobieraj całego pliku)",
+  streamOption: "Strumieniuj, gdy host to wspiera",
   streamHint:
-    "Czyta strony na żądanie po HTTP Range, z prawdziwym wyszukiwaniem pełnotekstowym.",
+    "Czyta strony na żądanie po HTTP Range (prawdziwe wyszukiwanie pełnotekstowe); gdy host nie wspiera Range, pobiera plik w całości.",
   streamSidecars:
     "Paczki załączników (adresy .khba, po jednym w wierszu — opcjonalne):",
   streamingBadge: "· strumieniowanie",

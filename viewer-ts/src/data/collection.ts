@@ -56,6 +56,24 @@ export async function fetchDocsetBytes(url: string): Promise<Uint8Array> {
 }
 
 /**
+ * Cheaply probe whether a host honours HTTP `Range` (needed for page-level
+ * streaming): a 1-byte request returns **206 Partial Content** if it does. Used to
+ * decide streaming-vs-whole for a remote without loading the streaming engine — if
+ * Range isn't supported (or CORS blocks the header), we fetch the docset whole.
+ */
+export async function rangeSupported(url: string): Promise<boolean> {
+  try {
+    const res = await fetch(url, { headers: { Range: "bytes=0-0" } });
+    const ok = res.status === 206;
+    // Stop the body download (a server that ignored Range sent the whole file).
+    await res.body?.cancel().catch(() => undefined);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * A merged view over several `.khb` docsets — the MS Help 2 "collection": one
  * table of contents, one index, one search across many books. Page ids are
  * namespaced as `docsetId:localId` so books never collide.

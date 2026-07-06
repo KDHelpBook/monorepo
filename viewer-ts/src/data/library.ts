@@ -81,8 +81,11 @@ const REMOTES_KEY = "kdhelp.remotes";
 export interface RemoteEntry {
   url: string;
   streaming?: boolean;
-  /** Sidecar `.khba` pack URLs (streaming remotes only). */
+  /** Sidecar `.khba` pack URLs. Streamed for a `streaming` remote, else fetched
+   *  whole — so a whole-file `.khb` can pair with remote packs too. */
   attachments?: string[];
+  /** The `.khbm` this entry was imported from, if any (for grouping/removal). */
+  manifest?: string;
 }
 
 export function getRemotes(): RemoteEntry[] {
@@ -91,7 +94,10 @@ export function getRemotes(): RemoteEntry[] {
     const list = raw ? (JSON.parse(raw) as unknown) : [];
     if (!Array.isArray(list)) return [];
     return list.flatMap((e): RemoteEntry[] => {
-      if (typeof e === "string") return [{ url: e }];
+      // `streaming` is now a *preference*: default true (prefer streaming, fall back
+      // to a whole fetch if the host has no Range support); only an explicit `false`
+      // forces a full download. Bare-string legacy entries default to the preference.
+      if (typeof e === "string") return [{ url: e, streaming: true }];
       const entry = e as RemoteEntry;
       if (e && typeof entry.url === "string") {
         const atts = Array.isArray(entry.attachments)
@@ -100,8 +106,11 @@ export function getRemotes(): RemoteEntry[] {
         return [
           {
             url: entry.url,
-            streaming: !!entry.streaming,
+            streaming: entry.streaming !== false,
             ...(atts && atts.length ? { attachments: atts } : {}),
+            ...(typeof entry.manifest === "string"
+              ? { manifest: entry.manifest }
+              : {}),
           },
         ];
       }
@@ -112,24 +121,48 @@ export function getRemotes(): RemoteEntry[] {
   }
 }
 
+/** Add (or update) a remote docset. Returns true if it was newly added. */
 export function addRemote(
   url: string,
   streaming = false,
   attachments: string[] = [],
-): void {
+  manifest?: string,
+): boolean {
   const list = getRemotes();
-  if (!list.some((e) => e.url === url)) {
-    const entry: RemoteEntry = {
-      url,
-      streaming,
-      ...(attachments.length ? { attachments } : {}),
-    };
-    try {
-      localStorage.setItem(REMOTES_KEY, JSON.stringify([...list, entry]));
-    } catch {
-      /* storage unavailable — remote just won't persist */
-    }
+  if (list.some((e) => e.url === url)) return false;
+  const entry: RemoteEntry = {
+    url,
+    streaming,
+    ...(attachments.length ? { attachments } : {}),
+    ...(manifest ? { manifest } : {}),
+  };
+  try {
+    localStorage.setItem(REMOTES_KEY, JSON.stringify([...list, entry]));
+  } catch {
+    /* storage unavailable — remote just won't persist */
   }
+  return true;
+}
+
+/** Fetch and import a `.khbm` manifest, adding each docset as a remote. Returns the
+ *  manifest title (if any) and how many entries were newly added. */
+export async function importKhbm(
+  url: string,
+): Promise<{ title?: string; added: number; total: number }> {
+  const { parseKhbm } = await import("./khbm");
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  const manifest = parseKhbm(await res.text(), url);
+  let added = 0;
+  for (const d of manifest.docsets) {
+    // Prefer streaming (auto-falls back to a whole fetch when Range isn't available).
+    if (addRemote(d.url, true, d.attachments, url)) added++;
+  }
+  return {
+    ...(manifest.title != null ? { title: manifest.title } : {}),
+    added,
+    total: manifest.docsets.length,
+  };
 }
 
 export function removeRemote(url: string): void {

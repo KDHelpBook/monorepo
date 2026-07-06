@@ -4,6 +4,7 @@ import contentCss from "./styles/content.css?inline";
 import {
   Collection,
   fetchDocsetBytes,
+  rangeSupported,
   type DocsetSource,
 } from "./data/collection";
 import { Docset, type SearchHit, type TocNode } from "./data/docset";
@@ -167,20 +168,29 @@ async function bootstrap(): Promise<void> {
   if (config.externalSources) {
     for (const entry of getRemotes()) {
       try {
-        if (entry.streaming) {
-          const { StreamingDocset } = await import("./data/streaming-docset");
-          const p = await StreamingDocset.peek(entry.url);
-          remotes.push({
-            url: entry.url,
-            id: p.id,
-            language: p.language,
-            title: p.title,
-            collection: p.collection,
-            version: p.version,
-            streaming: true,
-            attachments: entry.attachments,
-          });
-        } else {
+        // Prefer streaming when the entry allows it AND the host honours Range;
+        // otherwise (or if the streamed open fails) fetch the docset whole.
+        let streamed = false;
+        if (entry.streaming && (await rangeSupported(entry.url))) {
+          try {
+            const { StreamingDocset } = await import("./data/streaming-docset");
+            const p = await StreamingDocset.peek(entry.url);
+            remotes.push({
+              url: entry.url,
+              id: p.id,
+              language: p.language,
+              title: p.title,
+              collection: p.collection,
+              version: p.version,
+              streaming: true,
+              attachments: entry.attachments,
+            });
+            streamed = true;
+          } catch {
+            /* streaming open failed despite Range — fall back to a whole fetch */
+          }
+        }
+        if (!streamed) {
           const bytes = await fetchDocsetBytes(entry.url);
           const ds = await Docset.open(bytes);
           remotes.push({
@@ -192,6 +202,7 @@ async function bootstrap(): Promise<void> {
             collection: ds.collection,
             version: ds.version,
             streaming: false,
+            attachments: entry.attachments, // fetched whole alongside the .khb
           });
           ds.close();
         }
@@ -249,7 +260,11 @@ async function bootstrap(): Promise<void> {
       title: r.title,
       source: (r.streaming
         ? { url: r.url, mode: "streaming" as const, attachments: r.attachments }
-        : { bytes: r.bytes! }) as DocsetSource,
+        : {
+            bytes: r.bytes!,
+            // Whole-fetch docset can still pair with remote packs (fetched whole).
+            attachments: (r.attachments ?? []).map((file) => ({ file })),
+          }) as DocsetSource,
     })),
   ];
 
@@ -1800,9 +1815,9 @@ function start(
       `<div style="background:linear-gradient(180deg,var(--title-top),var(--title-bot));color:#fff;font-weight:bold;padding:6px 10px">${esc(s.openUrlTitle)}</div>` +
       `<div style="padding:14px 18px"><div style="color:var(--muted);margin-bottom:6px">${esc(s.openUrlHint)}</div>` +
       '<input class="url-in" type="url" placeholder="https://…/docs.khb" spellcheck="false" style="width:100%;font-family:var(--font-mono);font-size:12px;padding:5px 7px;border:1px solid #7f9bc0;border-radius:2px;box-sizing:border-box">' +
-      `<label style="display:flex;align-items:center;gap:6px;margin-top:8px;color:var(--content-fg);font-size:12px;cursor:pointer"><input class="url-stream" type="checkbox"> ${esc(s.streamOption)}</label>` +
+      `<label style="display:flex;align-items:center;gap:6px;margin-top:8px;color:var(--content-fg);font-size:12px;cursor:pointer"><input class="url-stream" type="checkbox" checked> ${esc(s.streamOption)}</label>` +
       `<div style="color:var(--muted);font-size:11px;margin-top:2px;margin-left:22px">${esc(s.streamHint)}</div>` +
-      `<div class="url-sidecars-row" style="display:none;margin-top:8px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">${esc(s.streamSidecars)}</div>` +
+      `<div class="url-sidecars-row" style="margin-top:8px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">${esc(s.streamSidecars)}</div>` +
       '<textarea class="url-sidecars" rows="2" spellcheck="false" placeholder="https://…/docs.khba" style="width:100%;font-family:var(--font-mono);font-size:12px;padding:5px 7px;border:1px solid #7f9bc0;border-radius:2px;box-sizing:border-box;resize:vertical"></textarea></div>' +
       '<div class="url-err" style="color:#a33;font-size:11px;min-height:15px;margin-top:5px"></div></div>' +
       '<div style="padding:10px 16px;border-top:1px solid var(--chrome-border);display:flex;gap:8px;justify-content:flex-end">' +
@@ -1814,29 +1829,34 @@ function start(
     const sidecars = bg.querySelector<HTMLTextAreaElement>(".url-sidecars")!;
     const err = bg.querySelector<HTMLElement>(".url-err")!;
     const add = bg.querySelector<HTMLButtonElement>(".url-add")!;
-    // Sidecar packs only make sense for a streamed docset.
-    stream.addEventListener("change", () => {
-      sidecarsRow.style.display = stream.checked ? "" : "none";
-    });
+    void sidecarsRow; // packs input is always shown (whole-fetch can use them too)
     const submit = async (): Promise<void> => {
       const url = input.value.trim();
       if (!url) return;
-      const streaming = stream.checked;
-      const packs = streaming
-        ? sidecars.value
-            .split(/\s+/)
-            .map((u) => u.trim())
-            .filter(Boolean)
-        : [];
+      const streaming = stream.checked; // prefer streaming; auto-falls back to whole
+      const packs = sidecars.value
+        .split(/\s+/)
+        .map((u) => u.trim())
+        .filter(Boolean);
       err.style.color = "var(--muted)";
       err.textContent = s.openUrlChecking;
       add.disabled = true;
       try {
-        // Validate: streaming needs a Range-served `.khb` (peek); whole-fetch reads it.
-        if (streaming) {
-          const { StreamingDocset } = await import("./data/streaming-docset");
-          await StreamingDocset.peek(url);
-        } else (await Docset.open(await fetchDocsetBytes(url))).close();
+        // Validate the URL is a reachable `.khb`: a cheap streaming peek when
+        // streaming is preferred and the host honours Range, else a whole fetch
+        // (which also covers a preferred-but-unavailable stream — it'll load whole).
+        let validated = false;
+        if (streaming && (await rangeSupported(url))) {
+          try {
+            const { StreamingDocset } = await import("./data/streaming-docset");
+            await StreamingDocset.peek(url);
+            validated = true;
+          } catch {
+            /* not Range-streamable after all — validate by fetching it whole */
+          }
+        }
+        if (!validated)
+          (await Docset.open(await fetchDocsetBytes(url))).close();
         addRemote(url, streaming, packs);
         location.reload();
       } catch {
