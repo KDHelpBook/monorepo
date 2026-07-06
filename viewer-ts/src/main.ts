@@ -820,12 +820,20 @@ function start(
   //   autohide           — side strip is the switcher; hovering a strip tab flies
   //                        its panel out OVER the content, beside the strip, and it
   //                        retracts on mouse-leave / document click.
-  // Narrow (<=640px): the panel is always a drawer overlay toggled by ☰ (`flyout`).
+  // Compact (narrow *or* short — phones portrait and landscape): the panel is a
+  // drawer overlay toggled by ☰ (`flyout`). Height matters so a landscape phone
+  // (wide but only ~375px tall) uses the drawer instead of the cramped docked
+  // layout. Keep this query in sync with the CSS `@media` blocks.
   const win = $("#window");
   const pinBtn = $("#left-pin");
-  const narrow = (): boolean => window.matchMedia("(max-width: 640px)").matches;
+  const COMPACT_MQ = "(max-width: 640px), (max-height: 480px)";
+  const narrow = (): boolean => window.matchMedia(COMPACT_MQ).matches;
 
   let pinned = true; // docked vs auto-hide
+  // Auto-hide reveals the panel on hover, which a touch device can't do. On coarse
+  // pointers (tablets) keep it docked and drop the pin toggle — the ☰ drawer covers
+  // "hide the panel" on phones/short screens.
+  if (coarsePointer) pinBtn.style.display = "none";
 
   const renderPanel = (): void => {
     win.classList.toggle("autohide", !pinned);

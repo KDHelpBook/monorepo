@@ -843,7 +843,10 @@ textarea {
 }
 
 /* Narrow screens: the left pane becomes a slide-in drawer over the content */
-@media (max-width: 640px) {
+/* Compact chrome — phones portrait *and* landscape (short screens use the drawer
+   too, so a rotated phone isn't stuck with the cramped docked layout). Keep the
+   query in sync with `COMPACT_MQ` in main.ts. */
+@media (max-width: 640px), (max-height: 480px) {
   body {
     padding: 0;
   }
@@ -1014,7 +1017,7 @@ textarea {
 .edge-swipe {
   display: none;
 }
-@media (max-width: 640px) {
+@media (max-width: 640px), (max-height: 480px) {
   .edge-swipe {
     display: block;
     position: absolute;

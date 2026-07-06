@@ -119,7 +119,12 @@ that the TypeScript viewer reached parity; it lives in git history (commit
 
 ## Layout gotchas that must survive the port (from HANDOFF §6)
 - `min-width: 0` on flex panels — without it long `<pre>` lines blow out the layout.
-- Single source of truth for the 640px breakpoint (CSS `@media` ↔ JS must agree).
+- Single source of truth for the responsive breakpoint (CSS `@media` ↔ JS must
+  agree). It's **compact = `(max-width: 640px), (max-height: 480px)`** — the height
+  arm puts landscape phones (wide but short) on the drawer layout too; `COMPACT_MQ`
+  in `main.ts` mirrors the two `@media` blocks. Touch (`pointer: coarse`) drives the
+  touch affordances (folder single-tap, bigger targets, no hover-only auto-hide),
+  independently of width.
 - Full-viewport app shell via a `height: 100dvh` flex root (the old `position:fixed`
   hack is not needed in a real Vite app).
 
