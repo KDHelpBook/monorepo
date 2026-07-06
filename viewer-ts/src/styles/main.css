@@ -690,6 +690,13 @@ textarea {
   overscroll-behavior: contain;
   padding: 16px 22px 60px;
   font-family: var(--font-ui);
+  /* Opaque + stacked above the frame: the app-UI pages (Search/Manage) cover the
+     iframe rather than the iframe being display:none'd. Toggling a sandboxed
+     srcdoc iframe to display:none and back drops its compositing in Chromium
+     (it reloads but paints blank), so the frame stays visible and we only
+     show/hide this overlay. */
+  z-index: 1;
+  background: #fff;
 }
 
 /* Full Search page (document area) */

@@ -1647,10 +1647,11 @@ function start(
     const token = ++loadSeq;
     persistTabs(); // tabs/active are settled by the caller before we render
     if (id === SEARCH_ID || id === MANAGE_ID) {
-      // App UI, rendered into #content (not the sandbox).
+      // App UI, rendered into #content (not the sandbox). The overlay covers the
+      // frame; we never display:none the frame itself — doing so drops a
+      // sandboxed srcdoc iframe's compositing in Chromium (it repaints blank).
       if (id === SEARCH_ID) renderSearchPage();
       else renderManagePage();
-      frame.style.display = "none";
       content.style.display = "";
       return;
     }
@@ -1677,7 +1678,7 @@ function start(
         `<h1>${esc(s.notFoundTitle)}</h1><p>${s.notFoundBody(esc(id))}</p>`,
       );
     }
-    frame.style.display = "";
+    // Hide the app-UI overlay so the (always-visible) frame shows through.
     content.style.display = "none";
     document.title = `${title} — kdhelp`;
     const { docsetId, localId } = collection.split(id);
