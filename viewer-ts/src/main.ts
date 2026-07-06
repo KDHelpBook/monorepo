@@ -2014,11 +2014,10 @@ function start(
         byCol.set(v.collection, []).get(v.collection)!
       ).push(v);
     }
-    // Group order: loaded families first, then any collection only in `variants`.
-    const order = [
-      ...families.map((f) => f.id),
-      ...[...byCol.keys()].filter((c) => !familyTitle.has(c)),
-    ];
+    // Order groups by a stable key — the collection id. `families()` is *load*
+    // order, which reshuffles when a language switch changes the loaded set (and
+    // titles are language-dependent too), so neither is stable across a switch.
+    const order = [...byCol.keys()].sort((a, b) => a.localeCompare(b));
 
     const groups =
       order
