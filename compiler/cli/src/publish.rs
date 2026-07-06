@@ -64,6 +64,8 @@ pub struct PackOptions {
     pub pwa: bool,
     /// Landing view: a page id, `"search"`, or `None` (viewer defaults to search).
     pub home: Option<String>,
+    /// Also emit `llms.txt` + `llms-full.txt` + per-page Markdown (AI-facing export).
+    pub llms: bool,
 }
 
 /// Assemble a fresh distribution at `out`.
@@ -96,10 +98,40 @@ pub fn pack(opts: &PackOptions) -> Result<()> {
             home: opts.home.clone(),
         },
     )?;
+    if opts.llms {
+        write_llms(&opts.out, &opts.docsets)?;
+    }
     println!(
         "packed {} docset(s) + viewer -> {}",
         opts.docsets.len(),
         opts.out.display()
+    );
+    Ok(())
+}
+
+/// Emit the `llms.txt` family into the dist root: the link index, the full inline
+/// concatenation, and per-page Markdown under `md/<docset>/<page>.md`. Plain text
+/// even in compact mode — these are meant to be fetched and read as-is.
+fn write_llms(out: &Path, docsets: &[PathBuf]) -> Result<()> {
+    let opened = docsets
+        .iter()
+        .map(|p| Docset::open(p).with_context(|| format!("opening {}", p.display())))
+        .collect::<Result<Vec<_>>>()?;
+    let refs: Vec<&Docset> = opened.iter().collect();
+    let export = kdhelp_core::llms::export(&refs, None)?;
+
+    fs::write(out.join("llms.txt"), &export.index)?;
+    fs::write(out.join("llms-full.txt"), &export.full)?;
+    for page in &export.pages {
+        let path = out.join(&page.path);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(&path, &page.content)?;
+    }
+    println!(
+        "wrote llms.txt + llms-full.txt + {} page file(s)",
+        export.pages.len()
     );
     Ok(())
 }

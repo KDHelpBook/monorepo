@@ -108,6 +108,10 @@ enum Command {
         /// `search`. Omitted → the viewer opens the Search page.
         #[arg(long)]
         home: Option<String>,
+        /// Also emit an AI-facing export: `llms.txt` (link index), `llms-full.txt`
+        /// (all pages inline), and per-page Markdown under `md/`.
+        #[arg(long)]
+        llms: bool,
     },
     /// Add or replace docsets in an already-built distribution.
     Patch {
@@ -142,6 +146,7 @@ fn main() -> Result<()> {
             pwa,
             no_pwa,
             home,
+            llms,
         } => {
             let mut external_sources = profile == Profile::Reader;
             if lock {
@@ -162,6 +167,7 @@ fn main() -> Result<()> {
                 external_sources,
                 pwa: wants_pwa,
                 home,
+                llms,
             })
         }
         Command::Patch {

@@ -144,7 +144,24 @@ kdhelp pack --viewer viewer-ts/dist \
 | `--lock` | lock the build: no docset management at all — hides *Open docset…*, *Open from URL…* and the whole **Manage docsets** page, and skips loading any uploaded/remote docsets or attachment packs (`config.externalSources: false`). Docsets are read-only either way; this removes the reader's ability to add/remove/attach them. |
 | `--pwa` / `--no-pwa` | force the service worker on/off |
 | `--home <id\|search>` | cold-start landing: a page id (`docsetId:localId`) or `search`; omitted → the viewer opens the Search page (search-first) |
+| `--llms` | also emit an AI-facing export (see below) |
 | `-o <dir>` | output directory |
+
+#### `--llms` — an AI-facing export
+
+`--llms` writes, alongside the viewer, the [`llms.txt`](https://llmstxt.org/) family
+so language models and agents can read the docs without scraping the SPA:
+
+- **`llms.txt`** — a link index: an `H1` title, a one-line summary, then one section
+  per book listing every page as `- [title](md/…): description` in TOC order.
+- **`llms-full.txt`** — every page's Markdown inline (with provenance comments), for
+  one-shot ingestion.
+- **`md/<docset>/<page>.md`** — each page as clean Markdown, fetchable on its own.
+
+The Markdown is the page's original source (the optional `pages.md` column, format
+v5), falling back to plain text for a docset that carries none. It's the **static**
+counterpart to a future MCP server: plain files a static host serves as-is, no
+backend. Nothing here is loaded by the viewer.
 
 ### `patch` — update a built distribution
 

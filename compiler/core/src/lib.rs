@@ -9,6 +9,7 @@ pub mod assets;
 pub mod binary;
 pub mod build;
 pub mod docset;
+pub mod llms;
 pub mod markdown;
 pub mod model;
 pub mod render;
@@ -175,6 +176,44 @@ mod tests {
         assert!(docset::resolve_asset(&ds, &[], "assets/missing.png")
             .unwrap()
             .is_none());
+    }
+
+    #[test]
+    fn llms_export_indexes_pages_and_carries_markdown() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("demo.khb");
+        build::build_khb(&render::render(&demo_source()), &path).unwrap();
+        let ds = Docset::open(&path).unwrap();
+
+        let export = llms::export(&[&ds], None).unwrap();
+
+        // Index: an H1 for the (single-book) title, plus a link per page in TOC order
+        // (intro before its nested child adv), with a derived description.
+        assert!(export.index.starts_with("# Demo\n"));
+        let intro_at = export.index.find("md/demo/intro.md").expect("intro link");
+        let adv_at = export.index.find("md/demo/adv.md").expect("adv link");
+        assert!(intro_at < adv_at, "TOC order: intro precedes nested adv");
+        assert!(export.index.contains("[Introduction](md/demo/intro.md)"));
+        assert!(export
+            .index
+            .contains("The quick brown foxes jump over lazy dogs"));
+        // The `#`-heading line is skipped when deriving the description.
+        assert!(!export.index.contains("[Introduction](md/demo/intro.md): #"));
+
+        // Full: every page's Markdown inline, with provenance comments.
+        assert!(export.full.contains("<!-- demo/intro —"));
+        assert!(export
+            .full
+            .contains("The quick brown foxes jump over lazy dogs."));
+
+        // Per-page files: one each, clean Markdown, at the linked paths.
+        let intro = export
+            .pages
+            .iter()
+            .find(|p| p.path == "md/demo/intro.md")
+            .expect("intro page file");
+        assert!(intro.content.starts_with("# Introduction"));
+        assert_eq!(export.pages.len(), 2);
     }
 
     #[test]

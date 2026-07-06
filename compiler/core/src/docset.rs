@@ -225,6 +225,29 @@ impl Docset {
             .flatten())
     }
 
+    /// Fetch a page's plain text (the FTS/snippet column) — the fallback body for
+    /// the llms.txt export when a page has no Markdown. `Ok(None)` if unknown.
+    pub fn page_plain(&self, id: &str) -> Result<Option<String>> {
+        Ok(self
+            .conn
+            .query_row("SELECT plain FROM pages WHERE id = ?1", params![id], |r| {
+                r.get::<_, String>(0)
+            })
+            .optional()?)
+    }
+
+    /// Every page's id and title, in storage order — the authoritative page set (a
+    /// page need not appear in the TOC). Reads only the two leading columns.
+    pub fn page_index(&self) -> Result<Vec<(String, String)>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, title FROM pages ORDER BY rowid")?;
+        let rows = stmt
+            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows)
+    }
+
     /// Full-text search over titles, body and keywords, ranked by bm25 with a
     /// highlighted snippet of the body.
     pub fn search(&self, query: &str, limit: usize) -> Result<Vec<SearchHit>> {

@@ -62,6 +62,7 @@ jobs:
             --docset out/en.khb --docset out/extras-en.khb \
             --docset out/pl.khb --docset out/extras-pl.khb \
             --docset out/sample-sdk-v1.khb --docset out/sample-sdk-v2.khb \
+            --llms \
             -o publish
 
       - uses: actions/configure-pages@v5
