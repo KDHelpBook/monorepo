@@ -91,10 +91,17 @@ pub fn export(docsets: &[&Docset], site_title: Option<&str>) -> Result<LlmsExpor
         };
         index.push_str(&format!("\n## {heading}\n\n"));
 
+        // Valid page ids in this book: a `#anchor` link is rewritten to a `.md` path
+        // only when it names a real page, so genuine heading anchors are left alone.
+        let page_ids: HashSet<String> = ordered.iter().map(|(pid, _)| pid.clone()).collect();
+        let md_prefix = format!("md/{}/", sanitize(id));
+
         for (page_id, page_title) in ordered {
             let body = page_content(ds, page_id)?;
-            let rel = format!("md/{}/{}.md", sanitize(id), sanitize(page_id));
+            let rel = format!("{md_prefix}{}.md", sanitize(page_id));
 
+            // The index description flattens links to text, so derive it from the
+            // original body (before link rewriting).
             let mut line = format!("- [{}]({rel})", escape_link_text(page_title));
             if let Some(desc) = describe(&body) {
                 line.push_str(&format!(": {desc}"));
@@ -102,13 +109,19 @@ pub fn export(docsets: &[&Docset], site_title: Option<&str>) -> Result<LlmsExpor
             index.push_str(&line);
             index.push('\n');
 
+            // Rewrite links per surface: from a standalone page file, a same-book link
+            // is a sibling `<page>.md`; from the root-level llms-full.txt it's
+            // `md/<book>/<page>.md`. Both send `assets/…` to the `asset:` scheme.
+            let full_body = rewrite_md_links(&body, &page_ids, &md_prefix);
+            let page_body = rewrite_md_links(&body, &page_ids, "");
+
             full.push_str(&format!("\n<!-- {id}/{page_id} — {book_title} -->\n\n"));
-            full.push_str(body.trim_end());
+            full.push_str(full_body.trim_end());
             full.push_str("\n\n---\n");
 
             pages.push(LlmsPage {
                 path: rel,
-                content: format!("{}\n", body.trim_end()),
+                content: format!("{}\n", page_body.trim_end()),
             });
         }
     }
@@ -257,4 +270,125 @@ fn sanitize(s: &str) -> String {
             }
         })
         .collect()
+}
+
+/// Rewrite a page's Markdown links for the export, **leaving code untouched**:
+/// a `[text](#page)` anchor to a real page becomes `[text]({page_prefix}<page>.md)`,
+/// and `[text](assets/…)` becomes `[text](asset:assets/…)` (the same scheme
+/// `body_html` uses). Fenced code blocks and inline code spans are copied verbatim —
+/// the docs describe these very patterns in examples, which must not be rewritten.
+fn rewrite_md_links(md: &str, page_ids: &HashSet<String>, page_prefix: &str) -> String {
+    let mut out = String::with_capacity(md.len());
+    let mut fence: Option<char> = None;
+    for line in md.split_inclusive('\n') {
+        match fence {
+            // Inside a fenced block: copy verbatim until the matching fence closes it.
+            Some(ch) => {
+                out.push_str(line);
+                if fence_marker(line) == Some(ch) {
+                    fence = None;
+                }
+            }
+            None => match fence_marker(line) {
+                Some(ch) => {
+                    fence = Some(ch);
+                    out.push_str(line);
+                }
+                None => rewrite_line(line, page_ids, page_prefix, &mut out),
+            },
+        }
+    }
+    out
+}
+
+/// The fence character if this line is a code fence (≥3 leading `` ` `` or `~`).
+fn fence_marker(line: &str) -> Option<char> {
+    let t = line.trim_start();
+    ['`', '~']
+        .into_iter()
+        .find(|&ch| t.chars().take_while(|&c| c == ch).count() >= 3)
+}
+
+/// Rewrite link targets on one non-fenced line, skipping inline code spans.
+fn rewrite_line(line: &str, page_ids: &HashSet<String>, page_prefix: &str, out: &mut String) {
+    let chars: Vec<char> = line.chars().collect();
+    let mut i = 0;
+    let mut code_run = 0usize; // backtick-run length of an open inline code span (0 = none)
+    while i < chars.len() {
+        let c = chars[i];
+        if c == '`' {
+            let run = chars[i..].iter().take_while(|&&c| c == '`').count();
+            for _ in 0..run {
+                out.push('`');
+            }
+            code_run = match code_run {
+                0 => run,           // open a span
+                n if n == run => 0, // a matching run closes it
+                n => n,             // a different run inside the span: unchanged
+            };
+            i += run;
+            continue;
+        }
+        // A `](target)` link, only when not inside inline code.
+        if code_run == 0 && c == ']' && chars.get(i + 1) == Some(&'(') {
+            if let Some(close) = chars[i + 2..].iter().position(|&c| c == ')') {
+                let target: String = chars[i + 2..i + 2 + close].iter().collect();
+                out.push_str("](");
+                out.push_str(&rewrite_target(&target, page_ids, page_prefix));
+                out.push(')');
+                i += 2 + close + 1;
+                continue;
+            }
+        }
+        out.push(c);
+        i += 1;
+    }
+}
+
+/// Rewrite a single link target (URL + optional ` "title"`), leaving anything that
+/// isn't a same-book page anchor or an `assets/…` reference unchanged.
+fn rewrite_target(target: &str, page_ids: &HashSet<String>, page_prefix: &str) -> String {
+    let (url, rest) = match target.find(char::is_whitespace) {
+        Some(p) => (&target[..p], &target[p..]),
+        None => (target, ""),
+    };
+    if let Some(anchor) = url.strip_prefix('#') {
+        if page_ids.contains(anchor) {
+            return format!("{page_prefix}{}.md{rest}", sanitize(anchor));
+        }
+    } else if url.starts_with("assets/") {
+        return format!("asset:{url}{rest}");
+    }
+    target.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rewrites_prose_links_but_leaves_code_verbatim() {
+        let ids: HashSet<String> = ["adv"].iter().map(|s| s.to_string()).collect();
+        let md = "\
+See [advanced](#adv) and the ![logo](assets/logo.svg).
+Inline `[x](#adv)` and `assets/y` stay.
+```
+[x](#adv) links and assets/y paths stay in code
+```
+An [unknown](#nope) anchor and [ext](https://x) stay.
+";
+        // Standalone page file: same-book links become sibling `.md`.
+        let page = rewrite_md_links(md, &ids, "");
+        assert!(page.contains("[advanced](adv.md)"));
+        assert!(page.contains("![logo](asset:assets/logo.svg)"));
+        assert!(page.contains("Inline `[x](#adv)` and `assets/y` stay.")); // inline code
+        assert!(page.contains("[x](#adv) links and assets/y paths stay in code")); // fenced
+        assert!(page.contains("[unknown](#nope)")); // not a real page → left
+        assert!(page.contains("[ext](https://x)")); // external → left
+
+        // llms-full.txt lives at the root, so links are `md/<book>/…`.
+        let full = rewrite_md_links(md, &ids, "md/demo/");
+        assert!(full.contains("[advanced](md/demo/adv.md)"));
+        assert!(full.contains("![logo](asset:assets/logo.svg)"));
+    }
 }
