@@ -1988,6 +1988,8 @@ function start(
         bg.remove();
       }
     });
+    // Version/language changes rebuild the collection live (no reload) and keep the
+    // dialog open, so several products can be adjusted before closing with OK.
     bg.querySelectorAll<HTMLSelectElement>("select[data-lang-col]").forEach(
       (sel) => {
         sel.addEventListener("change", () => {
@@ -1996,8 +1998,7 @@ function start(
           const map = loadDocsetLangs();
           map[col] = sel.value;
           saveDocsetLangs(map);
-          bg.remove();
-          void rebuild(); // live swap, no reload (same as the folder ⋯ menu)
+          void rebuild();
         });
       },
     );
@@ -2009,7 +2010,6 @@ function start(
           const map = loadDocsetVersions();
           map[col] = sel.value;
           saveDocsetVersions(map);
-          bg.remove();
           void rebuild();
         });
       },

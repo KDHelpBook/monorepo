@@ -940,15 +940,17 @@ textarea {
   /* Phones: the labelled toolbar overflows. Drop the button text (Back + the mode
      buttons become icons — the mode buttons still open the drawer), and remove the
      controls that already live in the ⋯ menu (text size, Sync, language) plus the
-     separators, so the row fits without scrolling. */
-  .toolbar .tbtn span {
+     separators, so the row fits without scrolling. Scope to the toolbar's DIRECT
+     children — the ⋯ menu is a descendant of `.toolbar` and reuses these same
+     `data-action`/`.lang-select` controls, which must stay visible there. */
+  .toolbar > .tbtn span {
     display: none;
   }
-  .toolbar .tsep,
-  .toolbar .lang-select,
-  .toolbar [data-action="font-up"],
-  .toolbar [data-action="font-down"],
-  .toolbar [data-action="sync"] {
+  .toolbar > .tsep,
+  .toolbar > .lang-select,
+  .toolbar > [data-action="font-up"],
+  .toolbar > [data-action="font-down"],
+  .toolbar > [data-action="sync"] {
     display: none;
   }
   /* Just the ☆ star — the "Favorite" word is redundant next to it on a phone. */
