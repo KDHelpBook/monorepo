@@ -401,6 +401,49 @@ textarea {
   font-weight: bold;
   color: #1a3d6b;
 }
+/* Current version/language shown in parens on a switchable product folder. */
+.node-meta {
+  flex: none;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: normal;
+}
+/* ⋯ button on a switchable folder — pushed to the row's right edge (away from the
+   folder-toggle tap area) to open the version/language menu. */
+.node-more {
+  flex: none;
+  margin-left: auto;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.node-more:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+/* Version/language popover (reuses .more-menu chrome) anchored to the ⋯ button. */
+.folder-menu .fm-head {
+  padding: 6px 12px 2px;
+  font-size: 11px;
+  font-weight: bold;
+  color: var(--muted);
+}
+.folder-menu .fm-item.fm-active {
+  font-weight: bold;
+  color: var(--content-h);
+}
+.folder-menu .fm-item.fm-active::before {
+  content: "● ";
+}
+.folder-menu .fm-item:not(.fm-active)::before {
+  content: "  ";
+  white-space: pre;
+}
 
 /* Index */
 .index-list {
@@ -1161,13 +1204,26 @@ textarea {
     margin: -6px 0;
     line-height: 30px;
   }
+  /* Bigger ⋯ touch target on the switchable-folder rows. */
+  .node-more {
+    padding: 6px 10px;
+    margin: -4px 0 -4px auto;
+  }
   .node {
     padding-top: 3px;
     padding-bottom: 3px;
   }
+  /* A clean square touch target tucked right after the tab name — grow only
+     vertically (into the tab's padding) so the × never drifts sideways. */
+  .doctab {
+    gap: 4px;
+    padding-right: 6px;
+  }
   .doctab .dt-x {
-    padding: 6px;
-    margin: -4px -2px -4px 2px;
+    width: 30px;
+    height: 30px;
+    margin: -5px 0;
+    padding: 0;
   }
   .node:active,
   .doctab:active,

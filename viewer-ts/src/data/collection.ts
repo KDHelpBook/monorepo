@@ -169,7 +169,7 @@ export class Collection {
     return this.find(this.split(nsId).docsetId)?.collection ?? "";
   }
 
-  tocTree(): TocNode[] {
+  tocTree(forceFolders: Set<string> = new Set()): TocNode[] {
     const nsNode = (docsetId: string, n: TocNode): TocNode => ({
       pageId: this.ns(docsetId, n.pageId),
       title: n.title,
@@ -181,11 +181,13 @@ export class Collection {
         .map((n) => nsNode(docsetId, n)) ?? [];
 
     const fams = this.families();
-    // One family (or one book) → seamless flat merge, no wrapper folder.
-    if (fams.length <= 1) {
+    // One family → seamless flat merge, unless it offers a version/language switch,
+    // which needs a folder header to hang the control on.
+    const wrap = fams.length > 1 || fams.some((f) => forceFolders.has(f.id));
+    if (!wrap) {
       return this.docsets.flatMap((d) => rootsFor(d.id));
     }
-    // Several products → each family is a collapsible top-level folder.
+    // Each family is a collapsible top-level folder.
     return fams.map((f) => ({
       pageId: `@collection:${f.id}`,
       title: f.title,

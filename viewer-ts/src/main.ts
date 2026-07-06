@@ -539,7 +539,15 @@ function start(
     });
   };
 
-  const toc = collection.tocTree();
+  // Per-collection version/language switch info, keyed for the tree folders. A
+  // switchable product is forced to render as a folder so the control has a home.
+  const verByCol = new Map(versionInfo.map((v) => [v.collection, v]));
+  const langByCol = new Map(langInfo.map((l) => [l.collection, l]));
+  const switchableCols = new Set([...verByCol.keys(), ...langByCol.keys()]);
+  const langName = (l: string): string =>
+    ({ en: "English", pl: "Polski" })[l] ?? l;
+
+  const toc = collection.tocTree(switchableCols);
   (function buildPages(nodes: TocNode[], path: string[]) {
     for (const n of nodes) {
       // Family folders are not pages; keep them out of the page map but include
@@ -596,17 +604,6 @@ function start(
   }
 
   // Version(s) per family (collection), for the folder tooltip.
-  const famVersions = ((): Map<string, string[]> => {
-    const m = new Map<string, string[]>();
-    for (const b of collection.books()) {
-      if (!b.version) continue;
-      const vs =
-        m.get(b.collection) ?? m.set(b.collection, []).get(b.collection)!;
-      if (!vs.includes(b.version)) vs.push(b.version);
-    }
-    return m;
-  })();
-
   function treeNode(n: TocNode, forceOpen = false): HTMLLIElement {
     const li = document.createElement("li");
     const kids = n.children.length > 0;
@@ -618,9 +615,31 @@ function start(
       `<span class="twisty ${kids ? "" : "leaf"}">${kids ? (open ? "−" : "+") : ""}</span>` +
       (n.group ? groupIcon() : pageIcon(kids)) +
       `<span class="label">${esc(n.title)}</span>`;
+    // A switchable product folder shows its current version/language in parens and a
+    // ⋯ button that opens a small menu to change either — right where you see the
+    // book, instead of a disconnected filter dropdown.
     if (n.group && n.pageId.startsWith("@collection:")) {
-      const vs = famVersions.get(n.pageId.slice("@collection:".length));
-      if (vs?.length) row.title = `${s.versionLabel} ${vs.join(", ")}`;
+      const col = n.pageId.slice("@collection:".length);
+      if (switchableCols.has(col)) {
+        const ver = verByCol.get(col);
+        const lng = langByCol.get(col);
+        const bits: string[] = [];
+        if (ver) bits.push(ver.chosen);
+        if (lng) bits.push(langName(lng.chosen));
+        const meta = document.createElement("span");
+        meta.className = "node-meta";
+        meta.textContent = `(${bits.join(" · ")})`;
+        const more = document.createElement("button");
+        more.type = "button";
+        more.className = "node-more";
+        more.textContent = "⋯";
+        more.title = s.changeVersionLang;
+        more.addEventListener("click", (e) => {
+          e.stopPropagation();
+          openFolderMenu(more, col);
+        });
+        row.append(meta, more);
+      }
     }
     li.appendChild(row);
     if (kids) {
@@ -664,6 +683,72 @@ function start(
     // click → new tab). Touch folder-pages are handled above.
     if (!n.group && !(kids && coarsePointer)) linkOpen(row, n.pageId);
     return li;
+  }
+
+  // Popover anchored to a folder's ⋯ button: switch that product's version and/or
+  // language. Picking an option saves the per-collection override and reloads.
+  function openFolderMenu(anchor: HTMLElement, col: string): void {
+    document.getElementById("folder-menu")?.remove();
+    const menu = document.createElement("div");
+    menu.id = "folder-menu";
+    menu.className = "more-menu folder-menu";
+    const head = (t: string): void => {
+      const h = document.createElement("div");
+      h.className = "fm-head";
+      h.textContent = t;
+      menu.appendChild(h);
+    };
+    const item = (label: string, active: boolean, apply: () => void): void => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "more-item fm-item" + (active ? " fm-active" : "");
+      b.textContent = label;
+      b.addEventListener("click", apply);
+      menu.appendChild(b);
+    };
+    const ver = verByCol.get(col);
+    if (ver) {
+      head(s.versionLabel);
+      for (const v of ver.versions) {
+        item(v, v === ver.chosen, () => {
+          const m = loadDocsetVersions();
+          m[col] = v;
+          saveDocsetVersions(m);
+          location.reload();
+        });
+      }
+    }
+    const lng = langByCol.get(col);
+    if (lng) {
+      head(s.docsetLanguage);
+      for (const l of lng.langs) {
+        item(langName(l), l === lng.chosen, () => {
+          const m = loadDocsetLangs();
+          m[col] = l;
+          saveDocsetLangs(m);
+          location.reload();
+        });
+      }
+    }
+    document.body.appendChild(menu);
+    const r = anchor.getBoundingClientRect();
+    const left = Math.max(
+      8,
+      Math.min(r.left, window.innerWidth - menu.offsetWidth - 8),
+    );
+    menu.style.top = `${Math.round(r.bottom + 2)}px`;
+    menu.style.left = `${Math.round(left)}px`;
+    const close = (e: Event): void => {
+      if (e.type === "keydown" && (e as KeyboardEvent).key !== "Escape") return;
+      if (e.type === "click" && menu.contains(e.target as Node)) return;
+      menu.remove();
+      document.removeEventListener("click", close, true);
+      document.removeEventListener("keydown", close, true);
+    };
+    setTimeout(() => {
+      document.addEventListener("click", close, true);
+      document.addEventListener("keydown", close, true);
+    }, 0);
   }
 
   function renderTree(): void {
@@ -1872,29 +1957,9 @@ function start(
     else if (mode === "index") renderIndex();
   });
 
-  // Version switcher — the left-panel dropdown, shown only when exactly one product
-  // is loaded in several versions (the common case). Changing it pins that product
-  // to the chosen version (default: latest) and reloads. Multi-product versioning
-  // is set per product in Manage docsets. Reload keeps this consistent with the
-  // language override (both change which docset the collection resolves to).
-  const versionSel = $<HTMLSelectElement>("#filter-version");
-  if (versionInfo.length === 1) {
-    const vi = versionInfo[0]!;
-    for (const v of vi.versions) {
-      const o = document.createElement("option");
-      o.value = v;
-      o.textContent = v;
-      versionSel.appendChild(o);
-    }
-    versionSel.value = vi.chosen;
-    versionSel.addEventListener("change", () => {
-      const map = loadDocsetVersions();
-      map[vi.collection] = versionSel.value;
-      saveDocsetVersions(map);
-      location.reload();
-    });
-    $("#filter-version-row").style.display = "";
-  }
+  // Version/language of a versioned or multilingual product is switched from the
+  // product's own folder in the tree (the ⋯ button → openFolderMenu), so the
+  // control sits next to the book it affects — no disconnected filter dropdown.
 
   // Language switcher: persist + reload (the content docset changes with the UI).
   // Language selectors — the toolbar one and the mobile ⋯-menu one behave alike.
