@@ -8,6 +8,7 @@ const K = {
   tabs: "kdhelp.tabs",
   fontSize: "kdhelp.fontSize",
   docsetLangs: "kdhelp.docsetLangs",
+  seenVersions: "kdhelp.seenVersions",
 } as const;
 
 function readStringArray(key: string): string[] {
@@ -43,6 +44,26 @@ export function loadExpanded(): string[] {
 }
 export function saveExpanded(ids: Iterable<string>): void {
   write(K.expanded, [...ids]);
+}
+
+// ---- last-seen docset versions ({ docsetId: version }) ----
+// Lets the viewer notice when a re-fetched remote (or re-uploaded docset) bumped
+// its version between sessions, and announce it once.
+export function loadSeenVersions(): Record<string, string> {
+  try {
+    const v: unknown = JSON.parse(localStorage.getItem(K.seenVersions) ?? "{}");
+    if (!v || typeof v !== "object") return {};
+    const out: Record<string, string> = {};
+    for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+      if (typeof val === "string") out[k] = val;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+export function saveSeenVersions(map: Record<string, string>): void {
+  write(K.seenVersions, map);
 }
 
 // ---- per-collection display-language overrides ({ collection: language }) ----

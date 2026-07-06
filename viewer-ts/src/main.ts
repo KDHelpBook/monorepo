@@ -20,14 +20,17 @@ import {
   loadExpanded,
   loadFavorites,
   loadFontSize,
+  loadSeenVersions,
   loadTabs,
   saveDocsetLangs,
   saveExpanded,
   saveFavorites,
   saveFontSize,
+  saveSeenVersions,
   saveTabs,
 } from "./data/uistate";
 import { languagesByCollection, pickLanguages } from "./data/langselect";
+import { detectUpdates } from "./data/versions";
 import { applyStatic, strings, type Strings } from "./i18n";
 
 interface Config {
@@ -147,6 +150,7 @@ async function bootstrap(): Promise<void> {
   const remotes: {
     url: string;
     bytes?: Uint8Array;
+    id: string;
     language: string;
     title: string;
     collection: string;
@@ -162,6 +166,7 @@ async function bootstrap(): Promise<void> {
           const p = await StreamingDocset.peek(entry.url);
           remotes.push({
             url: entry.url,
+            id: p.id,
             language: p.language,
             title: p.title,
             collection: p.collection,
@@ -175,6 +180,7 @@ async function bootstrap(): Promise<void> {
           remotes.push({
             url: entry.url,
             bytes,
+            id: ds.id,
             language: ds.language,
             title: ds.title,
             collection: ds.collection,
@@ -188,6 +194,21 @@ async function bootstrap(): Promise<void> {
       }
     }
   }
+
+  // Announce docsets whose version bumped since we last saw them (re-fetched
+  // remotes, re-uploaded files) — bundled docsets are covered by the PWA prompt.
+  const { updates, nextSeen } = detectUpdates(
+    [
+      ...remotes.map((r) => ({ id: r.id, title: r.title, version: r.version })),
+      ...uploadedAll.map((d) => ({
+        id: d.id,
+        title: d.title,
+        version: d.version ?? "",
+      })),
+    ],
+    loadSeenVersions(),
+  );
+  saveSeenVersions(nextSeen);
 
   // Every available docset as a language "variant" of its collection, each paired
   // with a ready-to-load source descriptor. We then pick one language per
@@ -264,6 +285,7 @@ async function bootstrap(): Promise<void> {
     available,
     config,
     langInfo,
+    updates,
   );
 }
 
@@ -346,6 +368,29 @@ function showUpdatePrompt(waiting: ServiceWorker, s: Strings): void {
   document.body.appendChild(toast);
 }
 
+// An informational (non-actionable) toast: docsets whose version bumped since the
+// last visit. Auto-dismisses; reuses the update-toast styling minus the reload.
+function showVersionToast(
+  updates: { title: string; from: string; to: string }[],
+  s: Strings,
+): void {
+  const toast = document.createElement("div");
+  toast.className = "update-toast";
+  const msg = document.createElement("span");
+  msg.textContent = updates
+    .map((u) => s.docsetUpdated(u.title, u.from, u.to))
+    .join(" · ");
+  const dismiss = document.createElement("button");
+  dismiss.type = "button";
+  dismiss.className = "update-dismiss";
+  dismiss.setAttribute("aria-label", s.close);
+  dismiss.textContent = "×";
+  dismiss.addEventListener("click", () => toast.remove());
+  toast.append(msg, dismiss);
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 12000);
+}
+
 // ---------------------------------------------------------------------------
 // App
 // ---------------------------------------------------------------------------
@@ -363,6 +408,7 @@ function start(
   available: string[],
   config: Config,
   langInfo: CollectionLangInfo[],
+  updates: { title: string; from: string; to: string }[],
 ): void {
   const s: Strings = strings(lang);
   // Locked (bundled) builds hide the "open other docsets" affordances.
@@ -2153,6 +2199,7 @@ function start(
   renderPanel();
 
   // ---- Start ----
+  if (updates.length) showVersionToast(updates, s);
   setMode("contents");
   // A hash deep link, if any (our own navigation also parks the current page here,
   // so it usually just names the session's active page on reload).

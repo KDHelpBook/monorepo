@@ -26,6 +26,7 @@ export interface Strings {
   close: string;
   updateReady: string;
   updateReload: string;
+  docsetUpdated: (title: string, from: string, to: string) => string;
   // modes / tabs
   contents: string;
   index: string;
@@ -112,6 +113,7 @@ const en: Strings = {
   close: "Close",
   updateReady: "A new version is available.",
   updateReload: "Reload",
+  docsetUpdated: (title, from, to) => `${title} updated: ${from} → ${to}`,
   contents: "Contents",
   index: "Index",
   search: "Search",
@@ -194,6 +196,8 @@ const pl: Strings = {
   close: "Zamknij",
   updateReady: "Dostępna jest nowa wersja.",
   updateReload: "Odśwież",
+  docsetUpdated: (title, from, to) =>
+    `${title} zaktualizowano: ${from} → ${to}`,
   contents: "Spis treści",
   index: "Indeks",
   search: "Szukaj",
