@@ -220,13 +220,7 @@ async function bootstrap(): Promise<void> {
   // with a ready-to-load source descriptor. We then pick one language per
   // collection (override → UI language → fallback) so a book present only in
   // another language stays visible instead of vanishing on a language switch.
-  const variants: {
-    collection: string;
-    language: string;
-    version: string;
-    title: string;
-    source: DocsetSource;
-  }[] = [
+  const variants: DocVariant[] = [
     ...manifest.docsets.map((d) => ({
       collection: d.collection ?? d.id,
       language: d.language,
@@ -264,38 +258,8 @@ async function bootstrap(): Promise<void> {
   document.documentElement.lang = lang;
   applyStatic(lang);
 
-  // Resolve each collection down to one shown book: first pick the version (latest
-  // or the reader's override), then the language within that version.
-  const versionOverrides = loadDocsetVersions();
-  const versioned = pickVersions(variants, versionOverrides);
-  const langOverrides = loadDocsetLangs();
-  const navLang = (navigator.language || "en").slice(0, 2);
-  const fallbackOrder = [...new Set(["en", navLang])];
-  const shown = pickLanguages(versioned, lang, langOverrides, fallbackOrder);
-  const sources = shown.map((v) => v.source);
+  const { sources, langInfo, versionInfo } = resolveVariants(variants, lang);
   if (!sources.length) throw new Error("no docsets to show");
-
-  // Per-collection info for the override UIs (only collections with a real choice).
-  const chosenByCol = new Map(shown.map((v) => [v.collection, v]));
-  const label = (col: string): string => chosenByCol.get(col)?.title ?? col;
-  const collLangs = languagesByCollection(versioned); // languages of the shown version
-  const langInfo: CollectionLangInfo[] = [...collLangs.entries()]
-    .filter(([, langs]) => langs.length > 1)
-    .map(([collection, langs]) => ({
-      collection,
-      title: label(collection),
-      langs,
-      chosen: chosenByCol.get(collection)?.language ?? langs[0]!,
-    }));
-  const collVersions = versionsByCollection(variants); // every version available
-  const versionInfo: CollectionVersionInfo[] = [...collVersions.entries()]
-    .filter(([, versions]) => versions.length > 1)
-    .map(([collection, versions]) => ({
-      collection,
-      title: label(collection),
-      versions,
-      chosen: chosenByCol.get(collection)?.version ?? versions[0]!,
-    }));
 
   if (config.pwa) registerServiceWorker(strings(lang));
   start(
@@ -306,7 +270,17 @@ async function bootstrap(): Promise<void> {
     langInfo,
     versionInfo,
     updates,
+    variants,
   );
+}
+
+/** One language/version edition of a product, with a ready-to-load source. */
+interface DocVariant {
+  collection: string;
+  language: string;
+  version: string;
+  title: string;
+  source: DocsetSource;
 }
 
 /** Per-collection language availability for the Manage docsets override UI. */
@@ -315,6 +289,55 @@ interface CollectionLangInfo {
   title: string;
   langs: string[];
   chosen: string;
+}
+
+/**
+ * Resolve the full variant list down to the shown source set + per-collection
+ * choice info, honouring the persisted version/language overrides. Shared by the
+ * initial bootstrap and the live in-place rebuild that runs when an override
+ * changes — so switching version/language never needs a page reload.
+ */
+function resolveVariants(
+  variants: DocVariant[],
+  uiLang: string,
+): {
+  sources: DocsetSource[];
+  langInfo: CollectionLangInfo[];
+  versionInfo: CollectionVersionInfo[];
+} {
+  // Pick the version first (latest or override), then the language within it.
+  const versioned = pickVersions(variants, loadDocsetVersions());
+  const navLang = (navigator.language || "en").slice(0, 2);
+  const fallbackOrder = [...new Set(["en", navLang])];
+  const shown = pickLanguages(
+    versioned,
+    uiLang,
+    loadDocsetLangs(),
+    fallbackOrder,
+  );
+  const chosenByCol = new Map(shown.map((v) => [v.collection, v]));
+  const label = (col: string): string => chosenByCol.get(col)?.title ?? col;
+  const langInfo: CollectionLangInfo[] = [
+    ...languagesByCollection(versioned).entries(),
+  ]
+    .filter(([, langs]) => langs.length > 1)
+    .map(([collection, langs]) => ({
+      collection,
+      title: label(collection),
+      langs,
+      chosen: chosenByCol.get(collection)?.language ?? langs[0]!,
+    }));
+  const versionInfo: CollectionVersionInfo[] = [
+    ...versionsByCollection(variants).entries(),
+  ]
+    .filter(([, versions]) => versions.length > 1)
+    .map(([collection, versions]) => ({
+      collection,
+      title: label(collection),
+      versions,
+      chosen: chosenByCol.get(collection)?.version ?? versions[0]!,
+    }));
+  return { sources: shown.map((v) => v.source), langInfo, versionInfo };
 }
 
 /** Per-collection version availability for the Version switcher + Manage docsets. */
@@ -438,6 +461,7 @@ function start(
   langInfo: CollectionLangInfo[],
   versionInfo: CollectionVersionInfo[],
   updates: { title: string; from: string; to: string }[],
+  variants: DocVariant[],
 ): void {
   const s: Strings = strings(lang);
   // Locked (bundled) builds hide the "open other docsets" affordances.
@@ -539,16 +563,18 @@ function start(
     });
   };
 
-  // Per-collection version/language switch info, keyed for the tree folders. A
-  // switchable product is forced to render as a folder so the control has a home.
-  const verByCol = new Map(versionInfo.map((v) => [v.collection, v]));
-  const langByCol = new Map(langInfo.map((l) => [l.collection, l]));
-  const switchableCols = new Set([...verByCol.keys(), ...langByCol.keys()]);
   const langName = (l: string): string =>
     ({ en: "English", pl: "Polski" })[l] ?? l;
 
-  const toc = collection.tocTree(switchableCols);
-  (function buildPages(nodes: TocNode[], path: string[]) {
+  // Per-collection version/language switch info + the namespaced TOC. All `let`
+  // because a live version/language switch rebuilds them in place (see `rebuild`).
+  let verByCol = new Map(versionInfo.map((v) => [v.collection, v]));
+  let langByCol = new Map(langInfo.map((l) => [l.collection, l]));
+  let switchableCols = new Set([...verByCol.keys(), ...langByCol.keys()]);
+  let toc = collection.tocTree(switchableCols);
+
+  // (Re)build the page-info and keyword maps from the current `collection`/`toc`.
+  function buildPages(nodes: TocNode[], path: string[]): void {
     for (const n of nodes) {
       // Family folders are not pages; keep them out of the page map but include
       // them in descendants' path so the tree can auto-expand to the current page.
@@ -561,14 +587,20 @@ function start(
       }
       if (n.children.length) buildPages(n.children, [...path, n.pageId]);
     }
-  })(toc, []);
-  for (const k of collection.keywords()) {
-    for (const pid of k.pageIds) {
-      const list = pageKeywords.get(pid);
-      if (list) list.push(k.term);
-      else pageKeywords.set(pid, [k.term]);
+  }
+  function deriveMaps(): void {
+    pages.clear();
+    buildPages(toc, []);
+    pageKeywords.clear();
+    for (const k of collection.keywords()) {
+      for (const pid of k.pageIds) {
+        const list = pageKeywords.get(pid);
+        if (list) list.push(k.term);
+        else pageKeywords.set(pid, [k.term]);
+      }
     }
   }
+  deriveMaps();
 
   // ---- page icons ----
   const pageIcon = (hasKids: boolean): string =>
@@ -714,7 +746,7 @@ function start(
           const m = loadDocsetVersions();
           m[col] = v;
           saveDocsetVersions(m);
-          location.reload();
+          void rebuild(); // live swap, no page reload
         });
       }
     }
@@ -726,7 +758,7 @@ function start(
           const m = loadDocsetLangs();
           m[col] = l;
           saveDocsetLangs(m);
-          location.reload();
+          void rebuild();
         });
       }
     }
@@ -749,6 +781,67 @@ function start(
       document.addEventListener("click", close, true);
       document.addEventListener("keydown", close, true);
     }, 0);
+  }
+
+  // Rebuild the loaded collection in place after a per-collection version/language
+  // override changes — no page reload (which flashes and loses state). Re-resolves
+  // the sources, swaps the collection, re-derives every collection-dependent map,
+  // remaps open tabs to the new docset ids, then re-renders the panel + content.
+  let rebuilding = false;
+  async function rebuild(): Promise<void> {
+    if (rebuilding) return;
+    rebuilding = true;
+    document.getElementById("folder-menu")?.remove();
+    try {
+      const oldDocsetToCol = new Map(
+        collection.books().map((b) => [b.id, b.collection]),
+      );
+      const r = resolveVariants(variants, lang);
+      const next = await Collection.load(r.sources, lang);
+      const prev = collection;
+      collection = next;
+      prev.close();
+      langInfo = r.langInfo;
+      versionInfo = r.versionInfo;
+      verByCol = new Map(versionInfo.map((v) => [v.collection, v]));
+      langByCol = new Map(langInfo.map((l) => [l.collection, l]));
+      switchableCols = new Set([...verByCol.keys(), ...langByCol.keys()]);
+      toc = collection.tocTree(switchableCols);
+      deriveMaps();
+      fillFilters();
+
+      // Open tabs / the current page point at the old docset ids; move each to the
+      // matching page in its collection's new variant (same local id where it
+      // exists, else that variant's first page). Untouched collections keep theirs.
+      const newColToDocset = new Map(
+        collection.books().map((b) => [b.collection, b.id]),
+      );
+      const firstOf = (docset: string): string => {
+        for (const k of pages.keys()) if (k.startsWith(docset + ":")) return k;
+        return pages.keys().next().value ?? "";
+      };
+      const remap = (id: string): string => {
+        if (id === SEARCH_ID) return id;
+        const { docsetId, localId } = collection.split(id);
+        const col = oldDocsetToCol.get(docsetId);
+        if (col === undefined) {
+          return pages.has(id) ? id : (pages.keys().next().value ?? id);
+        }
+        const newD = newColToDocset.get(col);
+        if (newD === undefined) return pages.keys().next().value ?? id;
+        const candidate = `${newD}:${localId}`;
+        return pages.has(candidate) ? candidate : firstOf(newD);
+      };
+      for (const t of tabs) t.id = remap(t.id);
+      currentId = remap(currentId);
+      persistTabs();
+
+      renderTabs();
+      setMode(mode);
+      await loadContent(tabs[active]?.id ?? currentId);
+    } finally {
+      rebuilding = false;
+    }
   }
 
   function renderTree(): void {
@@ -1907,7 +2000,8 @@ function start(
           const map = loadDocsetLangs();
           map[col] = sel.value;
           saveDocsetLangs(map);
-          location.reload();
+          bg.remove();
+          void rebuild(); // live swap, no reload (same as the folder ⋯ menu)
         });
       },
     );
@@ -1919,7 +2013,8 @@ function start(
           const map = loadDocsetVersions();
           map[col] = sel.value;
           saveDocsetVersions(map);
-          location.reload();
+          bg.remove();
+          void rebuild();
         });
       },
     );
@@ -1927,30 +2022,40 @@ function start(
   }
 
   // ---- Other wiring ----
-  for (const c of collection.categories()) {
-    const o = document.createElement("option");
-    o.value = c.id;
-    o.textContent = c.title;
-    filterSel.appendChild(o);
-  }
-  filterSel.addEventListener("change", () => {
-    filterCategory = filterSel.value;
-    if (mode === "contents") renderTree();
-    else if (mode === "index") renderIndex();
-  });
-
-  // Product (family) scope — only meaningful when more than one family is loaded.
   const productSel = $<HTMLSelectElement>("#filter-product");
-  const families = collection.families();
-  if (families.length > 1) {
+  // (Re)populate the category + product scope selects from the current collection —
+  // called on load and after a live switch (categories/family titles can change).
+  function fillFilters(): void {
+    while (filterSel.options.length > 1) filterSel.remove(1);
+    for (const c of collection.categories()) {
+      const o = document.createElement("option");
+      o.value = c.id;
+      o.textContent = c.title;
+      filterSel.appendChild(o);
+    }
+    if (!collection.categories().some((c) => c.id === filterCategory)) {
+      filterCategory = "";
+    }
+    filterSel.value = filterCategory;
+
+    while (productSel.options.length > 1) productSel.remove(1);
+    const families = collection.families();
     for (const f of families) {
       const o = document.createElement("option");
       o.value = f.id;
       o.textContent = f.title;
       productSel.appendChild(o);
     }
-    $("#filter-product-row").style.display = "";
+    if (!families.some((f) => f.id === filterProduct)) filterProduct = "";
+    productSel.value = filterProduct;
+    $("#filter-product-row").style.display = families.length > 1 ? "" : "none";
   }
+  fillFilters();
+  filterSel.addEventListener("change", () => {
+    filterCategory = filterSel.value;
+    if (mode === "contents") renderTree();
+    else if (mode === "index") renderIndex();
+  });
   productSel.addEventListener("change", () => {
     filterProduct = productSel.value;
     if (mode === "contents") renderTree();

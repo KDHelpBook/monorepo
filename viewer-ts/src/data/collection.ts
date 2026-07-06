@@ -71,6 +71,12 @@ export class Collection {
     return new Collection(language, docsets);
   }
 
+  /** Close every docset (frees sql.js / streaming handles) — used before a live
+   *  swap when the loaded set changes (version/language switch). */
+  close(): void {
+    for (const d of this.docsets) d.close();
+  }
+
   static async load(
     sources: DocsetSource[],
     language: string,
