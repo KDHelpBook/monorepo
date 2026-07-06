@@ -130,6 +130,7 @@ kdhelp pack --viewer viewer-ts/dist \
 | `--profile reader\|bundled` | sets external-sources / PWA defaults |
 | `--lock` | disable opening/uploading other docsets |
 | `--pwa` / `--no-pwa` | force the service worker on/off |
+| `--home <id\|search>` | cold-start landing: a page id (`docsetId:localId`) or `search`; omitted → the viewer opens the Search page (search-first) |
 | `-o <dir>` | output directory |
 
 ### `patch` — update a built distribution

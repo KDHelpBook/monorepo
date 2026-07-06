@@ -28,6 +28,9 @@ import { applyStatic, strings, type Strings } from "./i18n";
 interface Config {
   externalSources: boolean;
   pwa: boolean;
+  /** Cold-start landing: a page id (`docsetId:localId`) or `"search"`. When
+   *  unset the viewer defaults to the Search page (search-first). */
+  home?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -1723,7 +1726,12 @@ function start(
   } else if (deepLink) {
     openPage(deepLink);
   } else {
-    openPage(firstPageId);
+    // Cold start (no session, no deep link): the publisher's chosen home, or the
+    // Search page by default (search-first). An invalid page id falls back too.
+    const home = config.home ?? "search";
+    if (home === "search") openSearchPage("");
+    else if (pages.has(home)) openPage(home);
+    else openPage(firstPageId);
   }
 }
 

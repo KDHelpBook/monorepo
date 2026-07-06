@@ -40,6 +40,10 @@ struct Config {
     #[serde(rename = "externalSources")]
     external_sources: bool,
     pwa: bool,
+    /// The landing view on a cold start: a page id (`docsetId:localId`) or the
+    /// literal `"search"`. Omitted → the viewer defaults to the Search page.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    home: Option<String>,
 }
 
 /// Options for [`pack`].
@@ -50,6 +54,8 @@ pub struct PackOptions {
     pub compact: bool,
     pub external_sources: bool,
     pub pwa: bool,
+    /// Landing view: a page id, `"search"`, or `None` (viewer defaults to search).
+    pub home: Option<String>,
 }
 
 /// Assemble a fresh distribution at `out`.
@@ -79,6 +85,7 @@ pub fn pack(opts: &PackOptions) -> Result<()> {
         &Config {
             external_sources: opts.external_sources,
             pwa: opts.pwa,
+            home: opts.home.clone(),
         },
     )?;
     println!(

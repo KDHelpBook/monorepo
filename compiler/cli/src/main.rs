@@ -104,6 +104,10 @@ enum Command {
         /// Force the PWA service worker off.
         #[arg(long = "no-pwa")]
         no_pwa: bool,
+        /// Landing view on a cold start: a page id (`docsetId:localId`) or
+        /// `search`. Omitted → the viewer opens the Search page.
+        #[arg(long)]
+        home: Option<String>,
     },
     /// Add or replace docsets in an already-built distribution.
     Patch {
@@ -137,6 +141,7 @@ fn main() -> Result<()> {
             lock,
             pwa,
             no_pwa,
+            home,
         } => {
             let mut external_sources = profile == Profile::Reader;
             if lock {
@@ -156,6 +161,7 @@ fn main() -> Result<()> {
                 compact: mode == PackMode::Compact,
                 external_sources,
                 pwa: wants_pwa,
+                home,
             })
         }
         Command::Patch {
