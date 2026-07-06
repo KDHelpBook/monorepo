@@ -61,6 +61,39 @@ The viewer loads, per language:
    and re-fetched each session (online / hybrid), the host permitting CORS. All three
    merge into one collection (see [streaming.md](streaming.md)).
 
+All of these are managed from one place — *File → Manage docsets…* opens the
+**Manage docsets** page (an in-app tab): every loaded book, grouped by product, with
+its source (bundled / uploaded / remote), language + version selectors (switched
+live), and attachment packs. From there you can open a docset, add one from a URL,
+or **import a `.khbm` manifest**.
+
+A **remote** prefers **streaming** (page-by-page over HTTP `Range`) but auto-falls
+back to a whole fetch when the host has no Range support — so it works everywhere; a
+whole-fetch docset can still pair with remote `.khba` packs.
+
+### `.khbm` — a book manifest for one-step import
+
+A `.khbm` is a small JSON file naming several remote docsets so a whole product
+imports at once (via *Manage docsets → Import manifest…*). Unlike `docsets.json` (a
+packed-dist descriptor), its `url`/`attachments` are resolved **relative to the
+manifest's own URL**, so it can ship beside its files:
+
+```json
+{
+  "khbm": 1,
+  "title": "My Product Docs",
+  "docsets": [
+    { "url": "en.khb", "attachments": ["en.khba"] },
+    { "url": "https://cdn.example/pl.khb.gz" }
+  ]
+}
+```
+
+It describes *what* the docsets are, not *how* to fetch them (streaming is the
+reader's auto-negotiated choice). Relative resolution also lets a `.khbm` act as a
+disk entry point for the future desktop (Tauri) app, reading its `.khb`/`.khba`
+straight from disk.
+
 `docsets.json`:
 
 ```json

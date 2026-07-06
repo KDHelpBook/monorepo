@@ -69,6 +69,13 @@ export interface Strings {
   languageLabel: string;
   // library
   manageDocsets: string;
+  importManifest: string;
+  importManifestTitle: string;
+  importManifestHint: string;
+  uploadedBadge: string;
+  remoteBadge: string;
+  packsLabel: string;
+  noDocsets: string;
   uploadedTitle: string;
   noUploaded: string;
   remove: string;
@@ -152,6 +159,14 @@ const en: Strings = {
   aboutLanguage: "Language:",
   languageLabel: "Language",
   manageDocsets: "Manage docsets…",
+  importManifest: "Import manifest…",
+  importManifestTitle: "Import a .khbm manifest",
+  importManifestHint:
+    "Adds every docset named in a .khbm manifest, fetched from this URL.",
+  uploadedBadge: "uploaded",
+  remoteBadge: "remote",
+  packsLabel: "Packs:",
+  noDocsets: "No docsets loaded.",
   uploadedTitle: "Uploaded docsets",
   noUploaded: "No uploaded docsets yet. Use File → Open docset… to add a .khb.",
   remove: "Remove",
@@ -237,6 +252,14 @@ const pl: Strings = {
   aboutLanguage: "Język:",
   languageLabel: "Język",
   manageDocsets: "Zarządzaj docsetami…",
+  importManifest: "Importuj manifest…",
+  importManifestTitle: "Importuj manifest .khbm",
+  importManifestHint:
+    "Dodaje wszystkie docsety wymienione w manifeście .khbm, pobieranym z tego URL.",
+  uploadedBadge: "wgrany",
+  remoteBadge: "zdalny",
+  packsLabel: "Pakiety:",
+  noDocsets: "Brak wczytanych docsetów.",
   uploadedTitle: "Wgrane docsety",
   noUploaded:
     "Brak wgranych docsetów. Użyj Plik → Otwórz docset…, aby dodać plik .khb.",

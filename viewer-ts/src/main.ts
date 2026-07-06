@@ -13,6 +13,7 @@ import {
   allDocsets,
   deleteDocset,
   getRemotes,
+  importKhbm,
   putDocset,
   removeRemote,
 } from "./data/library";
@@ -233,6 +234,7 @@ async function bootstrap(): Promise<void> {
   // another language stays visible instead of vanishing on a language switch.
   const variants: DocVariant[] = [
     ...manifest.docsets.map((d) => ({
+      id: d.id,
       collection: d.collection ?? d.id,
       language: d.language,
       version: d.version ?? "",
@@ -242,8 +244,10 @@ async function bootstrap(): Promise<void> {
         // A `.gz` suffix (on the docset or a pack) decompresses on fetch.
         attachments: (d.attachments ?? []).map((file) => ({ file })),
       } as DocsetSource,
+      origin: { kind: "bundled", packs: d.attachments ?? [] } as BookOrigin,
     })),
     ...uploadedAll.map((d) => ({
+      id: d.id,
       collection: d.collection ?? d.id,
       language: d.language,
       version: d.version ?? "",
@@ -252,8 +256,14 @@ async function bootstrap(): Promise<void> {
         bytes: d.bytes,
         attachments: (d.attachments ?? []).map((bytes) => ({ bytes })),
       } as DocsetSource,
+      origin: {
+        kind: "uploaded",
+        removeKey: d.id,
+        packs: (d.attachments ?? []).map((_, i) => `pack ${i + 1}`),
+      } as BookOrigin,
     })),
     ...remotes.map((r) => ({
+      id: r.id,
       collection: r.collection,
       language: r.language,
       version: r.version,
@@ -265,6 +275,12 @@ async function bootstrap(): Promise<void> {
             // Whole-fetch docset can still pair with remote packs (fetched whole).
             attachments: (r.attachments ?? []).map((file) => ({ file })),
           }) as DocsetSource,
+      origin: {
+        kind: "remote",
+        removeKey: r.url,
+        streaming: r.streaming,
+        packs: r.attachments ?? [],
+      } as BookOrigin,
     })),
   ];
 
@@ -273,7 +289,10 @@ async function bootstrap(): Promise<void> {
   document.documentElement.lang = lang;
   applyStatic(lang);
 
-  const { sources, langInfo, versionInfo } = resolveVariants(variants, lang);
+  const { sources, langInfo, versionInfo, shown } = resolveVariants(
+    variants,
+    lang,
+  );
   if (!sources.length) throw new Error("no docsets to show");
 
   if (config.pwa) registerServiceWorker(strings(lang));
@@ -286,16 +305,30 @@ async function bootstrap(): Promise<void> {
     versionInfo,
     updates,
     variants,
+    originsOf(shown),
   );
+}
+
+/** Where a book came from + its packs — for the Manage docsets page. */
+interface BookOrigin {
+  kind: "bundled" | "uploaded" | "remote";
+  /** Docset id (uploaded) or URL (remote) to remove by; absent ⇒ not removable. */
+  removeKey?: string;
+  /** Remote transport preference (remote only). */
+  streaming?: boolean;
+  /** Attachment packs: `.khba` paths/URLs (bundled/remote) or generic labels. */
+  packs: string[];
 }
 
 /** One language/version edition of a product, with a ready-to-load source. */
 interface DocVariant {
+  id: string;
   collection: string;
   language: string;
   version: string;
   title: string;
   source: DocsetSource;
+  origin: BookOrigin;
 }
 
 /** Per-collection language availability for the Manage docsets override UI. */
@@ -319,6 +352,7 @@ function resolveVariants(
   sources: DocsetSource[];
   langInfo: CollectionLangInfo[];
   versionInfo: CollectionVersionInfo[];
+  shown: DocVariant[];
 } {
   // Pick the version first (latest or override), then the language within it.
   const versioned = pickVersions(variants, loadDocsetVersions());
@@ -352,7 +386,12 @@ function resolveVariants(
       versions,
       chosen: chosenByCol.get(collection)?.version ?? versions[0]!,
     }));
-  return { sources: shown.map((v) => v.source), langInfo, versionInfo };
+  return { sources: shown.map((v) => v.source), langInfo, versionInfo, shown };
+}
+
+/** Book origins keyed by docset id, for the Manage docsets page. */
+function originsOf(shown: DocVariant[]): Record<string, BookOrigin> {
+  return Object.fromEntries(shown.map((v) => [v.id, v.origin]));
 }
 
 /** Per-collection version availability for the Version switcher + Manage docsets. */
@@ -477,6 +516,7 @@ function start(
   versionInfo: CollectionVersionInfo[],
   updates: { title: string; from: string; to: string }[],
   variants: DocVariant[],
+  origins: Record<string, BookOrigin>,
 ): void {
   const s: Strings = strings(lang);
   // Locked (bundled) builds hide the "open other docsets" affordances.
@@ -520,6 +560,7 @@ function start(
   // A tab is a docset page, or the full Search results page (id === SEARCH_ID,
   // which carries its query + the last scroll of scope/sort controls).
   const SEARCH_ID = "@search";
+  const MANAGE_ID = "@manage"; // in-app Manage docsets page (rendered into #content)
   // Each tab keeps its OWN back/forward stack (`hist` + `pos`), like MS Document
   // Explorer and browser tabs — Back/Forward move within the active tab only, and
   // switching tabs never touches another tab's history. `id` mirrors `hist[pos]`.
@@ -818,6 +859,7 @@ function start(
       prev.close();
       langInfo = r.langInfo;
       versionInfo = r.versionInfo;
+      origins = originsOf(r.shown);
       verByCol = new Map(versionInfo.map((v) => [v.collection, v]));
       langByCol = new Map(langInfo.map((l) => [l.collection, l]));
       switchableCols = new Set([...verByCol.keys(), ...langByCol.keys()]);
@@ -836,7 +878,7 @@ function start(
         return pages.keys().next().value ?? "";
       };
       const remap = (id: string): string => {
-        if (id === SEARCH_ID) return id;
+        if (id === SEARCH_ID || id === MANAGE_ID) return id;
         const { docsetId, localId } = collection.split(id);
         const col = oldDocsetToCol.get(docsetId);
         if (col === undefined) {
@@ -1043,6 +1085,18 @@ function start(
       active = tabs.length - 1;
     }
     loadContent(SEARCH_ID);
+  }
+
+  // Open (or focus) the Manage docsets page tab.
+  function openManagePage(): void {
+    const existing = tabs.find((t) => t.id === MANAGE_ID);
+    if (existing) active = tabs.indexOf(existing);
+    else {
+      tabs.push(mkTab(MANAGE_ID));
+      active = tabs.length - 1;
+    }
+    void loadContent(MANAGE_ID);
+    renderTabs();
   }
 
   // Apply the scope/sort controls to a raw search over the whole collection.
@@ -1491,7 +1545,11 @@ function start(
     tabstrip.innerHTML = "";
     tabs.forEach((t, i) => {
       const name =
-        t.id === SEARCH_ID ? s.search : (pages.get(t.id)?.title ?? t.id);
+        t.id === SEARCH_ID
+          ? s.search
+          : t.id === MANAGE_ID
+            ? s.manageDocsets
+            : (pages.get(t.id)?.title ?? t.id);
       const tab = document.createElement("div");
       tab.className = "doctab" + (i === active ? " active" : "");
       tab.innerHTML =
@@ -1571,8 +1629,10 @@ function start(
     currentId = id;
     const token = ++loadSeq;
     persistTabs(); // tabs/active are settled by the caller before we render
-    if (id === SEARCH_ID) {
-      renderSearchPage(); // app UI, rendered into #content (not the sandbox)
+    if (id === SEARCH_ID || id === MANAGE_ID) {
+      // App UI, rendered into #content (not the sandbox).
+      if (id === SEARCH_ID) renderSearchPage();
+      else renderManagePage();
       frame.style.display = "none";
       content.style.display = "";
       return;
@@ -1700,7 +1760,7 @@ function start(
         openUrl();
         break;
       case "manage-docsets":
-        void showLibrary();
+        openManagePage();
         break;
       case "about":
         showAbout();
@@ -1911,130 +1971,140 @@ function start(
     }
   }
 
-  async function showLibrary(): Promise<void> {
-    const uploaded = await allDocsets();
-    const rmBtn =
-      "font-family:var(--font-ui);font-size:12px;padding:3px 10px;border:1px solid #b3462f;border-radius:2px;background:#fdeeea;color:#a33;cursor:pointer";
-    const row = (label: string, attr: string): string =>
-      `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--rule)"><span style="flex:1;overflow:hidden;text-overflow:ellipsis">${label}</span><button ${attr} style="${rmBtn}">${esc(s.remove)}</button></div>`;
-    const uploadedRows = uploaded.length
-      ? uploaded
-          .map((d) =>
-            row(
-              `${esc(d.title)} <span style="color:var(--muted)">(${esc(d.language)}${d.version ? `, ${esc(s.versionLabel)} ${esc(d.version)}` : ""})</span>`,
-              `data-remove="${esc(d.id)}"`,
-            ),
-          )
-          .join("")
-      : `<div style="color:var(--muted);padding:6px 0">${esc(s.noUploaded)}</div>`;
-    const remoteList = getRemotes();
-    const remoteRows = remoteList
-      .map((e) =>
-        row(
-          `<span style="font-family:var(--font-mono);font-size:11px">${esc(e.url)}</span>` +
-            (e.streaming
-              ? ` <span style="font-size:10px;color:var(--muted)">${esc(s.streamingBadge)}</span>`
-              : ""),
-          `data-remove-url="${esc(e.url)}"`,
-        ),
-      )
-      .join("");
-    // Per-collection display-language override — a select per product that has more
-    // than one language available, so the reader can pin a product to a language
-    // (even one other than the UI language). Persisted; a change reloads.
+  // The unified Manage docsets page, rendered into #content (like the Search page).
+  // One card per loaded book, grouped by product (family); per-product version +
+  // language selectors switch live; each book shows its source + attachment packs.
+  function renderManagePage(): void {
+    address.value = "manage:";
     const langLabel = (l: string): string =>
       ({ en: "English", pl: "Polski" })[l] ?? l;
-    const langRows = langInfo
-      .map((c) => {
-        const opts = c.langs
-          .map(
-            (l) =>
-              `<option value="${esc(l)}"${l === c.chosen ? " selected" : ""}>${esc(langLabel(l))}</option>`,
-          )
-          .join("");
-        return (
-          '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--rule)">' +
-          `<span style="flex:1;overflow:hidden;text-overflow:ellipsis">${esc(c.title)}</span>` +
-          `<select data-lang-col="${esc(c.collection)}" style="font-family:var(--font-ui);font-size:12px;padding:2px 4px">${opts}</select></div>`
-        );
-      })
-      .join("");
-    // Per-collection version override — a select per product loaded in several
-    // versions (default: latest). Persisted; a change reloads.
-    const versionRows = versionInfo
-      .map((c) => {
-        const opts = c.versions
-          .map(
-            (v) =>
-              `<option value="${esc(v)}"${v === c.chosen ? " selected" : ""}>${esc(v)}</option>`,
-          )
-          .join("");
-        return (
-          '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--rule)">' +
-          `<span style="flex:1;overflow:hidden;text-overflow:ellipsis">${esc(c.title)}</span>` +
-          `<select data-ver-col="${esc(c.collection)}" style="font-family:var(--font-ui);font-size:12px;padding:2px 4px">${opts}</select></div>`
-        );
-      })
-      .join("");
-    const rows =
-      uploadedRows +
-      (remoteList.length
-        ? `<div style="margin-top:12px;color:var(--content-h);font-weight:bold">${esc(s.remotesTitle)}</div>${remoteRows}`
-        : "") +
-      (versionInfo.length
-        ? `<div style="margin-top:12px;color:var(--content-h);font-weight:bold">${esc(s.versionLabel)}</div>${versionRows}`
-        : "") +
-      (langInfo.length
-        ? `<div style="margin-top:12px;color:var(--content-h);font-weight:bold">${esc(s.docsetLanguage)}</div>${langRows}`
-        : "");
-    const bg = document.createElement("div");
-    bg.style.cssText =
-      "position:fixed;inset:0;background:rgba(20,35,60,.35);display:grid;place-items:center;z-index:50";
-    bg.innerHTML =
-      '<div style="width:460px;max-width:92vw;background:var(--chrome-top);border:1px solid #17335c;border-radius:3px;box-shadow:0 12px 40px rgba(0,0,0,.5);overflow:hidden">' +
-      `<div style="background:linear-gradient(180deg,var(--title-top),var(--title-bot));color:#fff;font-weight:bold;padding:6px 10px">${esc(s.uploadedTitle)}</div>` +
-      `<div style="padding:14px 18px;line-height:1.5;max-height:50vh;overflow:auto">${rows}</div>` +
-      '<div style="padding:10px 16px;text-align:right;border-top:1px solid var(--chrome-border)"><button class="lib-ok" style="font-family:var(--font-ui);font-size:12px;padding:4px 16px;border:1px solid #16305a;border-radius:2px;background:linear-gradient(180deg,#eef4fd,#cbd9ec);cursor:pointer">OK</button></div></div>';
-    bg.addEventListener("click", (e) => {
-      const t = e.target as HTMLElement;
-      const rm = t.getAttribute("data-remove");
-      const rmUrl = t.getAttribute("data-remove-url");
-      if (rm) {
-        void deleteDocset(rm).then(() => location.reload());
-      } else if (rmUrl) {
-        removeRemote(rmUrl);
-        location.reload();
-      } else if (t === bg || t.classList.contains("lib-ok")) {
-        bg.remove();
-      }
-    });
-    // Version/language changes rebuild the collection live (no reload) and keep the
-    // dialog open, so several products can be adjusted before closing with OK.
-    bg.querySelectorAll<HTMLSelectElement>("select[data-lang-col]").forEach(
-      (sel) => {
-        sel.addEventListener("change", () => {
-          const col = sel.getAttribute("data-lang-col");
-          if (!col) return;
-          const map = loadDocsetLangs();
-          map[col] = sel.value;
-          saveDocsetLangs(map);
-          void rebuild();
-        });
-      },
-    );
-    bg.querySelectorAll<HTMLSelectElement>("select[data-ver-col]").forEach(
-      (sel) => {
+    const badge = (o?: BookOrigin): string =>
+      o?.kind === "uploaded"
+        ? s.uploadedBadge
+        : o?.kind === "remote"
+          ? s.remoteBadge + (o.streaming ? ` ${s.streamingBadge}` : "")
+          : s.bundledBadge;
+    const verByColL = new Map(versionInfo.map((v) => [v.collection, v]));
+    const langByColL = new Map(langInfo.map((l) => [l.collection, l]));
+    const books = collection.books();
+
+    const opt = (v: string, cur: string, label = v): string =>
+      `<option value="${esc(v)}"${v === cur ? " selected" : ""}>${esc(label)}</option>`;
+    const groups =
+      collection
+        .families()
+        .map((f) => {
+          const ver = verByColL.get(f.id);
+          const lng = langByColL.get(f.id);
+          const controls =
+            (ver
+              ? `<label class="mg-ctl">${esc(s.versionLabel)} <select data-ver-col="${esc(f.id)}">${ver.versions.map((v) => opt(v, ver.chosen)).join("")}</select></label>`
+              : "") +
+            (lng
+              ? `<label class="mg-ctl">${esc(s.docsetLanguage)} <select data-lang-col="${esc(f.id)}">${lng.langs.map((l) => opt(l, lng.chosen, langLabel(l))).join("")}</select></label>`
+              : "");
+          const bookRows = f.docsetIds
+            .map((did) => {
+              const b = books.find((x) => x.id === did);
+              const o = origins[did];
+              const remove = o?.removeKey
+                ? `<button class="mg-remove" ${o.kind === "uploaded" ? `data-remove-id="${esc(o.removeKey)}"` : `data-remove-url="${esc(o.removeKey)}"`}>${esc(s.remove)}</button>`
+                : "";
+              const packs = o?.packs.length
+                ? `<div class="mg-packs">${esc(s.packsLabel)} ${o.packs.map((p) => `<span class="mg-pack">${esc(p.split("/").pop() || p)}</span>`).join(" ")}</div>`
+                : "";
+              return (
+                `<div class="mg-book"><div class="mg-book-head">` +
+                `<span class="mg-title">${esc(b?.title ?? did)}</span>` +
+                `<span class="mg-badge mg-${o?.kind ?? "bundled"}">${esc(badge(o))}</span>` +
+                `<span class="mg-vl">${esc(b?.language ?? "")}${b?.version ? ` · ${esc(s.versionLabel)} ${esc(b.version)}` : ""}</span>` +
+                `${remove}</div>${packs}</div>`
+              );
+            })
+            .join("");
+          return (
+            `<section class="mg-group"><header class="mg-group-head">` +
+            `<span class="mg-group-title">${esc(f.title)}</span>` +
+            `<span class="mg-controls">${controls}</span></header>${bookRows}</section>`
+          );
+        })
+        .join("") || `<div class="mg-empty">${esc(s.noDocsets)}</div>`;
+
+    content.innerHTML =
+      `<div class="manage-page"><h1 class="mg-h">${esc(s.manageDocsets)}</h1>` +
+      `<div class="mg-bar">` +
+      `<button class="mg-act mg-open-docset">${esc(s.openDocset)}</button>` +
+      `<button class="mg-act mg-open-url">${esc(s.openUrl)}</button>` +
+      `<form class="mg-import" id="mg-import"><input class="mg-import-url" type="url" placeholder="https://…/books.khbm" spellcheck="false"><button type="submit" class="mg-act">${esc(s.importManifest)}</button></form>` +
+      `</div>` +
+      `<div class="mg-import-hint">${esc(s.importManifestHint)}</div>` +
+      `<div class="mg-import-err" id="mg-import-err"></div>` +
+      `<div class="mg-list">${groups}</div></div>`;
+
+    content
+      .querySelector(".mg-open-docset")
+      ?.addEventListener("click", () => pickDocset());
+    content
+      .querySelector(".mg-open-url")
+      ?.addEventListener("click", () => openUrl());
+    content
+      .querySelectorAll<HTMLSelectElement>("select[data-ver-col]")
+      .forEach((sel) =>
         sel.addEventListener("change", () => {
           const col = sel.getAttribute("data-ver-col");
           if (!col) return;
-          const map = loadDocsetVersions();
-          map[col] = sel.value;
-          saveDocsetVersions(map);
+          const m = loadDocsetVersions();
+          m[col] = sel.value;
+          saveDocsetVersions(m);
           void rebuild();
-        });
-      },
+        }),
+      );
+    content
+      .querySelectorAll<HTMLSelectElement>("select[data-lang-col]")
+      .forEach((sel) =>
+        sel.addEventListener("change", () => {
+          const col = sel.getAttribute("data-lang-col");
+          if (!col) return;
+          const m = loadDocsetLangs();
+          m[col] = sel.value;
+          saveDocsetLangs(m);
+          void rebuild();
+        }),
+      );
+    // Removing a docset changes the loaded set → a full reload re-gathers sources.
+    content.querySelectorAll<HTMLElement>(".mg-remove").forEach((btn) =>
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-remove-id");
+        const url = btn.getAttribute("data-remove-url");
+        if (id) void deleteDocset(id).then(() => location.reload());
+        else if (url) {
+          removeRemote(url);
+          location.reload();
+        }
+      }),
     );
-    document.body.appendChild(bg);
+    const err = content.querySelector<HTMLElement>("#mg-import-err");
+    content.querySelector("#mg-import")?.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const url = content
+        .querySelector<HTMLInputElement>(".mg-import-url")
+        ?.value.trim();
+      if (!url || !err) return;
+      err.style.color = "var(--muted)";
+      err.textContent = s.openUrlChecking;
+      importKhbm(url)
+        .then((r) => {
+          if (r.added) location.reload();
+          else {
+            err.style.color = "#a33";
+            err.textContent = s.openUrlError;
+          }
+        })
+        .catch(() => {
+          err.style.color = "#a33";
+          err.textContent = s.openUrlError;
+        });
+    });
   }
 
   // ---- Other wiring ----
@@ -2481,7 +2551,7 @@ function start(
     : "";
   const firstPageId = pages.keys().next().value ?? "";
   const validTab = (t: { id: string }): boolean =>
-    t.id === SEARCH_ID || pages.has(t.id);
+    t.id === SEARCH_ID || t.id === MANAGE_ID || pages.has(t.id);
   const saved = loadTabs();
   const restored = (saved?.tabs ?? []).filter(validTab);
   if (restored.length) {
