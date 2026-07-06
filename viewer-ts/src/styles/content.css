@@ -137,6 +137,11 @@ body {
 .content img {
   max-width: 100%;
   height: auto;
+  cursor: zoom-in; /* tap/click opens the app's zoomable lightbox */
+}
+.content a img,
+.content [data-asset-missing] {
+  cursor: inherit; /* linked or unresolved images aren't lightbox targets */
 }
 .content [data-asset-missing] {
   outline: 1px dashed #c0503a;

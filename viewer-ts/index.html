@@ -140,7 +140,12 @@
           ☰
         </button>
         <!-- Mobile-only overflow: the actions that live in the (hidden) menubar. -->
-        <button class="tbtn more-btn" id="btn-more" title="More" aria-label="More">
+        <button
+          class="tbtn more-btn"
+          id="btn-more"
+          title="More"
+          aria-label="More"
+        >
           ⋯
         </button>
         <button
@@ -297,7 +302,11 @@
         <!-- Mobile overflow menu (opened by the ⋯ button); actions reuse the same
              data-action delegation and externalSources gating as the menubar. -->
         <div class="more-menu" id="more-menu" hidden>
-          <button class="more-item" data-action="open-docset" data-i18n="openDocset">
+          <button
+            class="more-item"
+            data-action="open-docset"
+            data-i18n="openDocset"
+          >
             Open docset…
           </button>
           <button class="more-item" data-action="open-url" data-i18n="openUrl">
@@ -328,6 +337,30 @@
             Share…
           </button>
           <div class="more-sep"></div>
+          <!-- Text size lives here (not just the off-screen toolbar) so it's
+               reachable on a phone. These buttons keep the menu open (they aren't
+               `.more-item`), so you can tap up/down repeatedly. -->
+          <div class="more-size">
+            <span data-i18n="textSize">Text size</span>
+            <span class="more-size-btns">
+              <button
+                class="more-size-btn"
+                data-action="font-down"
+                title="Smaller text"
+                data-i18n-title="smallerText"
+              >
+                A−
+              </button>
+              <button
+                class="more-size-btn"
+                data-action="font-up"
+                title="Larger text"
+                data-i18n-title="largerText"
+              >
+                A+
+              </button>
+            </span>
+          </div>
           <label class="more-lang">
             <span data-i18n="languageLabel">Language</span>
             <select class="lang-select" id="lang-select-m">
@@ -453,7 +486,11 @@
             </span>
           </div>
           <div class="filterbar" id="filterbar">
-            <div class="filter-row" id="filter-product-row" style="display: none">
+            <div
+              class="filter-row"
+              id="filter-product-row"
+              style="display: none"
+            >
               <label for="filter-product" data-i18n="filterProduct"
                 >Filter by product:</label
               >

@@ -6,12 +6,15 @@ const K = {
   favorites: "kdhelp.favorites",
   expanded: "kdhelp.expanded",
   tabs: "kdhelp.tabs",
+  fontSize: "kdhelp.fontSize",
 } as const;
 
 function readStringArray(key: string): string[] {
   try {
     const v: unknown = JSON.parse(localStorage.getItem(key) ?? "[]");
-    return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+    return Array.isArray(v)
+      ? v.filter((x): x is string => typeof x === "string")
+      : [];
   } catch {
     return [];
   }
@@ -41,6 +44,19 @@ export function saveExpanded(ids: Iterable<string>): void {
   write(K.expanded, [...ids]);
 }
 
+// ---- reader font size (px) ----
+export function loadFontSize(fallback: number): number {
+  try {
+    const v = Number(localStorage.getItem(K.fontSize));
+    return Number.isFinite(v) && v >= 11 && v <= 20 ? v : fallback;
+  } catch {
+    return fallback;
+  }
+}
+export function saveFontSize(px: number): void {
+  write(K.fontSize, px);
+}
+
 // ---- open tabs ----
 export interface SavedTab {
   id: string;
@@ -63,7 +79,11 @@ export function parseTabs(raw: string | null): SavedTabs | null {
     for (const t of obj.tabs) {
       if (t && typeof (t as SavedTab).id === "string") {
         const st = t as SavedTab;
-        tabs.push(st.query != null ? { id: st.id, query: String(st.query) } : { id: st.id });
+        tabs.push(
+          st.query != null
+            ? { id: st.id, query: String(st.query) }
+            : { id: st.id },
+        );
       }
     }
     const active = typeof obj.active === "number" ? obj.active : 0;

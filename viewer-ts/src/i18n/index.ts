@@ -22,6 +22,10 @@ export interface Strings {
   share: string;
   linkCopied: string;
   refreshing: string;
+  textSize: string;
+  close: string;
+  updateReady: string;
+  updateReload: string;
   // modes / tabs
   contents: string;
   index: string;
@@ -102,6 +106,10 @@ const en: Strings = {
   share: "Share…",
   linkCopied: "Link copied",
   refreshing: "Refreshing…",
+  textSize: "Text size",
+  close: "Close",
+  updateReady: "A new version is available.",
+  updateReload: "Reload",
   contents: "Contents",
   index: "Index",
   search: "Search",
@@ -154,7 +162,8 @@ const en: Strings = {
   cancel: "Cancel",
   remotesTitle: "Remote docsets",
   streamOption: "Stream (don't download the whole file)",
-  streamHint: "Reads pages on demand over HTTP Range, with real full-text search.",
+  streamHint:
+    "Reads pages on demand over HTTP Range, with real full-text search.",
   streamSidecars: "Attachment packs (.khba URLs, one per line — optional):",
   streamingBadge: "· streaming",
 };
@@ -177,6 +186,10 @@ const pl: Strings = {
   share: "Udostępnij…",
   linkCopied: "Skopiowano link",
   refreshing: "Odświeżanie…",
+  textSize: "Rozmiar tekstu",
+  close: "Zamknij",
+  updateReady: "Dostępna jest nowa wersja.",
+  updateReload: "Odśwież",
   contents: "Spis treści",
   index: "Indeks",
   search: "Szukaj",
@@ -232,7 +245,8 @@ const pl: Strings = {
   streamOption: "Strumieniuj (nie pobieraj całego pliku)",
   streamHint:
     "Czyta strony na żądanie po HTTP Range, z prawdziwym wyszukiwaniem pełnotekstowym.",
-  streamSidecars: "Paczki załączników (adresy .khba, po jednym w wierszu — opcjonalne):",
+  streamSidecars:
+    "Paczki załączników (adresy .khba, po jednym w wierszu — opcjonalne):",
   streamingBadge: "· strumieniowanie",
 };
 

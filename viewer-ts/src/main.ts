@@ -18,9 +18,11 @@ import {
 import {
   loadExpanded,
   loadFavorites,
+  loadFontSize,
   loadTabs,
   saveExpanded,
   saveFavorites,
+  saveFontSize,
   saveTabs,
 } from "./data/uistate";
 import { applyStatic, strings, type Strings } from "./i18n";
@@ -58,7 +60,15 @@ function post(m){try{P.postMessage(m,'*')}catch(e){}}
 function link(e,mid){var a=e.target&&e.target.closest&&e.target.closest('a');if(!a)return;
  if(a.hasAttribute('data-target')){e.preventDefault();post({t:'kdhelp',a:'open',id:a.getAttribute('data-target'),newTab:!!(mid||e.ctrlKey||e.metaKey)})}
  else if(a.hasAttribute('data-ext')){e.preventDefault();post({t:'kdhelp',a:'ext',url:a.getAttribute('data-ext')})}}
-addEventListener('click',function(e){link(e,false)},true);
+// A tap/click on a standalone content image (not a linked one) asks the app to
+// open its zoomable lightbox. Only our resolved inline assets (data:image/…) —
+// never an arbitrary URL — so the app can trust the source it gets.
+function img(e){var el=e.target;if(!el||el.tagName!=='IMG')return false;
+ if(el.closest&&el.closest('a'))return false;
+ var src=el.currentSrc||el.getAttribute('src')||'';
+ if(src.indexOf('data:image/')!==0)return false;
+ e.preventDefault();post({t:'kdhelp',a:'img',src:src,alt:el.getAttribute('alt')||''});return true}
+addEventListener('click',function(e){if(img(e))return;link(e,false)},true);
 addEventListener('auxclick',function(e){if(e.button===1)link(e,true)},true);
 // Pull-to-refresh: a downward drag started at the top of the page posts a 'pull'
 // to the app (the reading content lives in this sandboxed frame, so the app can't
@@ -149,7 +159,12 @@ async function bootstrap(): Promise<void> {
         } else {
           const bytes = await fetchDocsetBytes(entry.url);
           const ds = await Docset.open(bytes);
-          remotes.push({ url: entry.url, bytes, language: ds.language, streaming: false });
+          remotes.push({
+            url: entry.url,
+            bytes,
+            language: ds.language,
+            streaming: false,
+          });
           ds.close();
         }
       } catch {
@@ -191,19 +206,79 @@ async function bootstrap(): Promise<void> {
   const sources = [...bundled, ...uploaded, ...remote];
   if (!sources.length) throw new Error(`no docsets for language "${lang}"`);
 
-  if (config.pwa) registerServiceWorker();
+  if (config.pwa) registerServiceWorker(strings(lang));
   start(await Collection.load(sources, lang), lang, available, config);
 }
 
-function registerServiceWorker(): void {
+function registerServiceWorker(s: Strings): void {
   if (import.meta.env.DEV) return; // no SW in dev — it would fight HMR
-  if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => {
-      navigator.serviceWorker.register("sw.js").catch(() => {
+  if (!("serviceWorker" in navigator)) return;
+  const register = (): void => {
+    navigator.serviceWorker
+      .register("sw.js")
+      .then((reg) => {
+        // A worker already waiting (updated in a past session, page reopened).
+        if (reg.waiting && navigator.serviceWorker.controller) {
+          showUpdatePrompt(reg.waiting, s);
+        }
+        reg.addEventListener("updatefound", () => {
+          const sw = reg.installing;
+          if (!sw) return;
+          sw.addEventListener("statechange", () => {
+            // "installed" while a controller exists ⇒ an update (not a first
+            // install), so the new worker is parked in "waiting": offer a reload.
+            if (
+              sw.state === "installed" &&
+              navigator.serviceWorker.controller
+            ) {
+              showUpdatePrompt(sw, s);
+            }
+          });
+        });
+      })
+      .catch(() => {
         /* offline support is best-effort */
       });
-    });
-  }
+  };
+  // bootstrap() awaits docset + wasm loading, so `load` has usually already fired
+  // by the time we get here — register now in that case rather than on a `load`
+  // event that will never come.
+  if (document.readyState === "complete") register();
+  else window.addEventListener("load", register, { once: true });
+}
+
+// A small bottom toast offering to activate a downloaded update. Built once; the
+// Reload button tells the waiting worker to take over → controllerchange reloads.
+function showUpdatePrompt(waiting: ServiceWorker, s: Strings): void {
+  if (document.getElementById("update-toast")) return;
+  const toast = document.createElement("div");
+  toast.id = "update-toast";
+  toast.className = "update-toast";
+  const msg = document.createElement("span");
+  msg.textContent = s.updateReady;
+  const reload = document.createElement("button");
+  reload.type = "button";
+  reload.className = "update-reload";
+  reload.textContent = s.updateReload;
+  reload.addEventListener("click", () => {
+    reload.disabled = true;
+    // Reload only when the *new* worker takes over (never on the initial claim of
+    // a first install), so a fresh visit is never interrupted by a spurious reload.
+    navigator.serviceWorker.addEventListener(
+      "controllerchange",
+      () => location.reload(),
+      { once: true },
+    );
+    waiting.postMessage({ type: "skip-waiting" });
+  });
+  const dismiss = document.createElement("button");
+  dismiss.type = "button";
+  dismiss.className = "update-dismiss";
+  dismiss.setAttribute("aria-label", s.close);
+  dismiss.textContent = "×";
+  dismiss.addEventListener("click", () => toast.remove());
+  toast.append(msg, reload, dismiss);
+  document.body.appendChild(toast);
 }
 
 // ---------------------------------------------------------------------------
@@ -257,7 +332,9 @@ function start(
   const persistTabs = (): void =>
     saveTabs({
       // Persist the open pages only, not each tab's transient back/forward stack.
-      tabs: tabs.map((t) => (t.query != null ? { id: t.id, query: t.query } : { id: t.id })),
+      tabs: tabs.map((t) =>
+        t.query != null ? { id: t.id, query: t.query } : { id: t.id },
+      ),
       active,
     });
   // A tab is a docset page, or the full Search results page (id === SEARCH_ID,
@@ -292,12 +369,13 @@ function start(
   let mode: Mode = "contents";
   let filterCategory = "";
   let filterProduct = ""; // family/collection scope (union by default)
-  let fontSize = 13;
+  let fontSize = loadFontSize(13);
   // Terms to highlight in the opened page — set when a search result is clicked,
   // persisted across navigation (like MS Document Explorer) until explicitly cleared.
   let highlightTerms: string[] = [];
 
-  const escapeRe = (t: string): string => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const escapeRe = (t: string): string =>
+    t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const queryTerms = (q: string): string[] => [
     ...new Set(
       q
@@ -673,7 +751,9 @@ function start(
     for (const hit of hits) {
       const trail = crumb(hit.pageId);
       const book = showSource ? esc(collection.docsetTitle(hit.pageId)) : "";
-      const source = [trail === "—" ? "" : trail, book].filter(Boolean).join(" · ");
+      const source = [trail === "—" ? "" : trail, book]
+        .filter(Boolean)
+        .join(" · ");
       const div = document.createElement("div");
       div.className = "sp-hit";
       div.innerHTML =
@@ -737,7 +817,8 @@ function start(
     catSel.value = searchScope.category;
     if (productSel) productSel.value = searchScope.product;
     sortSel.value = searchScope.sort;
-    const rerun = (): void => void renderSearchResults(tabs[active]?.query ?? "");
+    const rerun = (): void =>
+      void renderSearchResults(tabs[active]?.query ?? "");
     $("#sp-form").addEventListener("submit", (e) => {
       e.preventDefault();
       const v = $<HTMLInputElement>("#sp-q").value;
@@ -909,7 +990,10 @@ function start(
   // Resolve `asset:<path>` references to `data:` URLs (self-contained, so they load
   // inside the origin-isolated content frame where blob URLs would not). Images
   // render inline; other files become downloads.
-  async function resolveAssets(root: ParentNode, pageId: string): Promise<void> {
+  async function resolveAssets(
+    root: ParentNode,
+    pageId: string,
+  ): Promise<void> {
     // Assets arrive parked in `data-asset-src`/`data-asset-href` (see
     // `parkAssetUrls`) so the browser never speculatively fetches the bare
     // `asset:` URL. Resolve to a self-contained `data:` URL, then set the real attr.
@@ -929,7 +1013,8 @@ function start(
       }
       el.setAttribute(attr, `data:${blob.mime};base64,${toBase64(blob.data)}`);
       if (attr === "href") {
-        (el as HTMLAnchorElement).download = path.split("/").pop() ?? "download";
+        (el as HTMLAnchorElement).download =
+          path.split("/").pop() ?? "download";
       }
     };
     const jobs: Promise<void>[] = [];
@@ -948,7 +1033,7 @@ function start(
   function parkAssetUrls(html: string): string {
     return html.replace(
       /\s(src|href)=("|')asset:([^"']*)\2/gi,
-      ' data-asset-$1=$2asset:$3$2',
+      " data-asset-$1=$2asset:$3$2",
     );
   }
 
@@ -995,7 +1080,10 @@ function start(
       }
       const href = a.getAttribute("href") ?? "";
       if (href.startsWith("#")) {
-        a.setAttribute("data-target", collection.resolveLink(fromId, href.slice(1)));
+        a.setAttribute(
+          "data-target",
+          collection.resolveLink(fromId, href.slice(1)),
+        );
         a.setAttribute("href", "#");
       } else if (/^(https?:|mailto:|tel:)/i.test(href)) {
         a.setAttribute("data-ext", href);
@@ -1063,7 +1151,11 @@ function start(
         (tabs.length > 1
           ? '<span class="dt-x" title="Close tab">×</span>'
           : "");
-      tab.addEventListener("click", () => activateTab(i));
+      let swiped = false; // set by a close-swipe so the trailing click is ignored
+      tab.addEventListener("click", () => {
+        if (swiped) return;
+        activateTab(i);
+      });
       tab.addEventListener("auxclick", (e) => {
         if (e.button === 1) {
           e.preventDefault();
@@ -1074,6 +1166,36 @@ function start(
         e.stopPropagation();
         closeTab(i);
       });
+      // Touch: a clear upward swipe on a tab closes it (horizontal is reserved for
+      // scrolling the strip). Only meaningful when more than one tab is open.
+      if (coarsePointer && tabs.length > 1) {
+        let sx = 0;
+        let sy = 0;
+        tab.addEventListener(
+          "touchstart",
+          (e) => {
+            const p = e.touches[0];
+            if (!p) return;
+            sx = p.clientX;
+            sy = p.clientY;
+          },
+          { passive: true },
+        );
+        tab.addEventListener(
+          "touchmove",
+          (e) => {
+            const p = e.touches[0];
+            if (swiped || !p) return;
+            const dx = p.clientX - sx;
+            const dy = p.clientY - sy;
+            if (dy < -40 && Math.abs(dy) > Math.abs(dx) * 1.3) {
+              swiped = true;
+              closeTab(i);
+            }
+          },
+          { passive: true },
+        );
+      }
       tabstrip.appendChild(tab);
     });
     tabstrip.children[active]?.scrollIntoView({
@@ -1206,10 +1328,12 @@ function start(
       case "font-up":
         fontSize = Math.min(20, fontSize + 1);
         setFrameFont();
+        saveFontSize(fontSize);
         break;
       case "font-down":
         fontSize = Math.max(11, fontSize - 1);
         setFrameFont();
+        saveFontSize(fontSize);
         break;
       case "print":
         window.print();
@@ -1356,7 +1480,10 @@ function start(
       if (!url) return;
       const streaming = stream.checked;
       const packs = streaming
-        ? sidecars.value.split(/\s+/).map((u) => u.trim()).filter(Boolean)
+        ? sidecars.value
+            .split(/\s+/)
+            .map((u) => u.trim())
+            .filter(Boolean)
         : [];
       err.style.color = "var(--muted)";
       err.textContent = s.openUrlChecking;
@@ -1376,7 +1503,9 @@ function start(
       }
     };
     add.addEventListener("click", () => void submit());
-    bg.querySelector(".url-cancel")!.addEventListener("click", () => bg.remove());
+    bg.querySelector(".url-cancel")!.addEventListener("click", () =>
+      bg.remove(),
+    );
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter") void submit();
     });
@@ -1394,9 +1523,7 @@ function start(
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
       const attachments = await Promise.all(
-        attachmentFiles.map(
-          async (f) => new Uint8Array(await f.arrayBuffer()),
-        ),
+        attachmentFiles.map(async (f) => new Uint8Array(await f.arrayBuffer())),
       );
       const ds = await Docset.open(bytes, attachments); // validates + reads meta
       await putDocset({
@@ -1422,7 +1549,7 @@ function start(
   async function showLibrary(): Promise<void> {
     const uploaded = await allDocsets();
     const rmBtn =
-      'font-family:var(--font-ui);font-size:12px;padding:3px 10px;border:1px solid #b3462f;border-radius:2px;background:#fdeeea;color:#a33;cursor:pointer';
+      "font-family:var(--font-ui);font-size:12px;padding:3px 10px;border:1px solid #b3462f;border-radius:2px;background:#fdeeea;color:#a33;cursor:pointer";
     const row = (label: string, attr: string): string =>
       `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--rule)"><span style="flex:1;overflow:hidden;text-overflow:ellipsis">${label}</span><button ${attr} style="${rmBtn}">${esc(s.remove)}</button></div>`;
     const uploadedRows = uploaded.length
@@ -1510,28 +1637,30 @@ function start(
   // Language switcher: persist + reload (the content docset changes with the UI).
   // Language selectors — the toolbar one and the mobile ⋯-menu one behave alike.
   const langNames: Record<string, string> = { en: "English", pl: "Polski" };
-  document.querySelectorAll<HTMLSelectElement>(".lang-select").forEach((sel) => {
-    for (const l of available) {
-      if (![...sel.options].some((o) => o.value === l)) {
-        const opt = document.createElement("option");
-        opt.value = l;
-        opt.textContent = langNames[l] ?? l;
-        sel.appendChild(opt);
+  document
+    .querySelectorAll<HTMLSelectElement>(".lang-select")
+    .forEach((sel) => {
+      for (const l of available) {
+        if (![...sel.options].some((o) => o.value === l)) {
+          const opt = document.createElement("option");
+          opt.value = l;
+          opt.textContent = langNames[l] ?? l;
+          sel.appendChild(opt);
+        }
       }
-    }
-    for (const opt of Array.from(sel.options)) {
-      opt.disabled = !available.includes(opt.value);
-    }
-    sel.value = lang;
-    sel.addEventListener("change", () => {
-      try {
-        localStorage.setItem(LANG_KEY, sel.value);
-      } catch {
-        /* ignore storage errors */
+      for (const opt of Array.from(sel.options)) {
+        opt.disabled = !available.includes(opt.value);
       }
-      location.reload();
+      sel.value = lang;
+      sel.addEventListener("change", () => {
+        try {
+          localStorage.setItem(LANG_KEY, sel.value);
+        } catch {
+          /* ignore storage errors */
+        }
+        location.reload();
+      });
     });
-  });
 
   // Mobile overflow (⋯) menu — the actions inside reuse the global data-action
   // delegation; here we just toggle the dropdown and close it on outside click.
@@ -1595,6 +1724,149 @@ function start(
     );
   };
 
+  // ---- Image lightbox (mobile + desktop) ------------------------------------
+  // The content frame posts a tapped image's data: URL; we show it in a fullscreen
+  // overlay that zooms (wheel on desktop, pinch on touch, double-tap/-click) and
+  // pans when zoomed. Built lazily, once, and reused for every image.
+  let lightbox: { show: (src: string, alt: string) => void } | null = null;
+  function openLightbox(src: string, alt: string): void {
+    lightbox ??= buildLightbox();
+    lightbox.show(src, alt);
+  }
+  function buildLightbox(): { show: (src: string, alt: string) => void } {
+    const overlay = document.createElement("div");
+    overlay.className = "lightbox";
+    overlay.hidden = true;
+    const img = document.createElement("img");
+    img.className = "lightbox-img";
+    img.draggable = false;
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "lightbox-close";
+    closeBtn.textContent = "×";
+    closeBtn.setAttribute("aria-label", s.close);
+    overlay.append(img, closeBtn);
+    document.body.appendChild(overlay);
+
+    const MIN = 1;
+    const MAX = 6;
+    let scale = 1;
+    let tx = 0;
+    let ty = 0;
+    const apply = (): void => {
+      img.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`;
+      overlay.classList.toggle("zoomed", scale > 1.01);
+    };
+    const reset = (): void => {
+      scale = 1;
+      tx = 0;
+      ty = 0;
+      apply();
+    };
+    const close = (): void => {
+      overlay.hidden = true;
+      img.removeAttribute("src");
+      reset();
+    };
+    // Zoom to `factor` around a viewport point, keeping that point stationary.
+    const zoomAt = (cx: number, cy: number, factor: number): void => {
+      const next = Math.min(MAX, Math.max(MIN, scale * factor));
+      if (next === scale) return;
+      const px = cx - window.innerWidth / 2;
+      const py = cy - window.innerHeight / 2;
+      tx = px - ((px - tx) * next) / scale;
+      ty = py - ((py - ty) * next) / scale;
+      scale = next;
+      if (scale <= MIN + 0.001) {
+        tx = 0;
+        ty = 0;
+      }
+      apply();
+    };
+
+    closeBtn.addEventListener("click", close);
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) close();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (!overlay.hidden && e.key === "Escape") close();
+    });
+    overlay.addEventListener(
+      "wheel",
+      (e) => {
+        e.preventDefault();
+        zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.15 : 1 / 1.15);
+      },
+      { passive: false },
+    );
+    img.addEventListener("dblclick", (e) => {
+      e.preventDefault();
+      if (scale > 1.01) reset();
+      else zoomAt(e.clientX, e.clientY, 2.5);
+    });
+
+    // Pointer events unify mouse + touch: one pointer pans (when zoomed), two
+    // pinch-zoom around their midpoint.
+    const pts = new Map<number, { x: number; y: number }>();
+    let startDist = 0;
+    let startScale = 1;
+    let mid = { x: 0, y: 0 };
+    let panning = false;
+    let lastX = 0;
+    let lastY = 0;
+    overlay.addEventListener("pointerdown", (e) => {
+      if (e.target === closeBtn) return;
+      overlay.setPointerCapture(e.pointerId);
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pts.size === 2) {
+        const [a, b] = [...pts.values()];
+        startDist = Math.hypot(a!.x - b!.x, a!.y - b!.y);
+        startScale = scale;
+        mid = { x: (a!.x + b!.x) / 2, y: (a!.y + b!.y) / 2 };
+        panning = false;
+      } else if (pts.size === 1 && scale > 1.01) {
+        panning = true;
+        lastX = e.clientX;
+        lastY = e.clientY;
+      }
+    });
+    overlay.addEventListener("pointermove", (e) => {
+      if (!pts.has(e.pointerId)) return;
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pts.size === 2 && startDist > 0) {
+        const [a, b] = [...pts.values()];
+        const dist = Math.hypot(a!.x - b!.x, a!.y - b!.y);
+        const target = Math.min(
+          MAX,
+          Math.max(MIN, startScale * (dist / startDist)),
+        );
+        zoomAt(mid.x, mid.y, target / scale);
+      } else if (panning) {
+        tx += e.clientX - lastX;
+        ty += e.clientY - lastY;
+        lastX = e.clientX;
+        lastY = e.clientY;
+        apply();
+      }
+    });
+    const release = (e: PointerEvent): void => {
+      pts.delete(e.pointerId);
+      if (pts.size < 2) startDist = 0;
+      if (pts.size === 0) panning = false;
+    };
+    overlay.addEventListener("pointerup", release);
+    overlay.addEventListener("pointercancel", release);
+
+    return {
+      show: (src, alt) => {
+        img.src = src;
+        img.alt = alt;
+        reset();
+        overlay.hidden = false;
+      },
+    };
+  }
+
   // The only inbound channel from the sandboxed frame. Everything here is treated
   // as untrusted (a hostile docset's JS could also post): verify the source is our
   // frame, require a known shape, and keep every action safe-by-design — `open`
@@ -1606,6 +1878,8 @@ function start(
       a?: unknown;
       id?: unknown;
       url?: unknown;
+      src?: unknown;
+      alt?: unknown;
       newTab?: unknown;
     };
     if (!d || d.t !== "kdhelp") return;
@@ -1617,6 +1891,13 @@ function start(
       /^(https?:|mailto:|tel:)/i.test(d.url)
     ) {
       window.open(d.url, "_blank", "noopener,noreferrer");
+    } else if (
+      d.a === "img" &&
+      typeof d.src === "string" &&
+      d.src.startsWith("data:image/")
+    ) {
+      // Untrusted source, but constrained to an inline image — safe to display.
+      openLightbox(d.src, typeof d.alt === "string" ? d.alt : "");
     } else if (d.a === "pull" && getRemotes().length) {
       // Pull-to-refresh from the content — only meaningful with remote docsets
       // (a reload re-fetches them on bootstrap; the session is restored).
@@ -1742,7 +2023,9 @@ function start(
   setMode("contents");
   // A hash deep link, if any (our own navigation also parks the current page here,
   // so it usually just names the session's active page on reload).
-  const deepLink = pages.has(location.hash.slice(1)) ? location.hash.slice(1) : "";
+  const deepLink = pages.has(location.hash.slice(1))
+    ? location.hash.slice(1)
+    : "";
   const firstPageId = pages.keys().next().value ?? "";
   const validTab = (t: { id: string }): boolean =>
     t.id === SEARCH_ID || pages.has(t.id);

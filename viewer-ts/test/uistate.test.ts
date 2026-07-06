@@ -2,10 +2,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   loadExpanded,
   loadFavorites,
+  loadFontSize,
   loadTabs,
   parseTabs,
   saveExpanded,
   saveFavorites,
+  saveFontSize,
   saveTabs,
 } from "../src/data/uistate";
 
@@ -73,10 +75,28 @@ describe("tree expansion persistence", () => {
   });
 });
 
+describe("font size persistence", () => {
+  it("returns the fallback when unset and round-trips within bounds", () => {
+    expect(loadFontSize(13)).toBe(13);
+    saveFontSize(16);
+    expect(loadFontSize(13)).toBe(16);
+  });
+
+  it("rejects out-of-range or non-numeric stored values", () => {
+    saveFontSize(999);
+    expect(loadFontSize(13)).toBe(13);
+    localStorage.setItem("kdhelp.fontSize", "huge");
+    expect(loadFontSize(12)).toBe(12);
+  });
+});
+
 describe("tabs persistence", () => {
   it("round-trips tabs + active through storage", () => {
     expect(loadTabs()).toBeNull();
-    saveTabs({ tabs: [{ id: "a:p" }, { id: "@search", query: "x" }], active: 1 });
+    saveTabs({
+      tabs: [{ id: "a:p" }, { id: "@search", query: "x" }],
+      active: 1,
+    });
     expect(loadTabs()).toEqual({
       tabs: [{ id: "a:p" }, { id: "@search", query: "x" }],
       active: 1,
