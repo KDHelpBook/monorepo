@@ -101,6 +101,16 @@ Each docset's `meta.version` is surfaced read-only: in *Help → About* (every l
 book with its language + version), in *Manage docsets…*, and as a tooltip on each
 product folder in the table of contents.
 
+When one product (`collection`) is loaded in **several versions** — separate docsets
+sharing a collection but differing in `version` — the viewer shows only **one** at a
+time: the **latest** by default (numeric-dotted comparison, so `1.10 > 1.2`). A
+**Version** selector then appears (in the left panel when a single product is
+versioned; per product under *Manage docsets…*) to pin an older one. The choice
+persists and applies on reload — the resolver picks the version first, then the
+language within it. So the same book never appears once per version in the merged
+table of contents, and a re-fetched remote that bumps its version is announced via a
+toast (see the update notice above).
+
 ## Distribution profiles
 
 `config.json` (written by `kdhelp pack`) drives two profiles:

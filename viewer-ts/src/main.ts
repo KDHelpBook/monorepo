@@ -17,12 +17,14 @@ import {
 } from "./data/library";
 import {
   loadDocsetLangs,
+  loadDocsetVersions,
   loadExpanded,
   loadFavorites,
   loadFontSize,
   loadSeenVersions,
   loadTabs,
   saveDocsetLangs,
+  saveDocsetVersions,
   saveExpanded,
   saveFavorites,
   saveFontSize,
@@ -30,7 +32,11 @@ import {
   saveTabs,
 } from "./data/uistate";
 import { languagesByCollection, pickLanguages } from "./data/langselect";
-import { detectUpdates } from "./data/versions";
+import {
+  detectUpdates,
+  pickVersions,
+  versionsByCollection,
+} from "./data/versions";
 import { applyStatic, strings, type Strings } from "./i18n";
 
 interface Config {
@@ -258,24 +264,37 @@ async function bootstrap(): Promise<void> {
   document.documentElement.lang = lang;
   applyStatic(lang);
 
-  const overrides = loadDocsetLangs();
+  // Resolve each collection down to one shown book: first pick the version (latest
+  // or the reader's override), then the language within that version.
+  const versionOverrides = loadDocsetVersions();
+  const versioned = pickVersions(variants, versionOverrides);
+  const langOverrides = loadDocsetLangs();
   const navLang = (navigator.language || "en").slice(0, 2);
   const fallbackOrder = [...new Set(["en", navLang])];
-  const shown = pickLanguages(variants, lang, overrides, fallbackOrder);
+  const shown = pickLanguages(versioned, lang, langOverrides, fallbackOrder);
   const sources = shown.map((v) => v.source);
   if (!sources.length) throw new Error("no docsets to show");
 
-  // Per-collection language info for Manage docsets (only collections with a
-  // real choice — more than one language available).
-  const collLangs = languagesByCollection(variants);
+  // Per-collection info for the override UIs (only collections with a real choice).
   const chosenByCol = new Map(shown.map((v) => [v.collection, v]));
+  const label = (col: string): string => chosenByCol.get(col)?.title ?? col;
+  const collLangs = languagesByCollection(versioned); // languages of the shown version
   const langInfo: CollectionLangInfo[] = [...collLangs.entries()]
     .filter(([, langs]) => langs.length > 1)
     .map(([collection, langs]) => ({
       collection,
-      title: chosenByCol.get(collection)?.title ?? collection,
+      title: label(collection),
       langs,
       chosen: chosenByCol.get(collection)?.language ?? langs[0]!,
+    }));
+  const collVersions = versionsByCollection(variants); // every version available
+  const versionInfo: CollectionVersionInfo[] = [...collVersions.entries()]
+    .filter(([, versions]) => versions.length > 1)
+    .map(([collection, versions]) => ({
+      collection,
+      title: label(collection),
+      versions,
+      chosen: chosenByCol.get(collection)?.version ?? versions[0]!,
     }));
 
   if (config.pwa) registerServiceWorker(strings(lang));
@@ -285,6 +304,7 @@ async function bootstrap(): Promise<void> {
     available,
     config,
     langInfo,
+    versionInfo,
     updates,
   );
 }
@@ -294,6 +314,14 @@ interface CollectionLangInfo {
   collection: string;
   title: string;
   langs: string[];
+  chosen: string;
+}
+
+/** Per-collection version availability for the Version switcher + Manage docsets. */
+interface CollectionVersionInfo {
+  collection: string;
+  title: string;
+  versions: string[]; // latest-first
   chosen: string;
 }
 
@@ -408,6 +436,7 @@ function start(
   available: string[],
   config: Config,
   langInfo: CollectionLangInfo[],
+  versionInfo: CollectionVersionInfo[],
   updates: { title: string; from: string; to: string }[],
 ): void {
   const s: Strings = strings(lang);
@@ -1734,10 +1763,30 @@ function start(
         );
       })
       .join("");
+    // Per-collection version override — a select per product loaded in several
+    // versions (default: latest). Persisted; a change reloads.
+    const versionRows = versionInfo
+      .map((c) => {
+        const opts = c.versions
+          .map(
+            (v) =>
+              `<option value="${esc(v)}"${v === c.chosen ? " selected" : ""}>${esc(v)}</option>`,
+          )
+          .join("");
+        return (
+          '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--rule)">' +
+          `<span style="flex:1;overflow:hidden;text-overflow:ellipsis">${esc(c.title)}</span>` +
+          `<select data-ver-col="${esc(c.collection)}" style="font-family:var(--font-ui);font-size:12px;padding:2px 4px">${opts}</select></div>`
+        );
+      })
+      .join("");
     const rows =
       uploadedRows +
       (remoteList.length
         ? `<div style="margin-top:12px;color:var(--content-h);font-weight:bold">${esc(s.remotesTitle)}</div>${remoteRows}`
+        : "") +
+      (versionInfo.length
+        ? `<div style="margin-top:12px;color:var(--content-h);font-weight:bold">${esc(s.versionLabel)}</div>${versionRows}`
         : "") +
       (langInfo.length
         ? `<div style="margin-top:12px;color:var(--content-h);font-weight:bold">${esc(s.docsetLanguage)}</div>${langRows}`
@@ -1775,6 +1824,18 @@ function start(
         });
       },
     );
+    bg.querySelectorAll<HTMLSelectElement>("select[data-ver-col]").forEach(
+      (sel) => {
+        sel.addEventListener("change", () => {
+          const col = sel.getAttribute("data-ver-col");
+          if (!col) return;
+          const map = loadDocsetVersions();
+          map[col] = sel.value;
+          saveDocsetVersions(map);
+          location.reload();
+        });
+      },
+    );
     document.body.appendChild(bg);
   }
 
@@ -1808,6 +1869,30 @@ function start(
     if (mode === "contents") renderTree();
     else if (mode === "index") renderIndex();
   });
+
+  // Version switcher — the left-panel dropdown, shown only when exactly one product
+  // is loaded in several versions (the common case). Changing it pins that product
+  // to the chosen version (default: latest) and reloads. Multi-product versioning
+  // is set per product in Manage docsets. Reload keeps this consistent with the
+  // language override (both change which docset the collection resolves to).
+  const versionSel = $<HTMLSelectElement>("#filter-version");
+  if (versionInfo.length === 1) {
+    const vi = versionInfo[0]!;
+    for (const v of vi.versions) {
+      const o = document.createElement("option");
+      o.value = v;
+      o.textContent = v;
+      versionSel.appendChild(o);
+    }
+    versionSel.value = vi.chosen;
+    versionSel.addEventListener("change", () => {
+      const map = loadDocsetVersions();
+      map[vi.collection] = versionSel.value;
+      saveDocsetVersions(map);
+      location.reload();
+    });
+    $("#filter-version-row").style.display = "";
+  }
 
   // Language switcher: persist + reload (the content docset changes with the UI).
   // Language selectors — the toolbar one and the mobile ⋯-menu one behave alike.

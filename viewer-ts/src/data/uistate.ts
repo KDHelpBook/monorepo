@@ -8,8 +8,24 @@ const K = {
   tabs: "kdhelp.tabs",
   fontSize: "kdhelp.fontSize",
   docsetLangs: "kdhelp.docsetLangs",
+  docsetVersions: "kdhelp.docsetVersions",
   seenVersions: "kdhelp.seenVersions",
 } as const;
+
+/** Read a `{ key: string }` map from storage, dropping non-string values. */
+function readStringMap(key: string): Record<string, string> {
+  try {
+    const v: unknown = JSON.parse(localStorage.getItem(key) ?? "{}");
+    if (!v || typeof v !== "object") return {};
+    const out: Record<string, string> = {};
+    for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+      if (typeof val === "string") out[k] = val;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
 
 function readStringArray(key: string): string[] {
   try {
@@ -50,17 +66,7 @@ export function saveExpanded(ids: Iterable<string>): void {
 // Lets the viewer notice when a re-fetched remote (or re-uploaded docset) bumped
 // its version between sessions, and announce it once.
 export function loadSeenVersions(): Record<string, string> {
-  try {
-    const v: unknown = JSON.parse(localStorage.getItem(K.seenVersions) ?? "{}");
-    if (!v || typeof v !== "object") return {};
-    const out: Record<string, string> = {};
-    for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
-      if (typeof val === "string") out[k] = val;
-    }
-    return out;
-  } catch {
-    return {};
-  }
+  return readStringMap(K.seenVersions);
 }
 export function saveSeenVersions(map: Record<string, string>): void {
   write(K.seenVersions, map);
@@ -68,20 +74,18 @@ export function saveSeenVersions(map: Record<string, string>): void {
 
 // ---- per-collection display-language overrides ({ collection: language }) ----
 export function loadDocsetLangs(): Record<string, string> {
-  try {
-    const v: unknown = JSON.parse(localStorage.getItem(K.docsetLangs) ?? "{}");
-    if (!v || typeof v !== "object") return {};
-    const out: Record<string, string> = {};
-    for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
-      if (typeof val === "string") out[k] = val;
-    }
-    return out;
-  } catch {
-    return {};
-  }
+  return readStringMap(K.docsetLangs);
 }
 export function saveDocsetLangs(map: Record<string, string>): void {
   write(K.docsetLangs, map);
+}
+
+// ---- per-collection version overrides ({ collection: version }) ----
+export function loadDocsetVersions(): Record<string, string> {
+  return readStringMap(K.docsetVersions);
+}
+export function saveDocsetVersions(map: Record<string, string>): void {
+  write(K.docsetVersions, map);
 }
 
 // ---- reader font size (px) ----
