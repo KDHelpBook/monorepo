@@ -278,6 +278,8 @@ textarea {
 .left-body {
   flex: 1;
   overflow: auto;
+  /* Keep scroll momentum inside the panel — no rubber-band bleed to the page. */
+  overscroll-behavior: contain;
   padding: 4px 2px 8px;
 }
 .search-box {
@@ -642,6 +644,7 @@ textarea {
   position: absolute;
   inset: 0;
   overflow: auto;
+  overscroll-behavior: contain;
   padding: 16px 22px 60px;
   font-family: var(--font-ui);
 }
@@ -931,6 +934,12 @@ textarea {
      source order. */
   .tbtn.more-btn {
     display: inline-flex;
+  }
+  /* Reclaim a whole row of scarce vertical space: the ms-help:// address bar is
+     rarely typed on a phone (you navigate by tree/search/links, and Share copies
+     the link). */
+  .addressbar {
+    display: none;
   }
 }
 

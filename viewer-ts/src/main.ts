@@ -60,6 +60,14 @@ function link(e,mid){var a=e.target&&e.target.closest&&e.target.closest('a');if(
  else if(a.hasAttribute('data-ext')){e.preventDefault();post({t:'kdhelp',a:'ext',url:a.getAttribute('data-ext')})}}
 addEventListener('click',function(e){link(e,false)},true);
 addEventListener('auxclick',function(e){if(e.button===1)link(e,true)},true);
+// Pull-to-refresh: a downward drag started at the top of the page posts a 'pull'
+// to the app (the reading content lives in this sandboxed frame, so the app can't
+// see the gesture itself). The app decides whether to act (only if remotes exist).
+var py=0,pull=false;
+function stop(){return (document.scrollingElement||document.documentElement).scrollTop}
+addEventListener('touchstart',function(e){pull=stop()<=0;py=e.touches[0].clientY},{passive:true});
+addEventListener('touchmove',function(e){if(pull&&e.touches[0].clientY-py>72){pull=false;post({t:'kdhelp',a:'pull'})}},{passive:true});
+addEventListener('touchend',function(){pull=false},{passive:true});
 addEventListener('message',function(e){var d=e.data;if(!d||d.t!=='kdhelp-app')return;
  if(d.a==='font'&&typeof d.size==='number'){document.documentElement.style.setProperty('--content-size',d.size+'px')}});
 function ready(){var m=document.querySelector('mark.hl');if(m)m.scrollIntoView({block:'center'})}
@@ -1225,6 +1233,26 @@ function start(
       case "about":
         showAbout();
         break;
+      case "share":
+        void shareCurrent();
+        break;
+    }
+  }
+
+  // Share the current page's deep link via the OS share sheet, falling back to
+  // copying it to the clipboard.
+  async function shareCurrent(): Promise<void> {
+    const url = location.href;
+    const title = document.title;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title, url });
+      } else if (navigator.clipboard) {
+        await navigator.clipboard.writeText(url);
+        status.textContent = s.linkCopied;
+      }
+    } catch {
+      /* user dismissed the share sheet */
     }
   }
 
@@ -1589,6 +1617,11 @@ function start(
       /^(https?:|mailto:|tel:)/i.test(d.url)
     ) {
       window.open(d.url, "_blank", "noopener,noreferrer");
+    } else if (d.a === "pull" && getRemotes().length) {
+      // Pull-to-refresh from the content — only meaningful with remote docsets
+      // (a reload re-fetches them on bootstrap; the session is restored).
+      status.textContent = s.refreshing;
+      location.reload();
     }
   });
 

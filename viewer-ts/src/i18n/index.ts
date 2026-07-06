@@ -19,6 +19,9 @@ export interface Strings {
   back: string;
   forward: string;
   about: string;
+  share: string;
+  linkCopied: string;
+  refreshing: string;
   // modes / tabs
   contents: string;
   index: string;
@@ -96,6 +99,9 @@ const en: Strings = {
   back: "Back",
   forward: "Forward",
   about: "About kdhelp",
+  share: "Share…",
+  linkCopied: "Link copied",
+  refreshing: "Refreshing…",
   contents: "Contents",
   index: "Index",
   search: "Search",
@@ -168,6 +174,9 @@ const pl: Strings = {
   back: "Wstecz",
   forward: "Dalej",
   about: "O programie kdhelp",
+  share: "Udostępnij…",
+  linkCopied: "Skopiowano link",
+  refreshing: "Odświeżanie…",
   contents: "Spis treści",
   index: "Indeks",
   search: "Szukaj",
