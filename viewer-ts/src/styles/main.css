@@ -773,36 +773,42 @@ textarea {
   font-weight: bold;
   color: #1a3d6b;
 }
-.mg-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+.mg-group-hint {
+  font-size: 11px;
+  color: var(--muted);
 }
-.mg-ctl {
-  font-size: 12px;
-  color: var(--content-fg);
-}
-.mg-ctl select {
-  font: inherit;
-  font-size: 12px;
-  padding: 2px 4px;
-}
-.mg-book {
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--rule);
-}
-.mg-book:last-child {
-  border-bottom: none;
-}
-.mg-book-head {
+/* One edition (version × language) of a product; the loaded one is `.active`. */
+.mg-ed {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--rule);
+  cursor: pointer;
 }
-.mg-title {
+.mg-ed:last-child {
+  border-bottom: none;
+}
+.mg-ed:hover {
+  background: var(--hover);
+}
+.mg-ed.active {
+  background: #eaf3ff;
+}
+.mg-ed-dot {
+  color: var(--muted);
+  font-size: 11px;
+}
+.mg-ed.active .mg-ed-dot {
+  color: #2f6b3a;
+}
+.mg-ed-vl {
   font-weight: 600;
   color: var(--content-fg);
+}
+.mg-ed.active .mg-ed-vl {
+  color: #16325b;
 }
 .mg-badge {
   font-size: 10px;

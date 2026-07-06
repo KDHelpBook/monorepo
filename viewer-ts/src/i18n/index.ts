@@ -75,6 +75,7 @@ export interface Strings {
   uploadedBadge: string;
   remoteBadge: string;
   packsLabel: string;
+  chooseEdition: string;
   noDocsets: string;
   uploadedTitle: string;
   noUploaded: string;
@@ -166,6 +167,7 @@ const en: Strings = {
   uploadedBadge: "uploaded",
   remoteBadge: "remote",
   packsLabel: "Packs:",
+  chooseEdition: "Click an edition to show it",
   noDocsets: "No docsets loaded.",
   uploadedTitle: "Uploaded docsets",
   noUploaded: "No uploaded docsets yet. Use File → Open docset… to add a .khb.",
@@ -259,6 +261,7 @@ const pl: Strings = {
   uploadedBadge: "wgrany",
   remoteBadge: "zdalny",
   packsLabel: "Pakiety:",
+  chooseEdition: "Kliknij edycję, aby ją wyświetlić",
   noDocsets: "Brak wczytanych docsetów.",
   uploadedTitle: "Wgrane docsety",
   noUploaded:

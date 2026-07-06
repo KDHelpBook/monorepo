@@ -35,6 +35,7 @@ import {
 } from "./data/uistate";
 import { languagesByCollection, pickLanguages } from "./data/langselect";
 import {
+  compareVersions,
   detectUpdates,
   pickVersions,
   versionsByCollection,
@@ -289,10 +290,7 @@ async function bootstrap(): Promise<void> {
   document.documentElement.lang = lang;
   applyStatic(lang);
 
-  const { sources, langInfo, versionInfo, shown } = resolveVariants(
-    variants,
-    lang,
-  );
+  const { sources, langInfo, versionInfo } = resolveVariants(variants, lang);
   if (!sources.length) throw new Error("no docsets to show");
 
   if (config.pwa) registerServiceWorker(strings(lang));
@@ -305,7 +303,6 @@ async function bootstrap(): Promise<void> {
     versionInfo,
     updates,
     variants,
-    originsOf(shown),
   );
 }
 
@@ -352,7 +349,6 @@ function resolveVariants(
   sources: DocsetSource[];
   langInfo: CollectionLangInfo[];
   versionInfo: CollectionVersionInfo[];
-  shown: DocVariant[];
 } {
   // Pick the version first (latest or override), then the language within it.
   const versioned = pickVersions(variants, loadDocsetVersions());
@@ -386,12 +382,7 @@ function resolveVariants(
       versions,
       chosen: chosenByCol.get(collection)?.version ?? versions[0]!,
     }));
-  return { sources: shown.map((v) => v.source), langInfo, versionInfo, shown };
-}
-
-/** Book origins keyed by docset id, for the Manage docsets page. */
-function originsOf(shown: DocVariant[]): Record<string, BookOrigin> {
-  return Object.fromEntries(shown.map((v) => [v.id, v.origin]));
+  return { sources: shown.map((v) => v.source), langInfo, versionInfo };
 }
 
 /** Per-collection version availability for the Version switcher + Manage docsets. */
@@ -516,7 +507,6 @@ function start(
   versionInfo: CollectionVersionInfo[],
   updates: { title: string; from: string; to: string }[],
   variants: DocVariant[],
-  origins: Record<string, BookOrigin>,
 ): void {
   const s: Strings = strings(lang);
   // Locked (bundled) builds hide the "open other docsets" affordances.
@@ -859,7 +849,6 @@ function start(
       prev.close();
       langInfo = r.langInfo;
       versionInfo = r.versionInfo;
-      origins = originsOf(r.shown);
       verByCol = new Map(versionInfo.map((v) => [v.collection, v]));
       langByCol = new Map(langInfo.map((l) => [l.collection, l]));
       switchableCols = new Set([...verByCol.keys(), ...langByCol.keys()]);
@@ -1978,54 +1967,74 @@ function start(
     address.value = "manage:";
     const langLabel = (l: string): string =>
       ({ en: "English", pl: "Polski" })[l] ?? l;
-    const badge = (o?: BookOrigin): string =>
-      o?.kind === "uploaded"
+    const badge = (o: BookOrigin): string =>
+      o.kind === "uploaded"
         ? s.uploadedBadge
-        : o?.kind === "remote"
+        : o.kind === "remote"
           ? s.remoteBadge + (o.streaming ? ` ${s.streamingBadge}` : "")
           : s.bundledBadge;
-    const verByColL = new Map(versionInfo.map((v) => [v.collection, v]));
-    const langByColL = new Map(langInfo.map((l) => [l.collection, l]));
-    const books = collection.books();
 
-    const opt = (v: string, cur: string, label = v): string =>
-      `<option value="${esc(v)}"${v === cur ? " selected" : ""}>${esc(label)}</option>`;
+    // Show every edition (variant) grouped by product, the loaded ones marked
+    // active — so a multi-version × multi-language product shows its whole matrix,
+    // and a click on any edition makes it the shown one (live).
+    const activeIds = new Set(collection.books().map((b) => b.id));
+    const hasVer = new Set(versionInfo.map((v) => v.collection));
+    const hasLang = new Set(langInfo.map((l) => l.collection));
+    const families = collection.families();
+    const familyTitle = new Map(families.map((f) => [f.id, f.title]));
+    const byCol = new Map<string, DocVariant[]>();
+    for (const v of variants) {
+      (
+        byCol.get(v.collection) ??
+        byCol.set(v.collection, []).get(v.collection)!
+      ).push(v);
+    }
+    // Group order: loaded families first, then any collection only in `variants`.
+    const order = [
+      ...families.map((f) => f.id),
+      ...[...byCol.keys()].filter((c) => !familyTitle.has(c)),
+    ];
+
     const groups =
-      collection
-        .families()
-        .map((f) => {
-          const ver = verByColL.get(f.id);
-          const lng = langByColL.get(f.id);
-          const controls =
-            (ver
-              ? `<label class="mg-ctl">${esc(s.versionLabel)} <select data-ver-col="${esc(f.id)}">${ver.versions.map((v) => opt(v, ver.chosen)).join("")}</select></label>`
-              : "") +
-            (lng
-              ? `<label class="mg-ctl">${esc(s.docsetLanguage)} <select data-lang-col="${esc(f.id)}">${lng.langs.map((l) => opt(l, lng.chosen, langLabel(l))).join("")}</select></label>`
-              : "");
-          const bookRows = f.docsetIds
-            .map((did) => {
-              const b = books.find((x) => x.id === did);
-              const o = origins[did];
-              const remove = o?.removeKey
+      order
+        .filter((c) => byCol.has(c))
+        .map((col) => {
+          const eds = [...byCol.get(col)!].sort(
+            (a, b) =>
+              compareVersions(b.version, a.version) ||
+              a.language.localeCompare(b.language),
+          );
+          const title = familyTitle.get(col) ?? eds[0]!.title;
+          const hint =
+            eds.length > 1
+              ? `<span class="mg-group-hint">${esc(s.chooseEdition)}</span>`
+              : "";
+          const rows = eds
+            .map((v) => {
+              const active = activeIds.has(v.id);
+              const o = v.origin;
+              const remove = o.removeKey
                 ? `<button class="mg-remove" ${o.kind === "uploaded" ? `data-remove-id="${esc(o.removeKey)}"` : `data-remove-url="${esc(o.removeKey)}"`}>${esc(s.remove)}</button>`
                 : "";
-              const packs = o?.packs.length
-                ? `<div class="mg-packs">${esc(s.packsLabel)} ${o.packs.map((p) => `<span class="mg-pack">${esc(p.split("/").pop() || p)}</span>`).join(" ")}</div>`
+              const packs = o.packs.length
+                ? `<span class="mg-packs">${esc(s.packsLabel)} ${o.packs.map((p) => `<span class="mg-pack">${esc(p.split("/").pop() || p)}</span>`).join(" ")}</span>`
                 : "";
               return (
-                `<div class="mg-book"><div class="mg-book-head">` +
-                `<span class="mg-title">${esc(b?.title ?? did)}</span>` +
-                `<span class="mg-badge mg-${o?.kind ?? "bundled"}">${esc(badge(o))}</span>` +
-                `<span class="mg-vl">${esc(b?.language ?? "")}${b?.version ? ` · ${esc(s.versionLabel)} ${esc(b.version)}` : ""}</span>` +
-                `${remove}</div>${packs}</div>`
+                `<div class="mg-ed${active ? " active" : ""}" data-col="${esc(col)}" data-ver="${esc(v.version)}" data-lang="${esc(v.language)}" role="button" tabindex="0">` +
+                `<span class="mg-ed-dot">${active ? "●" : "○"}</span>` +
+                `<span class="mg-ed-vl">${v.version ? `${esc(s.versionLabel)} ${esc(v.version)} · ` : ""}${esc(langLabel(v.language))}</span>` +
+                `<span class="mg-badge mg-${o.kind}">${esc(badge(o))}</span>` +
+                packs +
+                remove +
+                `</div>`
               );
             })
             .join("");
           return (
             `<section class="mg-group"><header class="mg-group-head">` +
-            `<span class="mg-group-title">${esc(f.title)}</span>` +
-            `<span class="mg-controls">${controls}</span></header>${bookRows}</section>`
+            `<span class="mg-group-title">${esc(title)}</span>${hint}</header>` +
+            rows +
+            `</section>`
           );
         })
         .join("") || `<div class="mg-empty">${esc(s.noDocsets)}</div>`;
@@ -2047,30 +2056,30 @@ function start(
     content
       .querySelector(".mg-open-url")
       ?.addEventListener("click", () => openUrl());
-    content
-      .querySelectorAll<HTMLSelectElement>("select[data-ver-col]")
-      .forEach((sel) =>
-        sel.addEventListener("change", () => {
-          const col = sel.getAttribute("data-ver-col");
-          if (!col) return;
-          const m = loadDocsetVersions();
-          m[col] = sel.value;
-          saveDocsetVersions(m);
-          void rebuild();
-        }),
-      );
-    content
-      .querySelectorAll<HTMLSelectElement>("select[data-lang-col]")
-      .forEach((sel) =>
-        sel.addEventListener("change", () => {
-          const col = sel.getAttribute("data-lang-col");
-          if (!col) return;
-          const m = loadDocsetLangs();
-          m[col] = sel.value;
-          saveDocsetLangs(m);
-          void rebuild();
-        }),
-      );
+    // Clicking an edition pins the version/language needed to make it the shown one
+    // (only where the product actually has a choice), then rebuilds live.
+    const activate = (el: HTMLElement): void => {
+      if (el.classList.contains("active")) return;
+      const col = el.getAttribute("data-col");
+      if (!col) return;
+      if (hasVer.has(col)) {
+        const m = loadDocsetVersions();
+        m[col] = el.getAttribute("data-ver") ?? "";
+        saveDocsetVersions(m);
+      }
+      if (hasLang.has(col)) {
+        const m = loadDocsetLangs();
+        m[col] = el.getAttribute("data-lang") ?? "";
+        saveDocsetLangs(m);
+      }
+      void rebuild();
+    };
+    content.querySelectorAll<HTMLElement>(".mg-ed").forEach((el) =>
+      el.addEventListener("click", (e) => {
+        if ((e.target as HTMLElement).closest(".mg-remove")) return;
+        activate(el);
+      }),
+    );
     // Removing a docset changes the loaded set → a full reload re-gathers sources.
     content.querySelectorAll<HTMLElement>(".mg-remove").forEach((btn) =>
       btn.addEventListener("click", () => {
