@@ -63,16 +63,13 @@ textarea {
   -webkit-user-select: text;
 }
 
-/* App window — fills the viewport, independent of host height */
+/* App window — fills the whole viewport edge-to-edge (like a maximized
+   Document Explorer), independent of host height. */
 .window {
   height: 100dvh;
-  max-width: 1400px;
-  margin-inline: auto;
   display: flex;
   flex-direction: column;
   background: var(--chrome-top);
-  border: 1px solid #17335c;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
   overflow: hidden;
 }
 
