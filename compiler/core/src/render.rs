@@ -7,14 +7,20 @@ use crate::{assets, markdown};
 
 /// Render every page's Markdown to HTML and derive its plain-text form.
 pub fn render(src: &SourceDocset) -> RenderedDocset {
+    // One highlighter for the whole docset — building it loads syntect's syntax +
+    // theme sets, which we don't want to repeat per page.
+    let highlighter = markdown::highlighter();
     let pages = src
         .pages
         .iter()
         .map(|p| {
             // Rewrite `assets/…` image/link targets to the `asset:` scheme so the
             // viewer resolves them from the docset's attachment store.
-            let body_html = assets::rewrite_asset_urls(&markdown::render_html(&p.markdown));
-            let plain = markdown::html_to_plain(&body_html);
+            let body_html =
+                assets::rewrite_asset_urls(&markdown::render_html(&p.markdown, Some(&highlighter)));
+            // Plain text comes from an *unhighlighted* render — syntect's per-token
+            // spans would otherwise splatter the search text with stray spaces.
+            let plain = markdown::html_to_plain(&markdown::render_html(&p.markdown, None));
             RenderedPage {
                 id: p.id.clone(),
                 title: p.title.clone(),

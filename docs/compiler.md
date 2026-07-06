@@ -63,6 +63,13 @@ Content in **Markdown** — GFM tables, task lists, strikethrough, autolinks. Li
 between pages with `#id`, e.g. [another page](#another-id).
 ```
 
+A fenced code block that declares a language (```` ```rust ````, ```` ```bash ````,
+`…`) is **syntax-highlighted at compile time** (comrak + syntect, the light
+*InspiredGitHub* theme). The highlighting is emitted as inline styles, so the HTML in
+the `.khb` is self-contained — the viewer needs no highlighter, CSS, or JS at runtime.
+The search text (`plain`) is taken from an unhighlighted render, so the per-token
+spans never leak into full-text search.
+
 `id` defaults to the file name. `keywords` feed the F1 index; `categories` tag the
 page for the facet (many-to-many — a page can be in several; a category referenced
 but not declared in `categories.yaml` is auto-registered). `related` renders a
