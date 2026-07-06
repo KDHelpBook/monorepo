@@ -74,6 +74,13 @@
             </div>
             <div
               class="menu-item"
+              data-action="search-page"
+              data-i18n="advancedSearch"
+            >
+              Advanced search…
+            </div>
+            <div
+              class="menu-item"
               data-action="mode-favorites"
               data-i18n="favorites"
             >
@@ -302,6 +309,13 @@
           </button>
           <button
             class="more-item"
+            data-action="search-page"
+            data-i18n="advancedSearch"
+          >
+            Advanced search…
+          </button>
+          <button
+            class="more-item"
             data-action="clear-highlight"
             data-i18n="clearHighlight"
           >
@@ -458,6 +472,14 @@
               data-i18n-ph="searchPlaceholder"
               autocomplete="off"
             />
+            <!-- Opens the roomy Search page (scope + sort) with the current query. -->
+            <button
+              class="adv-search"
+              data-action="search-page"
+              data-i18n="advancedSearch"
+            >
+              Advanced search…
+            </button>
           </div>
           <div class="left-body" id="left-body"></div>
           <div class="left-tabs" role="tablist">

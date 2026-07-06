@@ -1178,6 +1178,11 @@ function start(
       case "mode-search":
         showMode("search");
         break;
+      case "search-page":
+        // The roomy Search page (scope + sort) with whatever's in the quick box.
+        openSearchPage(searchInput.value.trim());
+        if (narrow() || !pinned) retract();
+        break;
       case "mode-favorites":
         showMode("favorites");
         break;

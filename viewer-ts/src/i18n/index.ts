@@ -23,6 +23,7 @@ export interface Strings {
   contents: string;
   index: string;
   search: string;
+  advancedSearch: string;
   favorites: string;
   // left panel
   filterLabel: string;
@@ -98,6 +99,7 @@ const en: Strings = {
   contents: "Contents",
   index: "Index",
   search: "Search",
+  advancedSearch: "Advanced search…",
   favorites: "Favorites",
   filterLabel: "Filter by category:",
   filterAll: "(all)",
@@ -169,6 +171,7 @@ const pl: Strings = {
   contents: "Spis treści",
   index: "Indeks",
   search: "Szukaj",
+  advancedSearch: "Wyszukiwanie zaawansowane…",
   favorites: "Ulubione",
   filterLabel: "Filtruj wg kategorii:",
   filterAll: "(wszystkie)",
