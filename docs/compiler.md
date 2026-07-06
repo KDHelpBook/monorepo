@@ -140,8 +140,8 @@ kdhelp pack --viewer viewer-ts/dist \
 | `--viewer <dir>` | the built viewer to copy |
 | `--docset <path>` | a docset to bundle (repeatable) |
 | `--mode khb\|compact` | `compact` gzips every shipped file (docset **and** its `.khba` packs) to `<name>.gz` |
-| `--profile reader\|bundled` | sets external-sources / PWA defaults |
-| `--lock` | disable opening/uploading other docsets |
+| `--profile reader\|bundled` | sets external-sources / PWA defaults (`bundled` = locked) |
+| `--lock` | lock the build: no docset management at all — hides *Open docset…*, *Open from URL…* and the whole **Manage docsets** page, and skips loading any uploaded/remote docsets or attachment packs (`config.externalSources: false`). Docsets are read-only either way; this removes the reader's ability to add/remove/attach them. |
 | `--pwa` / `--no-pwa` | force the service worker on/off |
 | `--home <id\|search>` | cold-start landing: a page id (`docsetId:localId`) or `search`; omitted → the viewer opens the Search page (search-first) |
 | `-o <dir>` | output directory |

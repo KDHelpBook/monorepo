@@ -1103,6 +1103,9 @@ function start(
 
   // Open (or focus) the Manage docsets page tab.
   function openManagePage(): void {
+    // A locked (bundled) build has no docset management — refuse to open the page
+    // even if something (e.g. a stale persisted tab) asks for it.
+    if (!config.externalSources) return;
     const existing = tabs.find((t) => t.id === MANAGE_ID);
     if (existing) active = tabs.indexOf(existing);
     else {
@@ -2604,7 +2607,11 @@ function start(
     : "";
   const firstPageId = pages.keys().next().value ?? "";
   const validTab = (t: { id: string }): boolean =>
-    t.id === SEARCH_ID || t.id === MANAGE_ID || pages.has(t.id);
+    t.id === SEARCH_ID ||
+    // A persisted Manage tab from a prior unlocked session must not survive into
+    // a locked (bundled) build — the lock hides docset management entirely.
+    (t.id === MANAGE_ID && config.externalSources) ||
+    pages.has(t.id);
   const saved = loadTabs();
   const restored = (saved?.tabs ?? []).filter(validTab);
   if (restored.length) {
