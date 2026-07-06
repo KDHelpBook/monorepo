@@ -48,6 +48,19 @@ body {
   font-size: 12px;
   color: var(--text);
   -webkit-font-smoothing: antialiased;
+  /* Chrome (tree, tabs, menus, toolbar, panels) shouldn't select text on a
+     double-click — e.g. double-clicking a folder to expand it. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* …but keep the real content and form fields selectable. The reading pane is a
+   sandboxed iframe with its own selection, so it's unaffected by the rule above. */
+.content,
+input,
+textarea {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 /* App window — fills the viewport, independent of host height */
