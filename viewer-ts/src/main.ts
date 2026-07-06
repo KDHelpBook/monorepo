@@ -1861,6 +1861,10 @@ function start(
       show: (src, alt) => {
         img.src = src;
         img.alt = alt;
+        // SVG is vector: let it scale up to fill the overlay (crisp at any size)
+        // rather than sit at its small intrinsic width. Raster stays capped so it
+        // isn't upscaled into a blur.
+        img.classList.toggle("svg", src.startsWith("data:image/svg+xml"));
         reset();
         overlay.hidden = false;
       },

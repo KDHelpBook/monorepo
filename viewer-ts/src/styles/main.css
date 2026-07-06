@@ -1101,6 +1101,12 @@ textarea {
   will-change: transform;
   cursor: zoom-in;
 }
+/* Vector art scales up to fill the overlay (contain = fit, keep aspect ratio). */
+.lightbox-img.svg {
+  width: 96vw;
+  height: 96vh;
+  object-fit: contain;
+}
 .lightbox.zoomed {
   cursor: default;
 }
