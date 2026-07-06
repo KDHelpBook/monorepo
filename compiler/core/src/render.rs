@@ -23,6 +23,8 @@ pub fn render(src: &SourceDocset) -> RenderedDocset {
                 keywords: p.keywords.clone(),
                 categories: p.categories.clone(),
                 related: p.related.clone(),
+                // Carry the clean source Markdown (post-frontmatter) for llms.txt / MCP.
+                md: Some(p.markdown.clone()),
             }
         })
         .collect();

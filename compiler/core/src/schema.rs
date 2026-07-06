@@ -17,12 +17,21 @@ CREATE TABLE meta (
 -- `keywords` here is a space-joined copy of a page's keyword terms, present only
 -- so the external-content FTS5 index can tokenize it. The structured F1 index
 -- lives in the `keywords` table below.
+--
+-- `md` is an OPTIONAL clean-Markdown rendition of the body (NULL when the producing
+-- compiler has no Markdown source). The format stays source-agnostic: the viewer
+-- never reads it — `body_html` is the canonical render — it exists only for
+-- AI-facing consumers (llms.txt export, a future MCP `get_page`). It is the LAST
+-- column on purpose: SQLite serialises a row column-by-column and stops reading at
+-- the last requested column, so the hot paths (`SELECT id,title,body_html`; FTS over
+-- `plain`) never touch `md`, and only an explicit `SELECT md` streams its bytes.
 CREATE TABLE pages (
   id        TEXT PRIMARY KEY,
   title     TEXT NOT NULL,
   body_html TEXT NOT NULL,
   plain     TEXT NOT NULL,
-  keywords  TEXT NOT NULL DEFAULT ''
+  keywords  TEXT NOT NULL DEFAULT '',
+  md        TEXT
 );
 
 CREATE TABLE toc (

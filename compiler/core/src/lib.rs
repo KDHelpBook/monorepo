@@ -22,9 +22,10 @@ pub use vfs::{FileRangeReader, RangeReader};
 
 /// The on-disk `.khb`/`.khbb` format version this build reads and writes. Bumped to
 /// 2 for binary attachments (the `assets` table / sidecar `.khba`), to 3 for family
-/// metadata (`collection`), and to 4 for the `related` ("See also") table — each
+/// metadata (`collection`), to 4 for the `related` ("See also") table, and to 5 for
+/// the optional per-page `md` column (clean Markdown for llms.txt / MCP) — each
 /// changed the rendered-docset layout that `.khbb` encodes.
-pub const FORMAT_VERSION: u32 = 4;
+pub const FORMAT_VERSION: u32 = 5;
 
 /// The crate version, surfaced in a docset's `meta.generator`.
 pub fn generator() -> String {
@@ -120,6 +121,13 @@ mod tests {
         let page = ds.page("intro").unwrap().unwrap();
         assert!(page.body_html.contains("<h1>"));
         assert!(ds.page("missing").unwrap().is_none());
+
+        // Clean Markdown (`md` column): the source body, verbatim, for llms.txt / MCP.
+        assert_eq!(
+            ds.page_markdown("intro").unwrap().as_deref(),
+            Some("# Introduction\n\n![logo](assets/logo.svg)\n\nThe quick brown foxes jump over lazy dogs.")
+        );
+        assert!(ds.page_markdown("missing").unwrap().is_none());
 
         // Full-text search: the Porter stemmer makes "fox" match "foxes" on both pages.
         let hits = ds.search("fox", 10).unwrap();

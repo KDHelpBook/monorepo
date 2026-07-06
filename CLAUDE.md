@@ -83,8 +83,13 @@ that the TypeScript viewer reached parity; it lives in git history (commit
 ## Key decisions & conventions
 - **Rust `core` is the engine for CLI + Tauri.** The browser mirrors its SQL via
   sql.js (see the browser-SQLite note above). Keep the two query paths in sync.
-- Content is **source-format-agnostic**: `.khb` stores rendered HTML + plain
-  text, never Markdown. The bundled compiler happens to take Markdown + frontmatter.
+- Content is **source-format-agnostic**: the canonical render in `.khb` is HTML +
+  plain text (the viewer needs no Markdown). The bundled compiler takes Markdown +
+  frontmatter. A producer *may* also fill the **optional, nullable `pages.md`
+  column** (format v5) with clean Markdown — an enrichment the viewer ignores,
+  consumed only by AI-facing surfaces (llms.txt export, a future MCP `get_page`).
+  Fetch it lazily via `Docset::page_markdown` (`md` is the last column, so the
+  HTML/FTS hot paths never stream it).
 - **FTS5 external-content** (single copy of text) + `bm25()` + `snippet()`.
   Tokenizer per docset from `meta.language` (EN: `porter unicode61`;
   PL: `unicode61 remove_diacritics`).

@@ -19,14 +19,18 @@ bytes (`1f 8b`), not the name — so a host that auto-applies `Content-Encoding:
 for `.gz` files (and thus pre-decompresses) works just as well as one that serves the
 bytes verbatim.
 
-The format is **independent of the source format**: a `.khb` stores rendered HTML,
-never Markdown. The bundled compiler happens to take Markdown, but any front end
-can produce a valid `.khb`.
+The format is **independent of the source format**: the canonical render a `.khb`
+stores is HTML — the viewer never needs Markdown. A producer *may* also stash a clean
+Markdown rendition in the optional `pages.md` column (the bundled Markdown compiler
+does), but it's an enrichment for AI-facing consumers, not a requirement: it's
+nullable, the viewer ignores it, and any front end can produce a valid `.khb` without
+it.
 
 ## SQLite schema
 
-`meta.format_version` identifies the schema version (currently `4`: `assets` was
-added in v2, `meta.collection` in v3, and the `related` table in v4).
+`meta.format_version` identifies the schema version (currently `5`: `assets` was
+added in v2, `meta.collection` in v3, the `related` table in v4, and the optional
+`pages.md` column in v5).
 
 ```sql
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -34,9 +38,11 @@ CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE pages (
   id        TEXT PRIMARY KEY,
   title     TEXT NOT NULL,
-  body_html TEXT NOT NULL,   -- rendered HTML (no source Markdown is stored)
+  body_html TEXT NOT NULL,   -- rendered HTML (the canonical render)
   plain     TEXT NOT NULL,   -- plain text, for FTS + snippets
-  keywords  TEXT NOT NULL    -- space-joined terms, for FTS only
+  keywords  TEXT NOT NULL,   -- space-joined terms, for FTS only
+  md        TEXT             -- OPTIONAL clean Markdown, for llms.txt / MCP (nullable;
+                             --   last column so hot-path reads never touch it)
 );
 
 CREATE TABLE toc (

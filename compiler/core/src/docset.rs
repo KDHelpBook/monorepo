@@ -210,6 +210,21 @@ impl Docset {
             .optional()?)
     }
 
+    /// Fetch a page's clean Markdown body, if the docset carries one (the optional
+    /// `md` column). `Ok(None)` if the page has no Markdown (a non-Markdown producer)
+    /// or the id is unknown. This is the AI-facing read (llms.txt export, MCP
+    /// `get_page`); it's a separate query from [`page`](Self::page) so the common
+    /// HTML render path never streams the `md` bytes.
+    pub fn page_markdown(&self, id: &str) -> Result<Option<String>> {
+        Ok(self
+            .conn
+            .query_row("SELECT md FROM pages WHERE id = ?1", params![id], |r| {
+                r.get::<_, Option<String>>(0)
+            })
+            .optional()?
+            .flatten())
+    }
+
     /// Full-text search over titles, body and keywords, ranked by bm25 with a
     /// highlighted snippet of the body.
     pub fn search(&self, query: &str, limit: usize) -> Result<Vec<SearchHit>> {
@@ -343,17 +358,18 @@ impl Docset {
         {
             let mut stmt = self
                 .conn
-                .prepare("SELECT id, title, body_html, plain FROM pages ORDER BY rowid")?;
+                .prepare("SELECT id, title, body_html, plain, md FROM pages ORDER BY rowid")?;
             let rows = stmt.query_map([], |r| {
                 Ok((
                     r.get::<_, String>(0)?,
                     r.get::<_, String>(1)?,
                     r.get::<_, String>(2)?,
                     r.get::<_, String>(3)?,
+                    r.get::<_, Option<String>>(4)?,
                 ))
             })?;
             for row in rows {
-                let (id, title, body_html, plain) = row?;
+                let (id, title, body_html, plain, md) = row?;
                 let keywords = keywords_by_page.remove(&id).unwrap_or_default();
                 let categories = categories_by_page.remove(&id).unwrap_or_default();
                 let related = related_by_page.remove(&id).unwrap_or_default();
@@ -365,6 +381,7 @@ impl Docset {
                     keywords,
                     categories,
                     related,
+                    md,
                 });
             }
         }

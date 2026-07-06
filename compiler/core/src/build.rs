@@ -169,13 +169,14 @@ fn write_pages(tx: &Transaction, doc: &RenderedDocset) -> Result<()> {
     for page in &doc.pages {
         let keywords_text = page.keywords.join(" ");
         tx.execute(
-            "INSERT INTO pages(id, title, body_html, plain, keywords) VALUES(?1, ?2, ?3, ?4, ?5)",
+            "INSERT INTO pages(id, title, body_html, plain, keywords, md) VALUES(?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 page.id,
                 page.title,
                 page.body_html,
                 page.plain,
-                keywords_text
+                keywords_text,
+                page.md
             ],
         )
         .with_context(|| format!("inserting page {}", page.id))?;

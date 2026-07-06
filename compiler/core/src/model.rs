@@ -106,6 +106,11 @@ pub struct RenderedPage {
     /// Ids of related pages (within this book), for a "See also" footer.
     #[serde(default)]
     pub related: Vec<String>,
+    /// Optional clean Markdown for the body (the pre-render source, minus
+    /// frontmatter). `None` when the producer has no Markdown source. Not used by the
+    /// viewer — only by AI-facing consumers (llms.txt export, a future MCP server).
+    #[serde(default)]
+    pub md: Option<String>,
 }
 
 /// A complete rendered docset — the pivot shared by `.khb` and `.khbb`.

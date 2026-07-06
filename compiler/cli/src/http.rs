@@ -143,6 +143,7 @@ mod tests {
                 keywords: vec![format!("kw{i}")],
                 categories: vec![],
                 related: vec![],
+                md: None,
             })
             .collect();
         let toc = pages
