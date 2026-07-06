@@ -218,6 +218,11 @@ export class Collection {
     return d ? d.products.some((p) => p.id === productId) : false;
   }
 
+  /** Assets a loaded book references but can't resolve (pack not loaded). */
+  missingAssets(docsetId: string): { path: string; pack: string }[] {
+    return this.find(docsetId)?.missingAssets() ?? [];
+  }
+
   tocTree(forceFolders: Set<string> = new Set()): TocNode[] {
     const nsNode = (docsetId: string, n: TocNode): TocNode => ({
       pageId: this.ns(docsetId, n.pageId),

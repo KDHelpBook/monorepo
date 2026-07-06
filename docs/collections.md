@@ -71,6 +71,13 @@ A **remote** prefers **streaming** (page-by-page over HTTP `Range`) but auto-fal
 back to a whole fetch when the host has no Range support — so it works everywhere; a
 whole-fetch docset can still pair with remote `.khba` packs.
 
+If a loaded book references assets whose owning `.khba` pack wasn't shipped (the
+`asset_index` routes them to a pack that isn't loaded), its edition shows a
+**⚠ N missing assets** badge with an **Add pack…** action: give the URL of the
+`.khba` and it's attached to that docset (persisted per docset id, applied on every
+load) so the images resolve. This works for any source — a bundled or uploaded `.khb`
+can be completed with a pack fetched from a URL.
+
 ### `.khbm` — a book manifest for one-step import
 
 A `.khbm` is a small JSON file naming several remote docsets so a whole product

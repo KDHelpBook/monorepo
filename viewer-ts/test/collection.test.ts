@@ -24,6 +24,7 @@ function stub(cfg: {
   pagesByCategory?: Record<string, string[]>;
   pages?: Record<string, string>;
   hits?: SearchHit[];
+  missing?: { path: string; pack: string }[];
 }): IDocset {
   return {
     id: cfg.id,
@@ -35,6 +36,7 @@ function stub(cfg: {
     products: cfg.products ?? [
       { id: cfg.collection ?? cfg.id, title: cfg.collectionTitle ?? cfg.id },
     ],
+    missingAssets: () => cfg.missing ?? [],
     tocTree: () => cfg.toc ?? [],
     categories: () => cfg.categories ?? [],
     keywords: () => cfg.keywords ?? [],
@@ -164,6 +166,21 @@ describe("Collection index & categories", () => {
       "en",
     );
     expect(c.pagesByCategory("basics")).toEqual(["a:p1", "b:q1"]);
+  });
+});
+
+describe("Collection.missingAssets", () => {
+  it("reports a loaded book's unresolved assets, and nothing for unknown ids", () => {
+    const c = Collection.of(
+      [
+        stub({ id: "a", missing: [{ path: "img/x.png", pack: "extras" }] }),
+        stub({ id: "b" }),
+      ],
+      "en",
+    );
+    expect(c.missingAssets("a")).toEqual([{ path: "img/x.png", pack: "extras" }]);
+    expect(c.missingAssets("b")).toEqual([]);
+    expect(c.missingAssets("nope")).toEqual([]);
   });
 });
 

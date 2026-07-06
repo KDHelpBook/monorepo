@@ -9,11 +9,13 @@ import {
 } from "./data/collection";
 import { Docset, type SearchHit, type TocNode } from "./data/docset";
 import {
+  addExtraPack,
   addRemote,
   allDocsets,
   deleteDocset,
   getRemotes,
   importKhbm,
+  loadExtraPacks,
   putDocset,
   removeRemote,
 } from "./data/library";
@@ -229,6 +231,11 @@ async function bootstrap(): Promise<void> {
   );
   saveSeenVersions(nextSeen);
 
+  // Reader-attached `.khba` packs (URLs) that supply a docset's missing assets —
+  // applied on load alongside the docset's own packs, keyed by docset id.
+  const extraPacks = loadExtraPacks();
+  const extraOf = (id: string): string[] => extraPacks[id] ?? [];
+
   // Every available docset as a language "variant" of its collection, each paired
   // with a ready-to-load source descriptor. We then pick one language per
   // collection (override → UI language → fallback) so a book present only in
@@ -243,9 +250,14 @@ async function bootstrap(): Promise<void> {
       source: {
         file: d.file,
         // A `.gz` suffix (on the docset or a pack) decompresses on fetch.
-        attachments: (d.attachments ?? []).map((file) => ({ file })),
+        attachments: [...(d.attachments ?? []), ...extraOf(d.id)].map(
+          (file) => ({ file }),
+        ),
       } as DocsetSource,
-      origin: { kind: "bundled", packs: d.attachments ?? [] } as BookOrigin,
+      origin: {
+        kind: "bundled",
+        packs: [...(d.attachments ?? []), ...extraOf(d.id)],
+      } as BookOrigin,
     })),
     ...uploadedAll.map((d) => ({
       id: d.id,
@@ -255,12 +267,19 @@ async function bootstrap(): Promise<void> {
       title: d.title,
       source: {
         bytes: d.bytes,
-        attachments: (d.attachments ?? []).map((bytes) => ({ bytes })),
+        attachments: [
+          ...(d.attachments ?? []).map((bytes) => ({ bytes })),
+          // Extra packs are URLs even for an uploaded (bytes) docset — fetched whole.
+          ...extraOf(d.id).map((file) => ({ file })),
+        ],
       } as DocsetSource,
       origin: {
         kind: "uploaded",
         removeKey: d.id,
-        packs: (d.attachments ?? []).map((_, i) => `pack ${i + 1}`),
+        packs: [
+          ...(d.attachments ?? []).map((_, i) => `pack ${i + 1}`),
+          ...extraOf(d.id),
+        ],
       } as BookOrigin,
     })),
     ...remotes.map((r) => ({
@@ -270,17 +289,23 @@ async function bootstrap(): Promise<void> {
       version: r.version,
       title: r.title,
       source: (r.streaming
-        ? { url: r.url, mode: "streaming" as const, attachments: r.attachments }
+        ? {
+            url: r.url,
+            mode: "streaming" as const,
+            attachments: [...(r.attachments ?? []), ...extraOf(r.id)],
+          }
         : {
             bytes: r.bytes!,
             // Whole-fetch docset can still pair with remote packs (fetched whole).
-            attachments: (r.attachments ?? []).map((file) => ({ file })),
+            attachments: [...(r.attachments ?? []), ...extraOf(r.id)].map(
+              (file) => ({ file }),
+            ),
           }) as DocsetSource,
       origin: {
         kind: "remote",
         removeKey: r.url,
         streaming: r.streaming,
-        packs: r.attachments ?? [],
+        packs: [...(r.attachments ?? []), ...extraOf(r.id)],
       } as BookOrigin,
     })),
   ];
@@ -2019,12 +2044,20 @@ function start(
               const packs = o.packs.length
                 ? `<span class="mg-packs">${esc(s.packsLabel)} ${o.packs.map((p) => `<span class="mg-pack">${esc(p.split("/").pop() || p)}</span>`).join(" ")}</span>`
                 : "";
+              // Missing assets are only knowable for a loaded (active) book — its
+              // `asset_index` routes to a pack that wasn't loaded. Offer to attach one.
+              const missing = active ? collection.missingAssets(v.id) : [];
+              const missBadge = missing.length
+                ? `<span class="mg-missing" title="${esc(missing.map((m) => m.path).join("\n"))}">${esc(s.missingAssets(missing.length))}</span>` +
+                  `<button class="mg-addpack" data-id="${esc(v.id)}">${esc(s.addPack)}</button>`
+                : "";
               return (
                 `<div class="mg-ed${active ? " active" : ""}" data-col="${esc(col)}" data-ver="${esc(v.version)}" data-lang="${esc(v.language)}" role="button" tabindex="0">` +
                 `<span class="mg-ed-dot">${active ? "●" : "○"}</span>` +
                 `<span class="mg-ed-vl">${v.version ? `${esc(s.versionLabel)} ${esc(v.version)} · ` : ""}${esc(langLabel(v.language))}</span>` +
                 `<span class="mg-badge mg-${o.kind}">${esc(badge(o))}</span>` +
                 packs +
+                missBadge +
                 remove +
                 `</div>`
               );
@@ -2090,6 +2123,18 @@ function start(
           removeRemote(url);
           location.reload();
         }
+      }),
+    );
+    // Attach a `.khba` pack (by URL) to supply a book's missing assets. Persisted
+    // per docset id and applied on the next load, so a reload re-gathers sources.
+    content.querySelectorAll<HTMLElement>(".mg-addpack").forEach((btn) =>
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-id");
+        if (!id) return;
+        const url = prompt(s.addPackPrompt)?.trim();
+        if (!url) return;
+        addExtraPack(id, url);
+        location.reload();
       }),
     );
     const err = content.querySelector<HTMLElement>("#mg-import-err");

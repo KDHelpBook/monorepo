@@ -41,7 +41,13 @@ export class StreamingDocset implements IDocset {
     // Sidecar `.khba` packs keyed by their `meta.pack`, each its own streamed
     // connection — so `asset_index` can route an asset straight to its store.
     private readonly byPack: Map<string, StreamingDb>,
+    // Assets whose owning pack isn't loaded (computed eagerly at open).
+    private readonly missing: { path: string; pack: string }[],
   ) {}
+
+  missingAssets(): { path: string; pack: string }[] {
+    return this.missing;
+  }
 
   /**
    * Cheaply read just `meta` over Range (a few KB) — enough to validate the URL
@@ -169,6 +175,16 @@ export class StreamingDocset implements IDocset {
       }
     }
 
+    // Assets routed to a sidecar pack that isn't loaded → missing (computed once).
+    let missing: { path: string; pack: string }[] = [];
+    try {
+      missing = (await db.all("SELECT path, pack FROM asset_index WHERE pack != ''"))
+        .map((r) => ({ path: String(r.path), pack: String(r.pack) }))
+        .filter((a) => !byPack.has(a.pack));
+    } catch {
+      /* older docset without an asset_index */
+    }
+
     return new StreamingDocset(
       db,
       id,
@@ -185,6 +201,7 @@ export class StreamingDocset implements IDocset {
       relatedById,
       hasFts5,
       byPack,
+      missing,
     );
   }
 

@@ -75,6 +75,12 @@ export interface Strings {
   uploadedBadge: string;
   remoteBadge: string;
   packsLabel: string;
+  /** ⚠ badge on an edition with unresolved assets (owning `.khba` not loaded). */
+  missingAssets: (n: number) => string;
+  /** Button to attach a `.khba` pack that supplies those missing assets. */
+  addPack: string;
+  /** prompt() message for the pack URL. */
+  addPackPrompt: string;
   chooseEdition: string;
   noDocsets: string;
   uploadedTitle: string;
@@ -167,6 +173,9 @@ const en: Strings = {
   uploadedBadge: "uploaded",
   remoteBadge: "remote",
   packsLabel: "Packs:",
+  missingAssets: (n) => `⚠ ${n} missing asset${n === 1 ? "" : "s"}`,
+  addPack: "Add pack…",
+  addPackPrompt: "URL of the .khba pack with the missing assets:",
   chooseEdition: "Click an edition to show it",
   noDocsets: "No docsets loaded.",
   uploadedTitle: "Uploaded docsets",
@@ -261,6 +270,10 @@ const pl: Strings = {
   uploadedBadge: "wgrany",
   remoteBadge: "zdalny",
   packsLabel: "Pakiety:",
+  missingAssets: (n) =>
+    `⚠ ${n} ${n === 1 ? "brakujący zasób" : "brakujących zasobów"}`,
+  addPack: "Dodaj pakiet…",
+  addPackPrompt: "URL pakietu .khba z brakującymi zasobami:",
   chooseEdition: "Kliknij edycję, aby ją wyświetlić",
   noDocsets: "Brak wczytanych docsetów.",
   uploadedTitle: "Wgrane docsety",

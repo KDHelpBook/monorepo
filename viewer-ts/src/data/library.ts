@@ -175,3 +175,35 @@ export function removeRemote(url: string): void {
     /* ignore */
   }
 }
+
+// Extra `.khba` pack URLs the reader attached to a docset to supply its missing
+// assets (the pack `asset_index` routes to but that wasn't shipped). Keyed by
+// docset id, applied on load alongside the docset's own packs. localStorage.
+const EXTRA_PACKS_KEY = "kdhelp.extraPacks";
+
+export function loadExtraPacks(): Record<string, string[]> {
+  try {
+    const v: unknown = JSON.parse(localStorage.getItem(EXTRA_PACKS_KEY) ?? "{}");
+    if (!v || typeof v !== "object") return {};
+    const out: Record<string, string[]> = {};
+    for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+      if (Array.isArray(val)) {
+        out[k] = val.filter((x): x is string => typeof x === "string");
+      }
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+export function addExtraPack(docsetId: string, url: string): void {
+  const map = loadExtraPacks();
+  const list = map[docsetId] ?? [];
+  if (!list.includes(url)) map[docsetId] = [...list, url];
+  try {
+    localStorage.setItem(EXTRA_PACKS_KEY, JSON.stringify(map));
+  } catch {
+    /* storage unavailable — the attached pack just won't persist */
+  }
+}

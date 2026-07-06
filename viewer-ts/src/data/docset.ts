@@ -55,6 +55,9 @@ export interface IDocset {
   /** Products this book belongs to (many-to-many); defaults to one = its collection. */
   readonly products: Product[];
   tocTree(): TocNode[];
+  /** Assets whose owning `.khba` pack isn't loaded (path + expected pack id) —
+   *  what "locate missing assets" in Manage docsets needs. Empty when all resolve. */
+  missingAssets(): { path: string; pack: string }[];
   categories(): Category[];
   keywords(): KeywordEntry[];
   pagesByCategory(categoryId: string): string[];
@@ -138,6 +141,17 @@ export class Docset implements IDocset {
 
   meta(key: string): string | null {
     return metaValue(this.db, key);
+  }
+
+  missingAssets(): { path: string; pack: string }[] {
+    const loaded = new Set(this.attachmentsByPack.keys());
+    try {
+      return all(this.db, "SELECT path, pack FROM asset_index WHERE pack != ''")
+        .map((r) => ({ path: String(r.path), pack: String(r.pack) }))
+        .filter((a) => !loaded.has(a.pack));
+    } catch {
+      return []; // no asset_index (older docset) ⇒ nothing to report
+    }
   }
 
   tocTree(): TocNode[] {
