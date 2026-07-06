@@ -43,6 +43,7 @@ mod tests {
             language: "en".into(),
             collection: "demo-family".into(),
             collection_title: "Demo Family".into(),
+            products: Vec::new(),
             pages: vec![
                 SourcePage {
                     id: "intro".into(),
@@ -96,6 +97,11 @@ mod tests {
         assert_eq!(ds.language().unwrap(), "en");
         assert_eq!(ds.collection().unwrap(), "demo-family");
         assert_eq!(ds.collection_title().unwrap(), "Demo Family");
+        // No explicit products → defaults to one named after the collection.
+        let products = ds.products().unwrap();
+        assert_eq!(products.len(), 1);
+        assert_eq!(products[0].id, "demo-family");
+        assert_eq!(products[0].title, "Demo Family");
         assert_eq!(
             ds.meta("tokenizer").unwrap().unwrap(),
             "porter unicode61 remove_diacritics 2"

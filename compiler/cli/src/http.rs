@@ -160,6 +160,7 @@ mod tests {
             language: "en".into(),
             collection: "remote".into(),
             collection_title: "Remote".into(),
+            products: vec![],
             pages,
             toc,
             categories: vec![],

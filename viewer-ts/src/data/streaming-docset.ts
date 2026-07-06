@@ -4,6 +4,7 @@ import type {
   IDocset,
   KeywordEntry,
   Page,
+  Product,
   SearchHit,
   TocNode,
 } from "./docset";
@@ -30,6 +31,7 @@ export class StreamingDocset implements IDocset {
     readonly collection: string,
     readonly collectionTitle: string,
     readonly version: string,
+    readonly products: Product[],
     private readonly toc: TocNode[],
     private readonly cats: Category[],
     private readonly kws: KeywordEntry[],
@@ -95,6 +97,18 @@ export class StreamingDocset implements IDocset {
     const cats: Category[] = (
       await db.all("SELECT id, title FROM categories ORDER BY position")
     ).map((r) => ({ id: String(r.id), title: String(r.title) }));
+
+    // Products (many-to-many facet); default to one = the collection when absent.
+    let products: Product[] = [];
+    try {
+      products = (
+        await db.all("SELECT id, title FROM products ORDER BY position")
+      ).map((r) => ({ id: String(r.id), title: String(r.title) }));
+    } catch {
+      /* older `.khb` predates the products table */
+    }
+    if (!products.length)
+      products = [{ id: collection, title: collectionTitle }];
 
     const kws: KeywordEntry[] = [];
     for (const r of await db.all(
@@ -163,6 +177,7 @@ export class StreamingDocset implements IDocset {
       collection,
       collectionTitle,
       version,
+      products,
       toc,
       cats,
       kws,

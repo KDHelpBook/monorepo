@@ -26,14 +26,27 @@ id = "my-docs"
 title = "My Documentation"
 version = "0.1.0"
 language = "en"                 # selects the FTS tokenizer
-collection = "my-product"       # optional: product/family (default = id)
+collection = "my-product"       # optional: merge/family key (default = id)
 collection_title = "My Product" # optional: family display title (default = title)
+
+# optional: products this book belongs to (a many-to-many filter facet, separate
+# from `collection`). A book may list several; omit it and the book is filed under
+# one product named after its `collection`.
+[[products]]
+id = "my-product"
+title = "My Product"
+[[products]]
+id = "suite"
+title = "The Suite"
 ```
 
-`collection` groups books into a **product/family**: books sharing one merge
-seamlessly, while different families show as separate top-level folders in the
-viewer's table of contents (see [collections.md](collections.md)). Omit it and each
-book is its own family.
+`collection` is the **merge/family key**: books sharing one merge seamlessly under a
+single top-level folder in the viewer's table of contents, and it's also how a book's
+language/version editions pair up. `products` is a separate **filter facet** — the
+viewer's *Filter by product* scope — that is **many-to-many**: one book can belong to
+several products, and one product can span several families. (See
+[collections.md](collections.md).) Omit `products` and the book defaults to a single
+product named after its `collection`, so the scope keeps working.
 
 **Pages** — Markdown with an optional YAML frontmatter block:
 

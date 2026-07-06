@@ -15,6 +15,7 @@ function stub(cfg: {
   collection?: string;
   collectionTitle?: string;
   version?: string;
+  products?: { id: string; title: string }[];
   title?: string;
   toc?: TocNode[];
   categories?: Category[];
@@ -31,6 +32,9 @@ function stub(cfg: {
     collection: cfg.collection ?? cfg.id,
     collectionTitle: cfg.collectionTitle ?? cfg.title ?? cfg.id,
     version: cfg.version ?? "",
+    products: cfg.products ?? [
+      { id: cfg.collection ?? cfg.id, title: cfg.collectionTitle ?? cfg.id },
+    ],
     tocTree: () => cfg.toc ?? [],
     categories: () => cfg.categories ?? [],
     keywords: () => cfg.keywords ?? [],

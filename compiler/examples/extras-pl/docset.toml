@@ -4,3 +4,7 @@ version = "0.1.0"
 language = "pl"
 collection = "kdhelp-tips"
 collection_title = "Porady i FAQ"
+
+[[products]]
+id = "kdhelp"
+title = "kdhelp"

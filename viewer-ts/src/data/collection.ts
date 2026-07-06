@@ -175,6 +175,31 @@ export class Collection {
     return this.find(this.split(nsId).docsetId)?.collection ?? "";
   }
 
+  /**
+   * The products across all loaded books, unioned by id (first-seen title), in load
+   * order — the options for the viewer's "Filter by product" scope. Unlike
+   * `families()` (the merge key), a book may appear under several products.
+   */
+  products(): { id: string; title: string }[] {
+    const byId = new Map<string, { id: string; title: string }>();
+    const order: string[] = [];
+    for (const d of this.docsets) {
+      for (const p of d.products) {
+        if (!byId.has(p.id)) {
+          byId.set(p.id, p);
+          order.push(p.id);
+        }
+      }
+    }
+    return order.map((id) => byId.get(id)!);
+  }
+
+  /** Whether the book a page belongs to is tagged with the given product. */
+  pageInProduct(nsId: string, productId: string): boolean {
+    const d = this.find(this.split(nsId).docsetId);
+    return d ? d.products.some((p) => p.id === productId) : false;
+  }
+
   tocTree(forceFolders: Set<string> = new Set()): TocNode[] {
     const nsNode = (docsetId: string, n: TocNode): TocNode => ({
       pageId: this.ns(docsetId, n.pageId),

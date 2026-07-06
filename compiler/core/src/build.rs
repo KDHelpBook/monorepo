@@ -32,6 +32,7 @@ pub fn build_khb(doc: &RenderedDocset, out_path: &Path) -> Result<()> {
     // and the bundled SQLite enforces foreign keys. Pages before toc for the same
     // reason (`toc.page_id` → `pages(id)`).
     write_categories(&tx, doc)?;
+    write_products(&tx, doc)?;
     write_pages(&tx, doc)?;
     write_toc(&tx, &doc.toc, None)?;
     write_related(&tx, doc)?; // after all pages exist (FK on both columns)
@@ -217,6 +218,16 @@ fn write_categories(tx: &Transaction, doc: &RenderedDocset) -> Result<()> {
         tx.execute(
             "INSERT INTO categories(id, title, position) VALUES(?1, ?2, ?3)",
             params![category.id, category.title, position as i64],
+        )?;
+    }
+    Ok(())
+}
+
+fn write_products(tx: &Transaction, doc: &RenderedDocset) -> Result<()> {
+    for (position, product) in doc.products.iter().enumerate() {
+        tx.execute(
+            "INSERT OR IGNORE INTO products(id, title, position) VALUES(?1, ?2, ?3)",
+            params![product.id, product.title, position as i64],
         )?;
     }
     Ok(())

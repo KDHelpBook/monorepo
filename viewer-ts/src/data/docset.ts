@@ -12,6 +12,11 @@ export interface Category {
   id: string;
   title: string;
 }
+/** A product a book belongs to (many-to-many facet, separate from `collection`). */
+export interface Product {
+  id: string;
+  title: string;
+}
 export interface KeywordEntry {
   term: string;
   pageIds: string[];
@@ -47,6 +52,8 @@ export interface IDocset {
   readonly collectionTitle: string;
   /** Content version (`meta.version`); "" if the docset declares none. */
   readonly version: string;
+  /** Products this book belongs to (many-to-many); defaults to one = its collection. */
+  readonly products: Product[];
   tocTree(): TocNode[];
   categories(): Category[];
   keywords(): KeywordEntry[];
@@ -71,6 +78,7 @@ export class Docset implements IDocset {
     readonly collection: string,
     readonly collectionTitle: string,
     readonly version: string,
+    readonly products: Product[],
     // Sidecar `.khba` packs keyed by their `meta.pack` id, so the routing index
     // can address one directly (no ordering assumptions — survives re-upload).
     private readonly attachmentsByPack: Map<string, Database> = new Map(),
@@ -95,6 +103,7 @@ export class Docset implements IDocset {
     const collection = metaValue(db, "collection") ?? id;
     const collectionTitle = metaValue(db, "collection_title") ?? title;
     const version = metaValue(db, "version") ?? "";
+    const products = readProducts(db, collection, collectionTitle);
     const byPack = new Map<string, Database>();
     for (const b of attachmentBytes) {
       const adb = new SQL.Database(b);
@@ -109,6 +118,7 @@ export class Docset implements IDocset {
       collection,
       collectionTitle,
       version,
+      products,
       byPack,
     );
   }
@@ -311,6 +321,28 @@ function metaValue(db: Database, key: string): string | null {
   const rows = all(db, "SELECT value FROM meta WHERE key = ?", [key]);
   const r = rows[0];
   return r ? String(r.value) : null;
+}
+
+/** Read the products table, defaulting to one = the collection when it's absent
+ *  (older `.khb`) or empty — mirrors `Docset::products` in the Rust core. */
+function readProducts(
+  db: Database,
+  collection: string,
+  collectionTitle: string,
+): Product[] {
+  let rows: Row[] = [];
+  try {
+    rows = all(db, "SELECT id, title FROM products ORDER BY position");
+  } catch {
+    /* table predates products — fall through to the default */
+  }
+  const products = rows.map((r) => ({
+    id: String(r.id),
+    title: String(r.title),
+  }));
+  return products.length
+    ? products
+    : [{ id: collection, title: collectionTitle }];
 }
 
 /** Count non-overlapping occurrences of `needle` in `hay`. */

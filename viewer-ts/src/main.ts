@@ -848,16 +848,19 @@ function start(
     leftBody.innerHTML = "";
     const ul = document.createElement("ul");
     ul.className = "tree";
-    // A product scope drills into that family's subtree (drops the wrapper).
-    const roots = familyRoots(filterProduct);
+    // Product is a many-to-many tag: prune to books in the scoped product (keeping
+    // the family folder structure), rather than drilling into a single family.
     if (filterCategory) {
-      // Prune to pages in the category, but KEEP the folder/tree structure (the
-      // ancestors leading to a match survive); reveal it fully expanded.
+      // Prune to pages in the category (and product), KEEPING the folder structure
+      // (the ancestors leading to a match survive); reveal it fully expanded.
       const ids = new Set(collection.pagesByCategory(filterCategory));
-      const pruned = pruneTree(roots, (id) => ids.has(id) && inProduct(id));
+      const pruned = pruneTree(toc, (id) => ids.has(id) && inProduct(id));
       for (const n of pruned) ul.appendChild(treeNode(n, true));
+    } else if (filterProduct) {
+      const pruned = pruneTree(toc, (id) => inProduct(id));
+      for (const n of pruned) ul.appendChild(treeNode(n));
     } else {
-      for (const n of roots) ul.appendChild(treeNode(n));
+      for (const n of toc) ul.appendChild(treeNode(n));
     }
     leftBody.appendChild(ul);
     highlightTree();
@@ -884,16 +887,9 @@ function start(
     return out;
   }
 
-  // True if a page belongs to the scoped product (or no product scope is set).
+  // True if a page's book is tagged with the scoped product (or none is set).
   const inProduct = (nsId: string): boolean =>
-    !filterProduct || collection.collectionOf(nsId) === filterProduct;
-  // The top-level nodes to render for a product scope: the matching family's
-  // children (unwrapped), or the whole toc when unscoped / ungrouped.
-  const familyRoots = (product: string): TocNode[] => {
-    if (!product) return toc;
-    const g = toc.find((n) => n.group && n.pageId === `@collection:${product}`);
-    return g ? g.children : toc;
-  };
+    !filterProduct || collection.pageInProduct(nsId, filterProduct);
 
   const highlightTree = (): void => {
     leftBody.querySelectorAll<HTMLElement>(".node").forEach((el) => {
@@ -1042,8 +1038,8 @@ function start(
       hits = hits.filter((h) => allowed.has(h.pageId));
     }
     if (searchScope.product) {
-      hits = hits.filter(
-        (h) => collection.collectionOf(h.pageId) === searchScope.product,
+      hits = hits.filter((h) =>
+        collection.pageInProduct(h.pageId, searchScope.product),
       );
     }
     const locale = collection.language || "en";
@@ -1113,7 +1109,7 @@ function start(
     document.title = `${s.search} — kdhelp`;
     address.value = `search:${query}`;
     const cats = collection.categories();
-    const products = collection.families();
+    const products = collection.products();
     const multiProduct = products.length > 1;
     const opts = (
       items: { id: string; title: string }[],
@@ -2039,16 +2035,16 @@ function start(
     filterSel.value = filterCategory;
 
     while (productSel.options.length > 1) productSel.remove(1);
-    const families = collection.families();
-    for (const f of families) {
+    const products = collection.products();
+    for (const p of products) {
       const o = document.createElement("option");
-      o.value = f.id;
-      o.textContent = f.title;
+      o.value = p.id;
+      o.textContent = p.title;
       productSel.appendChild(o);
     }
-    if (!families.some((f) => f.id === filterProduct)) filterProduct = "";
+    if (!products.some((p) => p.id === filterProduct)) filterProduct = "";
     productSel.value = filterProduct;
-    $("#filter-product-row").style.display = families.length > 1 ? "" : "none";
+    $("#filter-product-row").style.display = products.length > 1 ? "" : "none";
   }
   fillFilters();
   filterSel.addEventListener("change", () => {

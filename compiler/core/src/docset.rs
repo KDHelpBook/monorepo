@@ -8,7 +8,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 
-use crate::model::{Asset, Category, RenderedDocset, RenderedPage, TocNode};
+use crate::model::{Asset, Category, Product, RenderedDocset, RenderedPage, TocNode};
 
 /// A page's renderable content.
 #[derive(Debug, Clone)]
@@ -101,6 +101,39 @@ impl Docset {
             .meta("collection_title")?
             .or(self.meta("title")?)
             .unwrap_or_default())
+    }
+
+    /// Products this book belongs to (many-to-many facet). Falls back to a single
+    /// product named after the `collection` when the table is absent (older `.khb`)
+    /// or empty, so the viewer's product scope keeps working for un-migrated docsets.
+    pub fn products(&self) -> Result<Vec<Product>> {
+        let mut stmt = match self
+            .conn
+            .prepare("SELECT id, title FROM products ORDER BY position")
+        {
+            Ok(stmt) => stmt,
+            Err(_) => return self.default_products(),
+        };
+        let rows = stmt
+            .query_map([], |r| {
+                Ok(Product {
+                    id: r.get(0)?,
+                    title: r.get(1)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        if rows.is_empty() {
+            self.default_products()
+        } else {
+            Ok(rows)
+        }
+    }
+
+    fn default_products(&self) -> Result<Vec<Product>> {
+        Ok(vec![Product {
+            id: self.collection()?,
+            title: self.collection_title()?,
+        }])
     }
 
     /// The full table of contents, ordered by parent then position.
@@ -343,6 +376,7 @@ impl Docset {
             language: self.language()?,
             collection: self.collection()?,
             collection_title: self.collection_title()?,
+            products: self.products()?,
             pages,
             toc: self.toc_tree()?,
             categories: self.categories()?,

@@ -31,14 +31,24 @@ by family:
 So books of one product (Guide + API + Tutorials, all `collection = "myapp"`) read as
 one book, while a second product loaded alongside gets its own folder.
 
+## Products — the filter facet (many-to-many)
+
+`collection` merges books; **`products`** filters them, and the two are independent.
+A docset lists the `products` it belongs to (id + title — see
+[compiler.md](compiler.md)); this is **many-to-many**, so a book can appear under
+several products, and a product can span several families. A docset with no explicit
+`products` defaults to one named after its `collection`, so the scope keeps working
+for un-migrated books.
+
 ## Scope — union with a product filter
 
 The index and search **union across all products by default** (cross-product
 discovery). To focus one product, a **"Filter by product:"** selector (Contents and
-Index) and a **Product** scope on the Search page narrow to a single family without
-losing the merged default. The category facet composes with it, and — like the
-product scope — filtering by category **prunes the tree while keeping its folder
-structure** rather than flattening it to a list.
+Index) and a **Product** scope on the Search page narrow to books tagged with that
+product — **pruning** the tree to the matching books while keeping the family folder
+structure (not flattening it), and never losing the merged default. Because products
+are a tag, one selection can reveal books from several families. The category facet
+composes with it the same way.
 
 ## Where docsets come from
 

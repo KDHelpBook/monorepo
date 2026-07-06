@@ -4,3 +4,7 @@ version = "0.1.0"
 language = "en"
 collection = "kdhelp-docs"
 collection_title = "Documentation"
+
+[[products]]
+id = "kdhelp"
+title = "kdhelp"

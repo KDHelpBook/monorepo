@@ -63,6 +63,17 @@ CREATE TABLE related (
   PRIMARY KEY (page_id, related_id)
 );
 CREATE INDEX idx_related_page ON related(page_id, position);
+
+-- Products this book belongs to — a many-to-many facet, separate from `collection`
+-- (which is the merge/family key). A book can be listed under several products in
+-- the viewer's "Filter by product" scope without changing how it merges in the TOC.
+-- A docset with no explicit products defaults to a single one named after its
+-- `collection`, so the scope keeps working for un-migrated docsets.
+CREATE TABLE products (
+  id       TEXT PRIMARY KEY,
+  title    TEXT NOT NULL,
+  position INTEGER NOT NULL
+);
 "#;
 
 /// Binary attachments: images and downloadable files referenced by pages as

@@ -39,6 +39,9 @@ pub struct SourceDocset {
     pub collection: String,
     /// Display title for the family (defaults to the docset title).
     pub collection_title: String,
+    /// Products this book belongs to (many-to-many facet; defaults to one named
+    /// after `collection`). Separate from `collection`, which is the merge key.
+    pub products: Vec<Product>,
     pub pages: Vec<SourcePage>,
     pub toc: Vec<TocNode>,
     pub categories: Vec<Category>,
@@ -63,6 +66,15 @@ pub struct TocNode {
 /// A category definition (the label/order for a facet tag).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Category {
+    pub id: String,
+    pub title: String,
+}
+
+/// A product a book belongs to (id + display title). Many-to-many: a book may list
+/// several. Distinct from `collection` (the merge/family key) — products are only a
+/// filter facet, driving the viewer's "Filter by product" scope.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Product {
     pub id: String,
     pub title: String,
 }
@@ -107,6 +119,9 @@ pub struct RenderedDocset {
     pub collection: String,
     /// Product/family display title.
     pub collection_title: String,
+    /// Products this book belongs to (many-to-many facet, separate from `collection`).
+    #[serde(default)]
+    pub products: Vec<Product>,
     pub pages: Vec<RenderedPage>,
     pub toc: Vec<TocNode>,
     pub categories: Vec<Category>,

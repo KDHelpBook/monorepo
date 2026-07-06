@@ -431,6 +431,7 @@ mod tests {
             language: "en".into(),
             collection: "big".into(),
             collection_title: "Big".into(),
+            products: vec![],
             pages,
             toc,
             categories: vec![],

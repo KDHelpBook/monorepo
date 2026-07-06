@@ -4,3 +4,11 @@ version = "2.0.0"
 language = "en"
 collection = "sample-sdk"
 collection_title = "Sample SDK"
+
+[[products]]
+id = "kdhelp"
+title = "kdhelp"
+
+[[products]]
+id = "sdk"
+title = "SDK"

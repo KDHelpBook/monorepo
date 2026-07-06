@@ -18,7 +18,7 @@ use anyhow::{bail, Context, Result};
 use serde::Deserialize;
 use walkdir::WalkDir;
 
-use crate::model::{Asset, Category, SourceDocset, SourcePage, TocNode};
+use crate::model::{Asset, Category, Product, SourceDocset, SourcePage, TocNode};
 use crate::{assets, markdown};
 
 #[derive(Deserialize)]
@@ -35,6 +35,10 @@ struct DocsetToml {
     /// Optional family display title (defaults to `title`).
     #[serde(default)]
     collection_title: Option<String>,
+    /// Optional products this book belongs to (many-to-many; `[[products]]` tables
+    /// with `id`/`title`). Defaults to a single product named after the collection.
+    #[serde(default)]
+    products: Vec<Product>,
 }
 fn default_version() -> String {
     "0.1.0".to_string()
@@ -122,6 +126,16 @@ pub fn load_dir(dir: &Path) -> Result<SourceDocset> {
     let collection_title = manifest
         .collection_title
         .unwrap_or_else(|| manifest.title.clone());
+    // No explicit products → one named after the collection, so the product scope
+    // keeps working for books that don't opt into the many-to-many facet.
+    let products = if manifest.products.is_empty() {
+        vec![Product {
+            id: collection.clone(),
+            title: collection_title.clone(),
+        }]
+    } else {
+        manifest.products
+    };
     Ok(SourceDocset {
         id: manifest.id,
         title: manifest.title,
@@ -129,6 +143,7 @@ pub fn load_dir(dir: &Path) -> Result<SourceDocset> {
         language: manifest.language,
         collection,
         collection_title,
+        products,
         pages,
         toc,
         categories,
