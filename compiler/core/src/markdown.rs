@@ -70,6 +70,34 @@ pub fn highlight_lines(code: &str, lang: &str, hl: &std::collections::HashSet<us
     out
 }
 
+/// Syntax-highlight a short **inline** snippet (the `` `x`{:lang} `` flag), returning the
+/// classed `<span>`s to drop inside a `<code>` — no `<pre>`, no line wrappers. Same
+/// `ClassStyle::Spaced` scheme as [`highlighter`], so [`syntax_theme_css`] colours it.
+pub fn highlight_inline(code: &str, lang: &str) -> String {
+    use std::sync::OnceLock;
+    use syntect::html::{ClassStyle, ClassedHTMLGenerator};
+    use syntect::parsing::SyntaxSet;
+    use syntect::util::LinesWithEndings;
+
+    static SYNTAX_SET: OnceLock<SyntaxSet> = OnceLock::new();
+    let ss = SYNTAX_SET.get_or_init(SyntaxSet::load_defaults_newlines);
+    let syntax = ss
+        .find_syntax_by_token(lang)
+        .unwrap_or_else(|| ss.find_syntax_plain_text());
+    let mut gen = ClassedHTMLGenerator::new_with_class_style(syntax, ss, ClassStyle::Spaced);
+    // The generator parses whole lines; inline code has none, so give it a newline and
+    // trim the trailing text back off.
+    let src = if code.ends_with('\n') {
+        code.to_string()
+    } else {
+        format!("{code}\n")
+    };
+    for line in LinesWithEndings::from(&src) {
+        let _ = gen.parse_html_for_line_which_includes_newline(line);
+    }
+    gen.finalize().trim_end().to_string()
+}
+
 /// The stylesheet that colours the class-tagged code spans: the light theme by
 /// default, and the dark theme under `[data-theme="dark"]` (dormant until the viewer
 /// sets that hook). Generated from syntect so it always matches the classes the

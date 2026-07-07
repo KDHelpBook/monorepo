@@ -30,8 +30,13 @@ pub fn render(src: &SourceDocset) -> Result<RenderedDocset> {
             let html = render_code_preview(&html, &highlighter).with_context(ctx)?;
             let html = render_code_tree(&html, &highlighter).with_context(ctx)?;
             let html = render_line_highlight(&html);
+            // `` `x`{:lang} `` → inline-highlighted code; `` `x`{.badge} `` → a badge.
+            let html = render_inline_attrs(&html);
             let html = assets::rewrite_asset_urls(&html);
-            let rendered = render_math(&html).with_context(ctx)?;
+            let html = render_math(&html).with_context(ctx)?;
+            // `:::tabs` / `:::tab` → an interactive tabbed panel. Runs last so each tab's
+            // body already has its code blocks, math, and callouts rendered.
+            let rendered = render_tabs(&html);
             // Prepend an "On this page" nav built from the heading anchors, honouring
             // the page's `toc` frontmatter (auto when unset). It floats top-right, so
             // sitting before the H1 keeps the viewer's subtitle handling intact.
@@ -478,6 +483,171 @@ fn parse_line_ranges(meta: &str) -> Option<std::collections::HashSet<usize>> {
     (!set.is_empty()).then_some(set)
 }
 
+/// Apply inline-code attributes: an inline `` `code` `` immediately followed by `{…}`.
+/// `{:lang}` syntax-highlights the code inline; `{.badge}` / `{.badge-KIND …}` turns it
+/// into a badge `<span>`; other `.class`es are copied onto the `<code>`. A `{…}` not
+/// directly touching the `</code>` (a stray brace in prose) is left alone.
+fn render_inline_attrs(html: &str) -> String {
+    const OPEN: &str = "<code>"; // bare inline code only — highlighted blocks carry a class
+    const CLOSE: &str = "</code>";
+    let mut out = String::with_capacity(html.len());
+    let mut i = 0;
+    while let Some(rel) = html[i..].find(OPEN) {
+        let cstart = i + rel;
+        let text_start = cstart + OPEN.len();
+        let Some(crel) = html[text_start..].find(CLOSE) else {
+            break;
+        };
+        let after = text_start + crel + CLOSE.len();
+        // Only treat it as attributed when `{` touches the closing tag.
+        if !html[after..].starts_with('{') {
+            out.push_str(&html[i..after]);
+            i = after;
+            continue;
+        }
+        let Some(brace) = html[after..].find('}') else {
+            out.push_str(&html[i..after]);
+            i = after;
+            continue;
+        };
+        let attrs = &html[after + 1..after + brace];
+        let text = &html[text_start..text_start + crel]; // comrak-escaped code text
+        out.push_str(&html[i..cstart]);
+        out.push_str(&render_code_attr(text, attrs));
+        i = after + brace + 1;
+    }
+    out.push_str(&html[i..]);
+    out
+}
+
+/// Render one attributed inline-code span (see [`render_inline_attrs`]). `text` is the
+/// code as comrak escaped it; `attrs` is the raw `{…}` body without the braces.
+fn render_code_attr(text: &str, attrs: &str) -> String {
+    let attrs = attrs.trim();
+    // `{:lang}` — inline syntax highlight (Shiki-style shorthand).
+    if let Some(lang) = attrs.strip_prefix(':') {
+        let lang = lang.trim();
+        let spans = markdown::highlight_inline(&unescape_html(text), lang);
+        return format!("<code class=\"language-{}\">{spans}</code>", esc(lang));
+    }
+    // `{.foo .bar}` — dotted class tokens. A `badge*` class makes it a badge span.
+    let classes: Vec<&str> = attrs
+        .split_whitespace()
+        .filter_map(|t| t.strip_prefix('.'))
+        .filter(|t| !t.is_empty())
+        .collect();
+    if classes.iter().any(|c| c.starts_with("badge")) {
+        let mut cls = vec!["badge"];
+        cls.extend(classes.iter().filter(|c| **c != "badge").copied());
+        return format!("<span class=\"{}\">{text}</span>", esc(&cls.join(" ")));
+    }
+    if !classes.is_empty() {
+        return format!("<code class=\"{}\">{text}</code>", esc(&classes.join(" ")));
+    }
+    format!("<code>{text}</code>") // unrecognised attr → plain inline code
+}
+
+/// Expand `:::tabs` containers (comrak `block_directive` → `<div class="tabs">` wrapping
+/// `<div class="tab LABEL">` children) into an interactive tabbed panel the frame bridge
+/// drives. The label is the directive name's trailing words; each panel keeps its already
+/// rendered body. A `.tabs` with no `.tab` children is left untouched.
+fn render_tabs(html: &str) -> String {
+    const OPEN: &str = "<div class=\"tabs\">";
+    let mut out = String::with_capacity(html.len());
+    let mut i = 0;
+    while let Some(rel) = html[i..].find(OPEN) {
+        let start = i + rel;
+        let Some((inner_start, inner_end, after)) = div_span(html, start) else {
+            break;
+        };
+        let tabs = parse_tab_children(&html[inner_start..inner_end]);
+        out.push_str(&html[i..start]);
+        if tabs.is_empty() {
+            out.push_str(&html[start..after]); // not a tab set — leave as a plain div
+        } else {
+            out.push_str(&build_tabs_widget(&tabs));
+        }
+        i = after;
+    }
+    out.push_str(&html[i..]);
+    out
+}
+
+/// The span of the `<div …>` whose opening tag starts at `open`: `(inner_start, inner_end,
+/// after_close)`, tracking nested `<div>`s. `None` if it's unbalanced (truncated input).
+fn div_span(html: &str, open: usize) -> Option<(usize, usize, usize)> {
+    let gt = open + html[open..].find('>')? + 1;
+    let mut depth = 1usize;
+    let mut j = gt;
+    while j < html.len() {
+        if html[j..].starts_with("<div") {
+            depth += 1;
+            j += 4;
+        } else if html[j..].starts_with("</div>") {
+            depth -= 1;
+            if depth == 0 {
+                return Some((gt, j, j + "</div>".len()));
+            }
+            j += "</div>".len();
+        } else {
+            j += 1;
+        }
+    }
+    None
+}
+
+/// Parse the top-level `<div class="tab …">` children of a `.tabs` container's inner HTML
+/// into `(label, body_html)`. `tab` with no label yields an empty label; a nested `tabs`
+/// div (`class="tabs"`) is skipped over, not mistaken for a tab.
+fn parse_tab_children(inner: &str) -> Vec<(String, String)> {
+    const TAB: &str = "<div class=\"tab";
+    let mut out = Vec::new();
+    let mut j = 0;
+    while let Some(rel) = inner[j..].find(TAB) {
+        let d = j + rel;
+        // Distinguish `tab`/`tab …` from `tabs`: the char after "tab" must close the
+        // word (`"`) or start a label (space).
+        let next = inner[d + TAB.len()..].chars().next();
+        let Some((is, ie, after)) = div_span(inner, d) else {
+            break;
+        };
+        if matches!(next, Some('"') | Some(' ')) {
+            let cls = attr_value(&inner[d..is], "class").unwrap_or_default();
+            let label = cls.split_whitespace().skip(1).collect::<Vec<_>>().join(" ");
+            out.push((label, inner[is..ie].trim().to_string()));
+        }
+        j = after; // skip the whole child (nested tabs included) — top-level only
+    }
+    out
+}
+
+/// Assemble the tab bar + panels from `(label, body)` pairs; the first tab starts active.
+/// The label is already comrak-escaped (it came from the div's `class`), so it is not
+/// re-escaped. The frame bridge's `tabSwitch` toggles `.active` by index.
+fn build_tabs_widget(tabs: &[(String, String)]) -> String {
+    let mut bar = String::new();
+    let mut panels = String::new();
+    for (idx, (label, body)) in tabs.iter().enumerate() {
+        let active = if idx == 0 { " active" } else { "" };
+        let label = if label.is_empty() {
+            format!("Tab {}", idx + 1)
+        } else {
+            label.clone()
+        };
+        bar.push_str(&format!(
+            "<button class=\"tab-btn{active}\" type=\"button\" data-tab=\"{idx}\">{label}</button>"
+        ));
+        // Recurse so a `:::tabs` nested inside this tab is expanded too.
+        let body = render_tabs(body);
+        panels.push_str(&format!(
+            "<div class=\"tab-panel{active}\" data-tab-panel=\"{idx}\">{body}</div>"
+        ));
+    }
+    format!(
+        "<div class=\"tabs\"><div class=\"tabs-bar\" role=\"tablist\">{bar}</div>{panels}</div>"
+    )
+}
+
 /// Split a code-group's raw body into `(info-string, code)` per inner ```` ``` ```` fence.
 fn split_group_fences(inner: &str) -> Vec<(String, String)> {
     let mut out = Vec::new();
@@ -674,6 +844,54 @@ mod tests {
                                                      // A block with no `{…}` range is left as-is (no `.cl` wrappers).
         let plain = markdown::render_html("```rust\nlet y = 2;\n```\n", Some(&h));
         assert!(!render_line_highlight(&plain).contains("class=\"cl\""));
+    }
+
+    #[test]
+    fn inline_attrs_highlight_and_badge() {
+        // `{:lang}` highlights the inline code and consumes the flag.
+        let hl = render_inline_attrs("<p>Run <code>npm ci</code>{:bash} now.</p>");
+        assert!(hl.contains("<code class=\"language-bash\">") && hl.contains("</code> now."));
+        assert!(!hl.contains("{:bash}"));
+
+        // `{.badge-green}` → a badge span that also carries the base `badge` class.
+        let bd = render_inline_attrs("<p><code>Beta</code>{.badge-green} feature.</p>");
+        assert!(bd.contains("<span class=\"badge badge-green\">Beta</span>"));
+        assert!(!bd.contains("<code>Beta</code>"));
+
+        // A brace not touching the `</code>` (a stray brace in prose) is left alone.
+        let stray = render_inline_attrs("<p><code>x</code> {y}.</p>");
+        assert!(stray.contains("<code>x</code> {y}."));
+    }
+
+    #[test]
+    fn expands_tabs() {
+        // Mimic comrak's block_directive output for `:::tabs` / `:::tab`.
+        let html = "<div class=\"tabs\">\n<div class=\"tab macOS\">\n<p>brew</p>\n</div>\n\
+                    <div class=\"tab Linux\">\n<p>apt</p>\n</div>\n</div>";
+        let out = render_tabs(html);
+        assert!(out.contains("class=\"tabs-bar\""));
+        assert!(out.contains(">macOS</button>") && out.contains(">Linux</button>"));
+        assert!(out.contains("data-tab=\"1\"") && out.contains("data-tab-panel=\"0\""));
+        assert!(out.contains("tab-btn active") && out.contains("tab-panel active"));
+        assert!(out.contains("<p>brew</p>") && out.contains("<p>apt</p>")); // bodies kept
+
+        // A multi-word label joins the trailing class tokens; unlabeled → "Tab N".
+        assert!(render_tabs(
+            "<div class=\"tabs\"><div class=\"tab Windows 11\"><p>x</p></div></div>"
+        )
+        .contains(">Windows 11</button>"));
+        assert!(
+            render_tabs("<div class=\"tabs\"><div class=\"tab\"><p>x</p></div></div>")
+                .contains(">Tab 1</button>")
+        );
+
+        // Nested tabs: the inner set expands and isn't mistaken for a tab of the outer.
+        let nested = "<div class=\"tabs\"><div class=\"tab A\">\
+                      <div class=\"tabs\"><div class=\"tab Inner\"><p>i</p></div></div>\
+                      </div></div>";
+        let no = render_tabs(nested);
+        assert!(no.contains(">A</button>") && no.contains(">Inner</button>"));
+        assert!(!no.contains(">Tab 1</button>")); // the inner `tabs` div isn't an unlabeled tab
     }
 
     #[test]

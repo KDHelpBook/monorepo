@@ -19,7 +19,7 @@ carries frontmatter, so this reference is itself a compilable docset.
 | Feature | Page |
 |---------|------|
 | Headings, paragraphs, heading anchors | [headings.md](headings.md) |
-| Bold, italic, strikethrough, inline code, line breaks | [text-formatting.md](text-formatting.md) |
+| Bold, italic, inline marks, inline-code highlight + badges | [text-formatting.md](text-formatting.md) |
 | Ordered / unordered / nested lists, task lists | [lists.md](lists.md) |
 | Links: in-page `#slug`, in-book `page-id`, cross-book, external, autolinks | [links.md](links.md) |
 | Emoji `:shortcode:` | [emoji.md](emoji.md) |
@@ -56,8 +56,9 @@ difference that matters isn't the colon count — it's the **semantics**: MDC re
 name to a **Vue component mounted at runtime** (what we can't do in a no-framework
 sandbox), while generic directives compile to plain `<div class="…">`. comrak 0.53
 **has a native `block_directive` extension** (`:::warning … :::` → `<div class="warning">`),
-which we **enable** — it powers the callout and card [directives](directives.md) with no
-custom parser. Only the *interactive* containers (tabs, steps) still need frame JS.
+which we **enable** — it powers the callout, card, tabs, and steps
+[directives](directives.md) with no custom parser. The interactive one (`:::tabs`) adds
+only a tiny frame-bridge click handler over that same `<div class>` output.
 
 **Recommendation:** don't reach for a `:::` directive parser for the code features.
 Split by shape:
@@ -70,9 +71,9 @@ Split by shape:
   post-process its verbatim body exactly like the math pass — no `render.unsafe`, no AST
   surgery, no directive parser.
 
-The static half of true `:::` **generic directives** (never MDC) now ships — callouts
-and cards (see [directives.md](directives.md)); the interactive ones (tabs / steps)
-remain a later day, when we layer frame JS over the same `<div class>` output.
+True `:::` **generic directives** (never MDC) now ship — callouts, cards, tabs, and
+steps (see [directives.md](directives.md)) — the static ones pure CSS, `:::tabs` with a
+small frame-bridge handler over the same `<div class>` output.
 
 ### Roadmap
 
@@ -84,16 +85,15 @@ Done so far: heading **anchors** + an **"On this page"** box, **emoji**, code-bl
 `` $`…`$ ``/```math → build-time MathML), **inline marks** (`==mark==`, `++ins++`,
 `^sup^`, `~sub~`, `__u__`, `||spoiler||`), **figures** (image title → `<figcaption>`),
 **description lists**, **inline footnotes** (`^[…]`), **container directives**
-(`:::note` / `:::card` callouts + cards via comrak `block_directive`), and **fenced
-blockquotes** (`>>>`).
+(`:::note` / `:::card` callouts + cards, `:::tabs` interactive tabs, `:::steps`
+walkthroughs), **fenced blockquotes** (`>>>`), and **inline-code attributes**
+(`` `x`{:lang} `` highlight, `` `x`{.badge} `` badges).
 What's left (all non-code blocks):
 
 | Want | How | Effort |
 |------|-----|--------|
-| **Interactive tabs / steps / badges** | frame-bridge JS over `:::` directives (the static container form already ships — see [directives.md](directives.md)) | medium |
 | **Diagrams** (`` ```mermaid ``) | render to **SVG at build time** (like math → MathML), so it stays static + sandbox-safe. Engine TBD — Mermaid needs node/`mmdc`; Graphviz/D2 have native CLIs | medium–large |
 | **Video / embeds** | a `:video`/`:embed` directive → sandboxed `<iframe>`/`<video>` | medium |
-| **Inline-code highlight** (`` `x`{:ts} ``) | per-block info-string flag | small (deferred) |
 
 Deliberately **out of scope**: anything needing a live framework runtime — MDC's Vue
 components, Docus's `CodePreview` live *component* output, `NuxtImg`.

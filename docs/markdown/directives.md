@@ -77,6 +77,65 @@ Renders as:
 A self-contained block: a summary, a definition, a call-out box of your own making.
 :::
 
+## Tabs
+
+`:::tabs` wraps a set of `:::tab` panels — one shown at a time, switched by clicking its
+label. The words after `tab` are the label; a panel holds any Markdown (prose, code,
+even another directive). Give the outer `tabs` fence more colons than the inner `tab`s:
+
+```md
+::::tabs
+:::tab macOS
+Install with Homebrew:
+
+`brew install foo`{:bash}
+:::
+:::tab Linux
+`apt install foo`{:bash}
+:::
+::::
+```
+
+Renders as an interactive tab strip:
+
+::::tabs
+:::tab macOS
+Install with Homebrew: `brew install foo`{:bash}
+:::
+:::tab Linux
+`apt install foo`{:bash}
+:::
+::::
+
+Tabs are the one directive that needs the viewer's frame bridge (a tiny click handler);
+everything else on this page is pure CSS. A `tab` with no label falls back to `Tab 1`,
+`Tab 2`, …
+
+## Steps
+
+`:::steps` turns an **ordered list** into a numbered walkthrough — big numerals down a
+connector line, with room for rich content under each step:
+
+```md
+:::steps
+1. **Install** the CLI.
+
+   `cargo install khb`{:bash}
+
+2. **Compile** your sources into a `.khb`.
+
+3. **Open** it in the viewer.
+:::
+```
+
+Renders as:
+
+:::steps
+1. **Install** the CLI. `cargo install khb`{:bash}
+2. **Compile** your sources into a `.khb`.
+3. **Open** it in the viewer.
+:::
+
 ## Nesting
 
 To put a directive inside another, give the **outer** fence more colons than the inner
@@ -99,6 +158,6 @@ Nested with three colons; the card uses four.
   syntax: `:::note Heading` doesn't set a heading, it just adds stray classes.
 - Callout directives and `> [!NOTE]` callouts are interchangeable; use whichever reads
   better in the source. Both compile to the same kind of box.
-- Interactive containers (tabs, collapsibles) aren't directives — code tabs use
-  [`~~~code-group`](code-blocks), and collapsible code uses the `collapse` fence flag,
-  because those need the viewer's frame bridge rather than plain CSS.
+- `:::tabs` here is for **prose** panels; to tab between *code* samples with real syntax
+  highlighting use [`~~~code-group`](code-blocks) instead. Collapsible code isn't a
+  directive either — it's the `collapse` fence flag.
