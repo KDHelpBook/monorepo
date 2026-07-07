@@ -25,23 +25,56 @@ Renders as: **bold**, *italic*, ***bold italic***, ~~strikethrough~~, `inline co
 Attribute syntax (`{.class}` on a span) is not supported either, and there are no
 inline components — see [Differences from GitHub Markdown](differences).
 
-## Highlight, underline, super- and subscript
+## Highlight
 
-Four inline marks beyond GitHub Markdown:
+Double equals signs mark text like a highlighter pen — for drawing the eye to the
+key fragment of a sentence, a value in a longer line, the part that changed.
 
 ```md
-==highlighted==, __underlined__
-H~2~O and E = mc^2^
+Set the ==id== field before anything else.
 ```
 
-Renders as: ==highlighted==, __underlined__, H~2~O and E = mc^2^.
+Renders as: Set the ==id== field before anything else.
 
-Two of them deliberately change what plain Markdown would mean:
+## Underline
+
+Double underscores underline text — useful for terms that carry a defined meaning,
+or wherever house style calls for underlining instead of italics.
+
+```md
+A __docset__ is one compiled book.
+```
+
+Renders as: A __docset__ is one compiled book.
 
 > [!IMPORTANT]
-> `__x__` is **underline** here, not bold — write bold as `**x**`. A single tilde
-> `~x~` is **subscript**, not strikethrough — that stays `~~x~~`. A literal tilde in
-> prose is escaped as `\~` (e.g. \~5 min).
+> In plain Markdown `__x__` means bold — here it means underline. Write bold with
+> asterisks only: `**x**`.
+
+## Superscript
+
+Carets raise text — exponents, ordinals, footnote-style markers in prose.
+
+```md
+E = mc^2^, the 4^th^ edition
+```
+
+Renders as: E = mc^2^, the 4^th^ edition.
+
+## Subscript
+
+Single tildes lower text — chemical formulas, variable indices.
+
+```md
+H~2~O, x~1~ … x~n~
+```
+
+Renders as: H~2~O, x~1~ … x~n~.
+
+> [!IMPORTANT]
+> In GitHub Markdown a single tilde can mean strikethrough — here it means
+> subscript; strikethrough is `~~x~~` only. A literal tilde in prose is escaped as
+> `\~` (e.g. \~5 min).
 
 ## Line breaks & rules
 
