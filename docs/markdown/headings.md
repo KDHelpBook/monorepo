@@ -41,5 +41,6 @@ Jump back to [Where to start](#where-to-start).
 - The **first H1** is used as the page title when the frontmatter has no explicit
   `title` — see [frontmatter](frontmatter).
 - Keep exactly one H1 per page (the title); start body sections at H2.
-- A page with two or more sections gets an **"On this page"** navigation box built from
-  its headings.
+- A page with two or more top-level sections automatically gets an **"On this page"**
+  navigation box built from its headings; force it with `toc: true` / `toc: false` in
+  the [frontmatter](frontmatter).

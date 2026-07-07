@@ -56,6 +56,7 @@ mod tests {
                     keywords: vec!["intro".into(), "start".into()],
                     categories: vec!["basics".into()],
                     related: vec!["adv".into(), "other-book:page".into()],
+                    toc: None,
                 },
                 SourcePage {
                     id: "adv".into(),
@@ -64,6 +65,7 @@ mod tests {
                     keywords: vec!["advanced".into()],
                     categories: vec![],
                     related: vec![],
+                    toc: None,
                 },
             ],
             toc: vec![TocNode {

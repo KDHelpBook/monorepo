@@ -24,6 +24,9 @@ pub struct SourcePage {
     pub categories: Vec<String>,
     /// Ids of related pages (within this book) shown as a "See also" footer.
     pub related: Vec<String>,
+    /// Force the on-page TOC on/off (`None` = auto). Emitted as a marker the viewer
+    /// reads; not stored as its own column.
+    pub toc: Option<bool>,
 }
 
 /// A complete docset with Markdown pages.

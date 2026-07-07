@@ -73,6 +73,10 @@ struct Frontmatter {
     /// Ids of related pages (within this book) for a "See also" footer.
     #[serde(default)]
     related: Vec<String>,
+    /// Force the on-page "On this page" table of contents on/off. Omitted → auto
+    /// (shown only when the page has several sections).
+    #[serde(default)]
+    toc: Option<bool>,
 }
 
 /// Load a source directory into a [`SourceDocset`], ready for [`crate::build::build_khb`].
@@ -244,6 +248,7 @@ fn load_pages(dir: &Path) -> Result<Vec<SourcePage>> {
             keywords: frontmatter.keywords,
             categories: frontmatter.categories,
             related: frontmatter.related,
+            toc: frontmatter.toc,
         });
     }
     Ok(pages)

@@ -33,6 +33,7 @@ Body content…
 | `keywords` | Terms for the **F1 keyword index** and full-text search weighting. |
 | `categories` | Facet tags (many-to-many). A category used here but absent from `categories.yaml` is auto-registered. |
 | `related` | Page ids for the **See also** footer — an in-book id, or a cross-book `docsetId:pageId`. |
+| `toc` | Force the on-page ["On this page"](headings) box `true`/`false`. Omitted → auto (shown only when the page has 2+ top-level sections). |
 
 ## Notes for kdhelp
 

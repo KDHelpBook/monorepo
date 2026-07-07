@@ -1545,7 +1545,8 @@ function start(
   // Build an inline "On this page" nav from the page's headings (they carry ids from
   // the compiler's header anchors). The `#slug` links reuse the in-page anchor path
   // (rewriteFrameLinks → data-anchor → frame scroll). Skipped for short pages.
-  function insertPageToc(root: ParentNode): void {
+  function insertPageToc(root: ParentNode, pref?: "on" | "off"): void {
+    if (pref === "off") return;
     // header_ids puts the slug on an empty `<a class="anchor" id="…">` inside the
     // heading, not on the heading element — read the id from there.
     const items = [...root.querySelectorAll<HTMLElement>("h2, h3")]
@@ -1555,7 +1556,10 @@ function start(
         text: (h.textContent ?? "").trim(),
       }))
       .filter((x) => x.id && x.text);
-    if (items.length < 2) return;
+    // `toc: true` shows it for any sectioned page; auto needs ≥2 top-level sections
+    // ("more topics") — H3s are listed but don't count toward that threshold.
+    const topics = items.filter((x) => x.h.tagName === "H2").length;
+    if (pref === "on" ? items.length < 1 : topics < 2) return;
 
     const nav = document.createElement("nav");
     nav.className = "page-toc";
@@ -1776,14 +1780,21 @@ function start(
       // Build in a detached container (parent origin — full DOM access), then hand
       // the serialized HTML to the sandboxed frame, which isolates the untrusted
       // docset markup from the app's origin.
+      // A leading marker (from the page's `toc` frontmatter) forces the on-page TOC
+      // on/off; absent → auto. Read it, then strip it before rendering.
+      const tocPref = /^<!--kdhelp:toc=(on|off)-->/.exec(page.bodyHtml)?.[1] as
+        | "on"
+        | "off"
+        | undefined;
+      const bodyHtml = page.bodyHtml.replace(/^<!--kdhelp:toc=(on|off)-->/, "");
       const holder = document.createElement("div");
-      holder.innerHTML = decorate(parkAssetUrls(page.bodyHtml), id);
+      holder.innerHTML = decorate(parkAssetUrls(bodyHtml), id);
       stripDangerous(holder);
       await resolveAssets(holder, id); // parked asset: → data: (may stream)
       if (token !== loadSeq) return;
       applyHighlight(holder);
       enhanceCodeBlocks(holder); // filename bar + copy button
-      insertPageToc(holder); // "On this page" nav (before link rewriting)
+      insertPageToc(holder, tocPref); // "On this page" nav (before link rewriting)
       rewriteFrameLinks(holder, id);
       frame.srcdoc = frameDoc(holder.innerHTML);
     } else {

@@ -15,9 +15,18 @@ pub fn render(src: &SourceDocset) -> RenderedDocset {
         .iter()
         .map(|p| {
             // Rewrite `assets/…` image/link targets to the `asset:` scheme so the
-            // viewer resolves them from the docset's attachment store.
-            let body_html =
-                assets::rewrite_asset_urls(&markdown::render_html(&p.markdown, Some(&highlighter)));
+            // viewer resolves them from the docset's attachment store. An explicit
+            // `toc` frontmatter is carried as a leading marker the viewer reads to
+            // force the on-page table of contents on/off (absent → auto).
+            let toc_marker = match p.toc {
+                Some(true) => "<!--kdhelp:toc=on-->",
+                Some(false) => "<!--kdhelp:toc=off-->",
+                None => "",
+            };
+            let body_html = format!(
+                "{toc_marker}{}",
+                assets::rewrite_asset_urls(&markdown::render_html(&p.markdown, Some(&highlighter)))
+            );
             // Plain text comes from an *unhighlighted* render — syntect's per-token
             // spans would otherwise splatter the search text with stray spaces.
             let plain = markdown::html_to_plain(&markdown::render_html(&p.markdown, None));
