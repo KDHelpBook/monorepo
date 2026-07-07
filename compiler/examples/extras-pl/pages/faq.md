@@ -13,4 +13,4 @@ Zawsze. Indeks jest w docsecie; przy zapytaniu nic nie jest pobierane.
 
 **Czy mogę łączyć kilka docsetów?**
 O to właśnie chodzi. Wiele książek wczytuje się razem i łączy w jedną kolekcję —
-jedno drzewo, jeden indeks, jedno wyszukiwanie — jak dawne kolekcje MS Help 2.
+jedno drzewo, jeden indeks, jedno wyszukiwanie — jak dawne klasyczne kolekcje pomocy.

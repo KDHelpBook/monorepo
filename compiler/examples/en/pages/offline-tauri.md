@@ -5,8 +5,8 @@ categories: [distribution, reference]
 ---
 # Offline desktop app (Tauri)
 
-Want a real desktop application with a native window and menus, like the original
-`dexplore.exe`? Wrap the same viewer in **Tauri**.
+Want a real desktop application with a native window and menus, like a classic
+desktop help viewer? Wrap the same viewer in **Tauri**.
 
 Because the entire data engine is a Rust crate that also compiles natively, Tauri
 reads `.khb` docsets straight from disk with native SQLite — no WebAssembly and no

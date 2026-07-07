@@ -4,7 +4,7 @@ Build it from the workspace:
 
 ```bash
 cd compiler
-cargo build --release -p kdhelp-cli   # target/release/kdhelp
+cargo build --release -p kdhelp-cli   # target/release/khb
 ```
 
 ## Authoring a source directory
@@ -113,9 +113,9 @@ them in a sibling `.khba` instead (see below).
 ### `compile` — source → docset
 
 ```bash
-kdhelp compile <src-dir> -o out.khb            # SQLite docset (default)
-kdhelp compile <src-dir> -o out.khbb --format khbb
-kdhelp compile <src-dir> -o out.khb --assets sidecar   # attachments -> out.khba
+khb compile <src-dir> -o out.khb            # SQLite docset (default)
+khb compile <src-dir> -o out.khbb --format khbb
+khb compile <src-dir> -o out.khb --assets sidecar   # attachments -> out.khba
 ```
 
 `--assets embed` (default) stores attachments inside the `.khb`; `--assets sidecar`
@@ -128,8 +128,8 @@ backed by several `.khba` packs — `pack`/`patch` pick up `out.khba` and any
 Direction is inferred from the file extensions:
 
 ```bash
-kdhelp convert out.khb  -o out.khbb    # down-convert to the binary form
-kdhelp convert out.khbb -o out.khb     # rebuild the SQLite docset
+khb convert out.khb  -o out.khbb    # down-convert to the binary form
+khb convert out.khbb -o out.khb     # rebuild the SQLite docset
 ```
 
 ### `pack` — assemble a publishable distribution
@@ -140,7 +140,7 @@ copies any sibling attachment packs (`foo.khba`, `foo.<tag>.khba`) and records t
 in the docset's `attachments` array.
 
 ```bash
-kdhelp pack --viewer viewer-ts/dist \
+khb pack --viewer viewer-ts/dist \
             --docset docs.khb --docset extras.khb \
             --profile reader \
             -o publish/
@@ -178,7 +178,7 @@ backend. Nothing here is loaded by the viewer.
 ### `patch` — update a built distribution
 
 ```bash
-kdhelp patch publish/ --docset new.khb    # add or replace, updating docsets.json
+khb patch publish/ --docset new.khb    # add or replace, updating docsets.json
 ```
 
 `patch` accepts `--mode` and `--stream` like `pack`, applied to the docsets being
@@ -192,6 +192,6 @@ added/replaced (existing entries are untouched).
 reports how little it downloaded.
 
 ```bash
-kdhelp inspect out.khb
-kdhelp inspect https://example.com/docs/en.khb    # streamed; needs a Range-capable host
+khb inspect out.khb
+khb inspect https://example.com/docs/en.khb    # streamed; needs a Range-capable host
 ```

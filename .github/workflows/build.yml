@@ -65,7 +65,7 @@ jobs:
           VERSION=$(sed -n 's/^version = "\(.*\)"$/\1/p' compiler/Cargo.toml | head -n1)
           NAME="kdhelp-v${VERSION}-${{ matrix.target }}"
           mkdir "$NAME"
-          cp "compiler/target/${{ matrix.target }}/release/kdhelp" README.md LICENSE "$NAME/"
+          cp "compiler/target/${{ matrix.target }}/release/khb" README.md LICENSE "$NAME/"
           tar czf "$NAME.tar.gz" "$NAME"
 
       - name: Package (zip)
@@ -75,7 +75,7 @@ jobs:
           $version = (Select-String -Path compiler/Cargo.toml -Pattern '^version = "(.*)"$').Matches[0].Groups[1].Value
           $name = "kdhelp-v$version-${{ matrix.target }}"
           New-Item -ItemType Directory -Path $name | Out-Null
-          Copy-Item "compiler/target/${{ matrix.target }}/release/kdhelp.exe", README.md, LICENSE $name
+          Copy-Item "compiler/target/${{ matrix.target }}/release/khb.exe", README.md, LICENSE $name
           Compress-Archive -Path $name -DestinationPath "$name.zip"
 
       - uses: actions/upload-artifact@v7
@@ -132,7 +132,7 @@ jobs:
       - name: Compile docs/markdown
         shell: bash
         run: |
-          BIN=compiler/target/release/kdhelp
+          BIN=compiler/target/release/khb
           mkdir -p out
           TAG="${{ inputs.release_tag }}"
           if [[ -n "$TAG" ]]; then
@@ -170,7 +170,7 @@ jobs:
         with:
           name: docs-khb
           path: assets
-      # The viewer dist ships as its own versioned archive: `kdhelp pack`
+      # The viewer dist ships as its own versioned archive: `khb pack`
       # needs a built viewer, so a downloaded CLI alone couldn't assemble a
       # distribution without it.
       - uses: actions/download-artifact@v8

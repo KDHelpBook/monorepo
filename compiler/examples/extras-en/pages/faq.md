@@ -13,4 +13,4 @@ Always. The index ships inside the docset; nothing is fetched at query time.
 
 **Can I combine several docsets?**
 That is the point. Multiple books load together and merge into one collection —
-one tree, one index, one search — like the old MS Help 2 collections.
+one tree, one index, one search — like the old classic help collections.

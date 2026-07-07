@@ -5,8 +5,8 @@ categories: [distribution, reference]
 ---
 # Aplikacja desktopowa (Tauri)
 
-Chcesz prawdziwą aplikację z natywnym oknem i menu, jak oryginalny
-`dexplore.exe`? Owiń tę samą przeglądarkę w **Tauri**.
+Chcesz prawdziwą aplikację z natywnym oknem i menu, jak klasyczny desktopowy
+czytnik pomocy? Owiń tę samą przeglądarkę w **Tauri**.
 
 Ponieważ cały silnik danych to crate w Rust, który kompiluje się też natywnie,
 Tauri czyta docsety `.khb` wprost z dysku, natywnym SQLite — bez WebAssembly

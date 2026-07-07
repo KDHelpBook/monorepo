@@ -1,6 +1,6 @@
 /**
  * The `docsets.json` manifest a packed distribution ships (written by
- * `kdhelp pack` / `patch`): the bundled docsets the viewer loads on start.
+ * `khb pack` / `patch`): the bundled docsets the viewer loads on start.
  * The types and the transport rules live here (not in main.ts) so they are
  * unit-testable without a DOM.
  */
@@ -18,7 +18,7 @@ export interface ManifestEntry {
   /** Sidecar `.khba` attachment packs (paths relative to the dist root). */
   attachments?: string[];
   /** Opt-in page-level streaming: open this docset over HTTP `Range` instead of
-   *  fetching it whole (worth it for big books only — set by `kdhelp pack
+   *  fetching it whole (worth it for big books only — set by `khb pack
    *  --stream`). A preference, not a promise: the viewer probes the host and
    *  falls back to the whole fetch when Range isn't honoured. */
   streaming?: boolean;

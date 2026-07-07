@@ -1,9 +1,10 @@
 # kdhelp — guide for Claude Code
 
-kdhelp is a documentation reader that recreates the look & feel of **Microsoft
-Document Explorer** (MS Help 2.x / `dexplore.exe`), backed by a modern
-toolchain. Content is compiled into a self-contained **`.khb`** docset (a SQLite
-database) and rendered by a TypeScript viewer.
+**KD Help Book** (the app is the *KD Help Book Viewer*) is a documentation reader with
+the look & feel of a **classic desktop help viewer** (early-2010s IDE aesthetic), backed
+by a modern toolchain. Content is compiled into a self-contained **`.khb`** docset
+("KD Help Book"; a SQLite database) and rendered by a TypeScript viewer. `kdhelp` remains
+the repo/crate name and codebase shorthand; the CLI binary is **`khb`**.
 
 ## Monorepo layout
 - `compiler/` — Rust **Cargo workspace** (the native data engine):
@@ -97,18 +98,18 @@ that the TypeScript viewer reached parity; it lives in git history (commit
 - **"See also" (`related` frontmatter, `related` table)**: per-page curated links,
   each a local page id or a cross-book `docsetId:localId`; the viewer renders a
   footer and hides links to books that aren't loaded.
-- **Multiple docsets merge into one** TOC/index/search (MS Help 2 collections);
-  ids namespaced `docsetId:pageId`. Docsets group by `language`.
+- **Multiple docsets merge into one** TOC/index/search (the classic help-collection
+  model); ids namespaced `docsetId:pageId`. Docsets group by `language`.
 - **Families (`meta.collection`)**: books sharing a `collection` merge; several
   families each render as a top-level folder in the TOC (only when >1 family loaded).
   Index/search union across products, with a "Filter by product:" scope to narrow.
   Category filter prunes the tree (keeps structure), doesn't flatten it.
 - **Streaming / online**: `core`'s Range-VFS (`Docset::open_reader`) + the CLI's
-  `HttpRangeReader`/`kdhelp inspect <url>` stream a remote `.khb` page-by-page — and the
+  `HttpRangeReader`/`khb inspect <url>` stream a remote `.khb` page-by-page — and the
   **browser now streams too** (async-VFS wa-sqlite, `StreamingDocset`), reading only
   touched pages with real FTS5. Online/hybrid loading (*File → Open from URL…*, remotes
   persisted as URLs, merged with bundled+uploaded) streams a book when its *Stream* box
-  is checked, or a `docsets.json` entry carries `"streaming": true` (`kdhelp pack
+  is checked, or a `docsets.json` entry carries `"streaming": true` (`khb pack
   --stream` — the published Pages site enables it for every book); whole-file fetch stays
   the default/fallback for non-Range hosts (`docs/streaming.md`).
 - **i18n from the start** (EN default + PL): UI strings in locale files; content
@@ -117,9 +118,9 @@ that the TypeScript viewer reached parity; it lives in git history (commit
   `pack` builds a publishable dist (viewer + docsets + `docsets.json`); `patch`
   updates one in place. Profiles: `reader` (external sources + PWA on) vs
   `bundled --lock` (embedded only, PWA off) — driven by `config.json`.
-- **Visual fidelity to MS Document Explorer** (VS 2008 palette): faithful chrome,
-  **no fake window titlebar** (that's system chrome), the **menu is fully
-  functional**, and the toolbar has **only functional buttons** — no dummy
+- **Visual fidelity to a classic desktop help viewer** (early-2010s IDE palette):
+  faithful chrome, **no fake window titlebar** (that's system chrome), the **menu is
+  fully functional**, and the toolbar has **only functional buttons** — no dummy
   controls anywhere.
 - Code, comments, README, and this file are in **English**. `HANDOFF.md` stays
   Polish (historical).

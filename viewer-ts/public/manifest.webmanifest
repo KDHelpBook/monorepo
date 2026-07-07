@@ -1,7 +1,7 @@
 {
-  "name": "kdhelp — documentation reader",
-  "short_name": "kdhelp",
-  "description": "A documentation reader in the spirit of Microsoft Document Explorer.",
+  "name": "KD Help Book Viewer",
+  "short_name": "KD Help Book",
+  "description": "A self-contained documentation reader with a classic desktop help-viewer feel.",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",

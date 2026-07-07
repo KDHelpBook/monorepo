@@ -2,7 +2,7 @@
 """Generate a large lorem-ipsum test docset source tree (pages + graphics).
 
 Deterministic (seeded), so re-running produces byte-identical output. Emits the
-directory layout `kdhelp compile` expects — docset.toml, categories.yaml,
+directory layout `khb compile` expects — docset.toml, categories.yaml,
 toc.yaml, pages/*.md, assets/*.{svg,png} — sized big enough (~40 pages, mixed
 SVG + PNG graphics) to make page-level streaming savings visible.
 

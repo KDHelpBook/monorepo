@@ -42,7 +42,7 @@ facet** (`categories`), and the **`asset:` scheme** with embedded/sidecar packs.
 Components) — `::block` / `:inline` syntax that renders **Vue components at runtime**.
 That is the crux of why MDC is *not* the right target for kdhelp:
 
-- kdhelp compiles to **static HTML** and renders it in a **sandboxed iframe with no
+- KD Help Book compiles to **static HTML** and renders it in a **sandboxed iframe with no
   framework** and deliberately restricted JS. MDC's value *is* the live Vue runtime —
   we'd have to reimplement every component as a compile-time HTML transform, and the
   interactive ones (tabs, accordion, copy button, code preview) need JS in the very

@@ -2,7 +2,7 @@
 
 The viewer is a static web app, so it runs unchanged inside a **[Tauri](https://tauri.app)**
 window to give an offline desktop application with a native window and menus — in
-the spirit of the original `dexplore.exe`.
+the spirit of a classic desktop help viewer.
 
 Two things are worth knowing:
 
@@ -25,8 +25,8 @@ Two things are worth knowing:
    ```bash
    cd viewer-ts && npm run build
    cd ..
-   compiler/target/release/kdhelp compile compiler/examples/en -o out/en.khb
-   compiler/target/release/kdhelp pack --profile bundled --lock \
+   compiler/target/release/khb compile compiler/examples/en -o out/en.khb
+   compiler/target/release/khb pack --profile bundled --lock \
      --viewer viewer-ts/dist --docset out/en.khb -o desktop-dist
    ```
 

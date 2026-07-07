@@ -20,4 +20,4 @@ Declare them in `categories.yaml`:
 
 …then tag pages in frontmatter with `categories: [basics, reference]`. The viewer
 uses them to filter the tree and browse by topic, echoing the collection filters
-of the original Document Explorer.
+of a classic desktop help viewer.

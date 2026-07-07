@@ -1,10 +1,10 @@
 /*
-  kdhelp viewer — Microsoft Document Explorer (VS 2008) look & feel.
+  kdhelp viewer — classic desktop help-viewer look & feel (early-2010s IDE palette).
   Ported from the original single-file prototype. No window titlebar (that is
   system chrome); the app shell is a 100dvh flex column.
 */
 :root {
-  /* VS 2008 / Document Explorer palette */
+  /* Classic IDE help-viewer palette */
   --title-top: #3d75bd;
   --title-bot: #1f4d8f;
   --chrome-top: #eef3fa;
@@ -21,7 +21,7 @@
   --link-visited: #7a3ea0;
   --text: #1b1b1b;
   --muted: #5b6675;
-  --swoosh: #e8651e; /* MSDN accent orange */
+  --swoosh: #e8651e; /* accent orange (the chrome's warm highlight) */
   --content-h: #1a3d6b;
   --code-bg: #f4f7fb;
   --code-border: #d7e0ee;
@@ -64,7 +64,7 @@ textarea {
 }
 
 /* App window — fills the whole viewport edge-to-edge (like a maximized
-   Document Explorer), independent of host height. */
+   classic help viewer), independent of host height. */
 .window {
   height: 100dvh;
   display: flex;
@@ -1192,7 +1192,7 @@ textarea {
   .tbtn.more-btn {
     display: inline-flex;
   }
-  /* Reclaim a whole row of scarce vertical space: the kd-help:// address bar is
+  /* Reclaim a whole row of scarce vertical space: the khb:// address bar is
      rarely typed on a phone (you navigate by tree/search/links, and Share copies
      the link). */
   .addressbar {

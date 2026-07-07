@@ -3,7 +3,7 @@
 > **Status: streaming is proven on every tier — native, HTTP, and now the
 > browser.** `compiler/core` has a read-only SQLite VFS (`vfs.rs`):
 > `Docset::open_reader` streams only the pages a query touches (a 2 MB docset reads
-> ~15 % for open + TOC + one page + one search), and the CLI's `kdhelp inspect
+> ~15 % for open + TOC + one page + one search), and the CLI's `khb inspect
 > <url>` reads a remote `.khb` over HTTP `Range`. The viewer has **online / hybrid**
 > loading (*File → Open from URL…*, persisted remotes merged with bundled +
 > uploaded). And the browser now **streams too**: *File → Open from URL…* has a
@@ -55,7 +55,7 @@ Streaming needs a **SQLite VFS over byte ranges**:
   lives in the CLI (`kdhelp-cli`'s `HttpRangeReader`, a ~30-line `ureq` impl:
   `read_at` → `GET` with a `Range:` header; `size` from `Content-Range`) — kept out
   of `core`'s dependencies so each consumer picks its own client.
-  **`kdhelp inspect <url>`** opens a remote `.khb` this way; e.g. it reads a docset's
+  **`khb inspect <url>`** opens a remote `.khb` this way; e.g. it reads a docset's
   full metadata by fetching ~1×64 KiB block, and a 2 MB docset streams ~15 % for
   open + TOC + one page + one search.
 - **Browser — built and measured (with FTS5).** `viewer-ts/src/data/streaming.ts`
@@ -118,10 +118,10 @@ adds a remote docset by URL; it is persisted (as a URL, re-fetched each session 
 can mix a product's own docs with remote ones. Its **"Stream"** checkbox chooses the
 transport: unchecked fetches the `.khb` whole (works on any CORS host); checked opens
 it **page-by-page over `Range`** through the browser async-VFS engine — the same
-page-level streaming that `kdhelp inspect <url>` / Tauri do natively.
+page-level streaming that `khb inspect <url>` / Tauri do natively.
 
 **Bundled books can stream too.** A `docsets.json` entry may carry
-`"streaming": true` (written by `kdhelp pack`/`patch` `--stream`): the viewer then
+`"streaming": true` (written by `khb pack`/`patch` `--stream`): the viewer then
 opens that bundled book page-by-page over `Range` from the site's own `docsets/`
 folder instead of downloading it whole — including in a locked `bundled --lock`
 build, which never reaches the remote-sources path. The negotiation mirrors a
@@ -188,9 +188,9 @@ For the desktop app, stream bytes to the webview through a **custom URI scheme**
   downloads stream instead of being inlined whole as a `data:` URL (which is what the
   browser build does today for simplicity).
 
-## Online / hybrid (the MS Help model)
+## Online / hybrid (the classic help-viewer model)
 
-MS Document Explorer could run local-only, online, or "local first, then online".
+A classic desktop help viewer could run local-only, online, or "local first, then online".
 The same three modes fall out of the seams above:
 
 | Mode | How |
@@ -206,7 +206,7 @@ small fully-fetched index for a remote book).
 ## Summary of what to build, in order
 
 1. A Range-VFS SQLite loader. **✅ Native + HTTP done** (`core/src/vfs.rs` +
-   `Docset::open_reader`; the CLI's `HttpRangeReader` + `kdhelp inspect <url>`).
+   `Docset::open_reader`; the CLI's `HttpRangeReader` + `khb inspect <url>`).
 2. Remote docsets in the viewer. **✅ Done** — *File → Open from URL…* + persisted
    remotes, merged into the collection (online / hybrid). Whole-file fetch is the
    default transport here; the **Stream** checkbox opts into page-level streaming
@@ -224,7 +224,7 @@ small fully-fetched index for a remote book).
    618 KB file to open + read a page), and its bm25 FTS5 hits interleave with the
    sql.js books (per-book score normalization keeps the merge fair). Opt-in via *File →
    Open from URL… → Stream* for remotes, or `"streaming": true` in `docsets.json`
-   (`kdhelp pack --stream`) for bundled books; the engine is code-split so
+   (`khb pack --stream`) for bundled books; the engine is code-split so
    non-streaming sessions never load it. Whole-file (step 2) stays the default and
    the fallback for non-Range hosts.
 4. Tauri `khb-asset://` protocol with `Range` support for streamed media.

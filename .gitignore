@@ -11,7 +11,7 @@
 /compiler/wasm/pkg/
 /viewer-ts/src/wasm/
 
-# Publishable distributions (produced by `kdhelp pack`)
+# Publishable distributions (produced by `khb pack`)
 /publish/
 /_site/
 

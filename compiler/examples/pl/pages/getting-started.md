@@ -5,11 +5,11 @@ categories: [basics]
 ---
 # Witaj w kdhelp
 
-*Przeglądarka dokumentacji w duchu Microsoft Document Explorer.*
+*Przeglądarka dokumentacji w duchu klasycznego desktopowego czytnika pomocy.*
 
 kdhelp kompiluje Twoją dokumentację do samowystarczalnego pliku **`.khb`** — bazy
 SQLite z gotowym indeksem pełnotekstowym — i wyświetla ją w szybkiej przeglądarce
-z interfejsem w stylu MS Help 2: drzewem spisu treści, indeksem słów kluczowych
+z interfejsem w stylu klasycznego czytnika pomocy: drzewem spisu treści, indeksem słów kluczowych
 (F1), wyszukiwarką offline, ulubionymi i kartami.
 
 ## Od czego zacząć
@@ -19,4 +19,4 @@ z interfejsem w stylu MS Help 2: drzewem spisu treści, indeksem słów kluczowy
 - [Pakowanie](packaging) opisuje przygotowanie witryny do publikacji.
 
 > Można wczytać wiele docsetów naraz — łączą się w jeden spis treści, indeks
-> i wyszukiwarkę, dokładnie jak kolekcje MS Help 2.
+> i wyszukiwarkę, dokładnie jak klasyczne kolekcje pomocy.

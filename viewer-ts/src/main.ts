@@ -277,7 +277,7 @@ async function bootstrap(): Promise<void> {
   const extraOf = (id: string): string[] => extraPacks[id] ?? [];
 
   // Bundled docsets are whole-fetched by default; an entry marked
-  // `"streaming": true` (kdhelp pack --stream) opens page-by-page over HTTP
+  // `"streaming": true` (khb pack --stream) opens page-by-page over HTTP
   // Range instead — even in a locked build, which never reaches the remotes
   // path above. Same negotiation as a remote: the host must honour Range and a
   // cheap streamed peek must succeed, else fall back to the whole fetch.
@@ -686,7 +686,7 @@ function start(
   let filterProduct = ""; // family/collection scope (union by default)
   let fontSize = loadFontSize(13);
   // Terms to highlight in the opened page — set when a search result is clicked,
-  // persisted across navigation (like MS Document Explorer) until explicitly cleared.
+  // persisted across navigation (classic help-viewer behaviour) until explicitly cleared.
   let highlightTerms: string[] = [];
 
   const escapeRe = (t: string): string =>
@@ -854,7 +854,7 @@ function start(
         });
       } else {
         // Desktop folder-page: single-click opens its page, double-click expands
-        // (MS Help style); the +/− twisty toggles it too.
+        // (classic help-viewer style); the +/− twisty toggles it too.
         row.addEventListener("dblclick", (e) => {
           e.preventDefault();
           toggle();
@@ -1166,7 +1166,7 @@ function start(
     statusCount.textContent = s.searchResults(results.length);
   }
 
-  // ---- Full Search page (roomy results in the document area, dexplore-style) ----
+  // ---- Full Search page (roomy results in the document area, help-viewer style) ----
   // Open (or focus) the Search page tab for `query`, keeping any reading tab.
   function openSearchPage(query: string): void {
     const existing = tabs.find((t) => t.id === SEARCH_ID);
@@ -1271,7 +1271,7 @@ function start(
 
   function renderSearchPage(): void {
     const query = tabs[active]?.query ?? "";
-    document.title = `${s.search} — kdhelp`;
+    document.title = `${s.search} — KD Help Book`;
     address.value = `search:${query}`;
     const cats = collection.categories();
     const products = collection.products();
@@ -1848,9 +1848,9 @@ function start(
     }
     // Hide the app-UI overlay so the (always-visible) frame shows through.
     content.style.display = "none";
-    document.title = `${title} — kdhelp`;
+    document.title = `${title} — KD Help Book`;
     const { docsetId, localId } = collection.split(id);
-    address.value = `kd-help://${docsetId}/${localId}.htm`;
+    address.value = `khb://${docsetId}/${localId}.htm`;
     renderTabs();
     updateFavBtn();
     if (mode === "contents") revealCurrent();
@@ -2020,8 +2020,8 @@ function start(
       .join("");
     bg.innerHTML =
       '<div style="width:420px;background:var(--chrome-top);border:1px solid #17335c;border-radius:3px;box-shadow:0 12px 40px rgba(0,0,0,.5);overflow:hidden">' +
-      '<div style="background:linear-gradient(180deg,var(--title-top),var(--title-bot));color:#fff;font-weight:bold;padding:6px 10px">About kdhelp</div>' +
-      '<div style="padding:16px 18px;line-height:1.6"><div style="font-size:15px;font-weight:bold;color:var(--content-h)">kdhelp</div>' +
+      `<div style="background:linear-gradient(180deg,var(--title-top),var(--title-bot));color:#fff;font-weight:bold;padding:6px 10px">${esc(s.about)}</div>` +
+      '<div style="padding:16px 18px;line-height:1.6"><div style="font-size:15px;font-weight:bold;color:var(--content-h)">KD Help Book</div>' +
       `<div>${esc(s.aboutTagline)}</div>` +
       `<p style="color:#5b6675;margin:.8em 0 .3em">${esc(s.aboutLanguage)} <b>${esc(collection.language)}</b></p>` +
       `<div style="font-size:11px;color:#5b6675">${bookLines}</div></div>` +
@@ -2450,7 +2450,7 @@ function start(
   address.addEventListener("keydown", (e) => {
     if (e.key !== "Enter") return;
     const v = address.value.trim();
-    const m = v.match(/kd-help:\/\/([^/]+)\/([^/]+?)(?:\.htm)?$/);
+    const m = v.match(/khb:\/\/([^/]+)\/([^/]+?)(?:\.htm)?$/);
     if (m) openPage(`${m[1]}:${m[2]}`);
     else openPage(v.includes(":") ? v : collection.resolveLink(currentId, v));
   });

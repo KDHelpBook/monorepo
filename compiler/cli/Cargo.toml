@@ -1,6 +1,6 @@
 [package]
 name = "kdhelp-cli"
-description = "kdhelp command-line tool: compile / pack / patch / convert"
+description = "KD Help Book command-line tool (khb): compile / pack / patch / convert"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,7 +8,7 @@ authors.workspace = true
 repository.workspace = true
 
 [[bin]]
-name = "kdhelp"
+name = "khb"
 path = "src/main.rs"
 
 [dependencies]

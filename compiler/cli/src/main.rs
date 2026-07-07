@@ -1,4 +1,4 @@
-//! `kdhelp` — the command-line tool.
+//! `khb` — the KD Help Book command-line tool.
 //!
 //! Subcommands: `compile` (source → `.khb`/`.khbb`), `convert` (`.khb` ⇄ `.khbb`),
 //! `pack` (assemble a publishable distribution), `patch` (update one in place) and
@@ -18,7 +18,11 @@ use crate::http::HttpRangeReader;
 use crate::publish::{pack, patch, PackOptions};
 
 #[derive(Parser)]
-#[command(name = "kdhelp", version, about = "kdhelp docset compiler & publisher")]
+#[command(
+    name = "khb",
+    version,
+    about = "KD Help Book — docset compiler & publisher"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,

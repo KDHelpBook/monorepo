@@ -19,4 +19,4 @@ Zadeklaruj je w `categories.yaml`:
 
 …a następnie oznacz strony we frontmatterze: `categories: [basics, reference]`.
 Przeglądarka używa ich do zawężania drzewa i przeglądania po temacie — jak filtry
-kolekcji w oryginalnym Document Explorerze.
+kolekcji w klasycznym desktopowym czytniku pomocy.

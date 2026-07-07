@@ -1,10 +1,10 @@
 # Collections, languages & profiles
 
-## Collections — merging docsets (MS Help 2 style)
+## Collections — merging docsets (classic desktop help style)
 
 The viewer can load several docsets at once and **merge them into one** table of
 contents, index, full-text search, and category facet — the modern equivalent of
-MS Help 2 collections.
+classic help collections.
 
 Page ids are namespaced as **`docsetId:localId`** so books never collide. A few
 consequences:
@@ -13,7 +13,7 @@ consequences:
   point at pages in several books).
 - Search runs over every book and merges the ranked results.
 - In-content `#localId` links resolve **within the same book**.
-- The address bar reads `ms-help://docsetId/localId.htm`.
+- The address bar reads `khb://docsetId/localId.htm`.
 
 ## Families — one product vs. many
 
@@ -54,7 +54,7 @@ composes with it the same way.
 
 The viewer loads, per language:
 
-1. **Bundled** docsets listed in `docsets.json` (written by `kdhelp pack`).
+1. **Bundled** docsets listed in `docsets.json` (written by `khb pack`).
 2. **Uploaded** docsets the user opened via *File → Open docset…*, persisted in
    the browser's IndexedDB and restored on the next visit.
 3. **Remote** docsets added via *File → Open docset from URL…* — persisted as a URL
@@ -124,7 +124,7 @@ decompressed after fetch — so any file can be compressed independently. An opt
 [the format spec](format.md#attachments-assets--khba)); the viewer opens them beside
 the docset and routes assets through the `.khb`'s index.
 
-An optional `"streaming": true` (written by `kdhelp pack/patch --stream`) marks a
+An optional `"streaming": true` (written by `khb pack/patch --stream`) marks a
 bundled docset for **page-level streaming**: the viewer opens it (and its packs)
 over HTTP `Range` instead of downloading the whole file — worth it for big books,
 and available even in a locked `bundled` build. It is a preference, not a promise:
@@ -178,7 +178,7 @@ when you select 1.0.
 
 ## Distribution profiles
 
-`config.json` (written by `kdhelp pack`) drives two profiles:
+`config.json` (written by `khb pack`) drives two profiles:
 
 | Profile | `externalSources` | `pwa` | Use |
 |---------|-------------------|-------|-----|

@@ -94,7 +94,7 @@ jobs:
             || { echo "::error::no viewer-dist artifact found — run build.yml first"; exit 1; }
           mkdir -p cli
           tar xzf cli-dl/*.tar.gz -C cli --strip-components=1
-          BIN="$PWD/cli/kdhelp"
+          BIN="$PWD/cli/khb"
           "$BIN" --version
           echo "BIN=$BIN" >> "$GITHUB_ENV"
 

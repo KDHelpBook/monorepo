@@ -1,13 +1,14 @@
-# kdhelp
+# KD Help Book
 
-A documentation reader in the spirit of **Microsoft Document Explorer** — the
-MSDN Library viewer that shipped with Visual Studio 2008 (`dexplore.exe`).
-Period-authentic chrome, modern engine.
+**KD Help Book** — a documentation reader with the look & feel of a **classic desktop
+help viewer** (an early-2010s IDE aesthetic). Period-authentic chrome, modern engine.
+(`kdhelp` is the repo/codebase name; the CLI binary is **`khb`**, and a compiled docset
+is a **`.khb`** — a "KD Help Book".)
 
 Write your docs, compile them into a self-contained **`.khb`** docset (a SQLite
 database with a prebuilt full-text index), and read them in a fast web viewer
 that can **merge multiple docsets into one** table of contents, index, and
-search — just like MS Help 2 collections.
+search — the way classic help collections did.
 
 ## Repository layout
 
@@ -55,8 +56,8 @@ npm run dev
 
 ## Distribution
 
-`kdhelp pack` assembles a ready-to-host static distribution (viewer + docsets +
-a `docsets.json` manifest); `kdhelp patch` updates an already-built one without
+`khb pack` assembles a ready-to-host static distribution (viewer + docsets +
+a `docsets.json` manifest); `khb patch` updates an already-built one without
 rebuilding the viewer. Two profiles:
 
 - **`reader`** — the general viewer: users can open/upload other docsets; PWA on.
