@@ -1,0 +1,94 @@
+name: PR docs preview
+
+# Builds a pull request's CLI + viewer + documentation and publishes the packed
+# site to a per-PR subfolder of this repo's gh-pages branch, so reviewers can
+# open the *compiled* docs straight from the PR. Opt-in per PR: it runs only
+# while the PR carries the `preview` label (building the whole toolchain on
+# every push would be wasteful). Removing the label — or closing the PR — tears
+# the preview down again.
+#
+# Served at https://kdhelpbook.github.io/monorepo/pr-preview/pr-<N>/ — a project
+# subpath, which the viewer handles natively (Vite base "./", and the llms/
+# sitemap hooks are subpath-safe). This is entirely separate from production,
+# which is deployed from the KDHelpBook/kdhelpbook.github.io repo.
+#
+# Prerequisite (one-time, done outside this file): the repo's Pages source must
+# be "Deploy from a branch → gh-pages / root". Fork PRs get a read-only token
+# and so cannot deploy — previews are for same-repo branches.
+
+on:
+  pull_request:
+    types: [opened, reopened, labeled, unlabeled, synchronize, closed]
+
+concurrency:
+  group: pr-preview-${{ github.event.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write # push the built site to the gh-pages branch
+  pull-requests: write # let the action post/update the preview-URL comment
+
+jobs:
+  preview:
+    # Act on the `preview` label, its removal, or a close — the last two so the
+    # preview is torn down again.
+    if: >
+      github.event.action == 'closed' ||
+      github.event.action == 'unlabeled' ||
+      contains(github.event.pull_request.labels.*.name, 'preview')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # The build steps run only when we are (re)deploying: PR still open and
+      # still labelled. On close/unlabel we skip straight to the action below in
+      # `remove` mode, which needs no build.
+      - name: Setup Rust
+        if: github.event.action != 'closed' && contains(github.event.pull_request.labels.*.name, 'preview')
+        uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        if: github.event.action != 'closed' && contains(github.event.pull_request.labels.*.name, 'preview')
+        with:
+          workspaces: compiler
+      - name: Setup Node
+        if: github.event.action != 'closed' && contains(github.event.pull_request.labels.*.name, 'preview')
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: viewer-ts/package-lock.json
+
+      # Same pipeline as publish.yml, built from the PR ref: compile every
+      # documentation volume (docs/*/docset.toml), then pack the bundled dist.
+      # --base-url points sitemap/robots + the discovery hooks at this PR's
+      # subpath; --stream keeps page-level streaming (Pages honours Range).
+      - name: Build and pack the preview
+        if: github.event.action != 'closed' && contains(github.event.pull_request.labels.*.name, 'preview')
+        run: |
+          set -euo pipefail
+          cargo build --release -p khb-cli --manifest-path compiler/Cargo.toml
+          BIN="$PWD/compiler/target/release/khb"
+          ( cd viewer-ts && npm ci && npm run build )
+          mkdir -p out
+          DOCSETS=()
+          for T in docs/*/docset.toml; do
+            DIR=$(dirname "$T")
+            ID=$(sed -n 's/^id = "\(.*\)"$/\1/p' "$T" | head -n1)
+            "$BIN" compile "$DIR" -o "out/${ID}.khb"
+            DOCSETS+=(--docset "out/${ID}.khb")
+          done
+          "$BIN" pack --profile bundled --viewer viewer-ts/dist \
+            "${DOCSETS[@]}" \
+            --home khb-authoring:index \
+            --stream --llms \
+            --base-url "https://kdhelpbook.github.io/monorepo/pr-preview/pr-${{ github.event.number }}/" \
+            -o preview
+
+      # Deploys ./preview to gh-pages under pr-preview/pr-<N>/ and comments the
+      # URL; on close or when the label is removed it removes that subfolder.
+      - name: Deploy or tear down the preview
+        uses: rossjrw/pr-preview-action@v1
+        with:
+          source-dir: preview
+          umbrella-dir: pr-preview
+          action: ${{ (github.event.action != 'closed' && contains(github.event.pull_request.labels.*.name, 'preview')) && 'deploy' || 'remove' }}
