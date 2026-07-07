@@ -44,7 +44,7 @@ The payload sits inside a **versioned wrapper** so it can be validated before us
 the file carries a `format_version`, and a reader rejects any version other than
 the one it was built for. Unlike the SQLite form — where old tables simply keep
 working — a `.khbb` is a serialized snapshot of the rendered-docset layout, so
-every format bump (see the [version history](sqlite-schema)) gates it.
+every format bump (see the [SQLite schema](sqlite-schema)) gates it.
 
 `khb convert` turns a `.khb` into a `.khbb` and back; the direction is inferred
 from the file extensions.

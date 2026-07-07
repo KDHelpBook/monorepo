@@ -83,7 +83,7 @@ time; cross-book ids are stored as-is and the viewer hides any whose book is not
 loaded.
 
 **`toc.yaml`** — the table-of-contents hierarchy, referencing pages by id. A node
-may instead omit `page:` and give just a `title:` — a **folder node** (format v6)
+may instead omit `page:` and give just a `title:` — a **folder node**
 that only groups its children and cannot be opened:
 
 ```yaml

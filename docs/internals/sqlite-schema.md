@@ -8,7 +8,7 @@ related: [file-formats, full-text-search, building-a-compiler]
 # SQLite schema
 
 Every `.khb` contains the tables below, identified by `meta.format_version`
-(currently **6**). The DDL is quoted from `compiler/core/src/schema.rs`, which —
+(currently **1**). The DDL is quoted from `compiler/core/src/schema.rs`, which —
 together with `docs/format.md` — is the source of truth.
 
 ## Core tables
@@ -52,7 +52,7 @@ Three columns deserve a closer look:
   deliberately the **last** column: SQLite serialises a row column-by-column and
   stops at the last requested column, so hot-path reads (`SELECT id, title,
   body_html`) never stream its bytes.
-- **`toc.page_id`** is `NULL` for a **pure folder node** (v6): a grouping row that
+- **`toc.page_id`** is `NULL` for a **pure folder node**: a grouping row that
   only holds children and cannot be opened. `NULL` passes the foreign-key check by
   design.
 
@@ -126,28 +126,14 @@ lookup, never a probe across packs (see [File formats](file-formats)).
 
 | Key | Meaning |
 |-----|---------|
-| `format_version` | schema version this file conforms to (currently `6`) |
+| `format_version` | schema version this file conforms to (currently `1`) |
 | `docset_id` | the book's id — the namespace prefix in `docsetId:pageId` links |
 | `title` | display title |
 | `version` | content version (drives the viewer's version switcher) |
 | `language` | content language; also selects the FTS tokenizer |
 | `tokenizer` | the FTS5 tokenizer string actually used at build time |
 | `generator` | the producing tool, e.g. `khb-core 0.1.0` |
-| `collection` | family/merge key (v3) — books sharing it merge in the viewer |
-
-## Format version history
-
-Each bump also changed the rendered-docset layout that `.khbb` encodes, so a
-`.khbb` is validated against exactly this number.
-
-| Version | Added |
-|---------|-------|
-| 1 | the initial schema |
-| 2 | binary attachments: the `assets` table and sidecar `.khba` files |
-| 3 | family metadata: `meta.collection` |
-| 4 | the `related` ("See also") table |
-| 5 | the optional, nullable `pages.md` column (clean Markdown for llms.txt / MCP) |
-| 6 | page-less TOC folder nodes: `toc.page_id` became nullable |
+| `collection` | family/merge key — books sharing it merge in the viewer |
 
 > [!NOTE]
 > There is also a language-dependent virtual table, `pages_fts`, created with a

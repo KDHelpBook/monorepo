@@ -19,7 +19,7 @@ anything. This page is the checklist. The bundled Markdown compiler
    [SQLite schema](sqlite-schema) page: `meta`, `pages`, `toc`, `categories`,
    `page_categories`, `keywords`, `related`, `products`, `assets` (may be empty)
    and `asset_index`. The DDL to copy is in `compiler/core/src/schema.rs`.
-2. **Fill `meta`** — at minimum `format_version` (currently `6`), `docset_id`,
+2. **Fill `meta`** — at minimum `format_version` (currently `1`), `docset_id`,
    `title`, `version`, `language`, `tokenizer` (the string you actually used —
    see step 5) and `generator` (name your tool). Set `collection` if the book
    should merge with siblings into one product family.
@@ -33,8 +33,7 @@ anything. This page is the checklist. The bundled Markdown compiler
    future dark mode) while hard-coded colours would not; and derive `plain`
    from an **unhighlighted** render, so per-token markup never leaks into
    full-text search.
-4. **Optionally fill `pages.md`** with a clean Markdown rendition (nullable,
-   format v5). The viewer ignores it; it feeds AI-facing surfaces such as the
+4. **Optionally fill `pages.md`** with a clean Markdown rendition (nullable). The viewer ignores it; it feeds AI-facing surfaces such as the
    `llms.txt` export. Skip it if your source has no sensible Markdown form.
 5. **Create the FTS index with the right tokenizer.** Emit the
    external-content `pages_fts` table (`content='pages'`) and pick the tokenizer
@@ -53,7 +52,7 @@ anything. This page is the checklist. The bundled Markdown compiler
    existing page. Cross-book ids (`docsetId:localId`) are stored as-is — the
    target book may not be loaded, and the viewer hides such links.
 8. **Build the TOC** in `toc` with `parent_id`/`position`; use `page_id = NULL`
-   for pure folder nodes (v6). `VACUUM` the finished database.
+   for pure folder nodes. `VACUUM` the finished database.
 
 ## What you get for free
 

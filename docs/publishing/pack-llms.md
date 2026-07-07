@@ -22,7 +22,7 @@ files instead of scraping a single-page app.
 ## Where the Markdown comes from
 
 The export uses each page's **original Markdown source** — the optional `md`
-column a compiler may store (format v5). A docset that carries none falls back to
+column a compiler may store. A docset that carries none falls back to
 the page's plain text, so the export always works; it's just nicer with the real
 source. Books compiled by the bundled `khb compile` carry it.
 
