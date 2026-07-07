@@ -1,0 +1,155 @@
+name: Publish
+
+# Builds the GitHub Pages site: compiles the docsets from the checked-out ref
+# with the kdhelp CLI produced by build.yml, builds the viewer, packs the
+# distribution (with the llms.txt export), merges archived documentation
+# versions downloaded from past releases, and deploys.
+#
+# Requires: repo Settings → Pages → Source = "GitHub Actions".
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        description: Git ref to publish from
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  actions: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      # Toolchain + cache are set up unconditionally so the build-from-source
+      # fallback below just works; when a prebuilt CLI is found they cost
+      # seconds.
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: compiler
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: viewer-ts/package-lock.json
+
+      # In a release run (called by release.yml) the CLI artifact exists in
+      # this very run; standalone runs fall back to the latest successful
+      # build.yml run on main, then to building from source.
+      - name: Fetch the CLI from this run
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: kdhelp-x86_64-unknown-linux-gnu
+          path: cli-dl
+
+      - name: Ensure the CLI
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p cli-dl
+          if ! ls cli-dl/*.tar.gz >/dev/null 2>&1; then
+            RUN=$(gh run list -R "${{ github.repository }}" --workflow build.yml \
+              --branch main --status success --limit 1 \
+              --json databaseId --jq '.[0].databaseId' || true)
+            if [[ -n "$RUN" ]]; then
+              gh run download "$RUN" -R "${{ github.repository }}" \
+                -n kdhelp-x86_64-unknown-linux-gnu -D cli-dl || true
+            fi
+          fi
+          if ls cli-dl/*.tar.gz >/dev/null 2>&1; then
+            mkdir -p cli
+            tar xzf cli-dl/*.tar.gz -C cli --strip-components=1
+            BIN="$PWD/cli/kdhelp"
+          else
+            echo "No prebuilt CLI available — building from source."
+            (cd compiler && cargo build --release -p kdhelp-cli)
+            BIN="$PWD/compiler/target/release/kdhelp"
+          fi
+          "$BIN" --version
+          echo "BIN=$BIN" >> "$GITHUB_ENV"
+
+      - name: Compile the docsets
+        run: |
+          mkdir -p out
+          "$BIN" compile compiler/examples/en        -o out/en.khb
+          "$BIN" compile compiler/examples/extras-en -o out/extras-en.khb
+          # PL docs ship their attachments in a sidecar out/pl.khba (pack picks it up).
+          "$BIN" compile compiler/examples/pl        -o out/pl.khb --assets sidecar
+          "$BIN" compile compiler/examples/extras-pl -o out/extras-pl.khb
+          # One product in two versions — demonstrates the Version switcher (V3).
+          "$BIN" compile compiler/examples/sample-sdk-v1 -o out/sample-sdk-v1.khb
+          "$BIN" compile compiler/examples/sample-sdk-v2 -o out/sample-sdk-v2.khb
+          # The Markdown reference (docs/markdown) — the versioned project docs.
+          "$BIN" compile docs/markdown -o out/markdown.khb
+
+      - name: Build the viewer
+        run: |
+          npm ci
+          npm run build
+        working-directory: viewer-ts
+
+      - name: Pack the distribution
+        run: |
+          "$BIN" pack --profile reader --viewer viewer-ts/dist \
+            --docset out/en.khb --docset out/extras-en.khb \
+            --docset out/pl.khb --docset out/extras-pl.khb \
+            --docset out/sample-sdk-v1.khb --docset out/sample-sdk-v2.khb \
+            --docset out/markdown.khb \
+            --llms \
+            -o publish
+
+      - name: Merge archived doc versions from releases
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Every release carries a kdhelp-markdown-vX.Y.Z.khb (versioned id).
+          # Skip the release matching the current version: the freshly compiled
+          # book already covers it, and two variants with the same version
+          # string would both render in the viewer.
+          CUR=$(sed -n 's/^version = "\(.*\)"$/\1/p' docs/markdown/docset.toml | head -n1)
+          mkdir -p old
+          for TAG in $(gh release list -R "${{ github.repository }}" --json tagName --jq '.[].tagName'); do
+            [[ "$TAG" == "v$CUR" ]] && continue
+            gh release download "$TAG" -R "${{ github.repository }}" \
+              --pattern 'kdhelp-markdown-*.khb' -D "old/$TAG" || true
+          done
+          shopt -s nullglob
+          for F in old/*/*.khb; do
+            echo "patching in $F"
+            "$BIN" patch publish --docset "$F"
+          done
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: publish
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
