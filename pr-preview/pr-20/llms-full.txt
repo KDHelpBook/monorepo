@@ -759,6 +759,19 @@ Markdown (bold, code, links) is used, and it wraps within the tile:
     Exactly **one** tag may answer.
     ~~~
 
+Live, with a description under each tile:
+
+~~~gallery
+![The table of contents](assets/viewer-overview.png)
+All three volumes merge into one tree; the **On this page** box tracks headings.
+
+![Syntax highlighting](assets/viewer-code.png)
+Baked in at **compile time** — the viewer ships no highlighter.
+
+![Callouts](assets/viewer-callouts.png)
+`> [!NOTE]` blockquotes become labelled boxes, and so do `:::note` directives.
+~~~
+
 ### Layout flags
 
 Bare words in the fence info string tune the layout:
@@ -781,9 +794,20 @@ Use `wrap` for a loose set of images that can reflow, and `scroll` for an ordere
 sequence you want kept in one line. In print, a `scroll` gallery wraps so nothing is
 clipped.
 
+Live — a `scroll` strip of wider tiles (drag, or shift-scroll, sideways):
+
+~~~gallery w=320 scroll
+![Overview](assets/viewer-overview.png)
+![Code blocks](assets/viewer-code.png)
+![Callouts](assets/viewer-callouts.png)
+![Diagrams](assets/viewer-diagram.png)
+~~~
+
 ### Gallery notes
 
-- **Clicking a tile** opens the full-size image in the lightbox, like any other image.
+- **Clicking a tile** opens the full-size image in the lightbox; from a gallery the
+  lightbox adds **‹ prev / next ›** controls (and the ← / → keys) to step through the
+  strip, with a position counter.
 - **Captions are searchable** — the alt text feeds the page's plain-text index.
 - A gallery with **no images** is a build error (the same rule the `~~~code-*` fences
   follow).
