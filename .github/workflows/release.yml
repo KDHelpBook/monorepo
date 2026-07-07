@@ -67,16 +67,10 @@ jobs:
           grep -q "^version = \"${NEW}\"$" compiler/Cargo.toml
           (cd compiler && cargo update --workspace)
           (cd viewer-ts && npm version "$NEW" --no-git-tag-version)
-          # Site books surface a consistent version in the About dialog. The
-          # sample-sdk/lorem demos keep their fixture versions (switcher demo).
-          for T in docs/markdown/docset.toml \
-                   compiler/examples/en/docset.toml \
-                   compiler/examples/pl/docset.toml \
-                   compiler/examples/extras-en/docset.toml \
-                   compiler/examples/extras-pl/docset.toml; do
-            sed -i "s/^version = \".*\"$/version = \"${NEW}\"/" "$T"
-            grep -q "^version = \"${NEW}\"$" "$T"
-          done
+          # The published documentation book; the compiler/examples/* fixtures
+          # keep their static demo versions.
+          sed -i "s/^version = \".*\"$/version = \"${NEW}\"/" docs/markdown/docset.toml
+          grep -q "^version = \"${NEW}\"$" docs/markdown/docset.toml
           git diff --stat
 
       - name: Commit, tag, push
