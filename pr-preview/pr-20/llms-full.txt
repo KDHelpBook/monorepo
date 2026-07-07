@@ -3444,10 +3444,13 @@ Inline: $`a^2 + b^2 = c^2`$
 \sum_{k=1}^n k = \frac{n(n+1)}{2}
 ```
 
-A formula the converter can't parse **fails the build** (with the page id and the
-offending LaTeX), rather than silently degrading to raw text — a broken equation is a
-content bug worth catching at compile time. MathML is stored in the page, so math works
-offline and needs no scripts in the sandboxed content frame.
+MathML is stored in the page, so math works offline and needs no scripts in the
+sandboxed content frame.
+
+> [!NOTE]
+> A formula the converter can't parse **fails the build** — the error names the page and
+> the offending LaTeX, so a broken equation is caught at compile time rather than silently
+> degrading to raw text.
 
 ---
 
