@@ -1,0 +1,8 @@
+- id: publishing
+  title: Publishing
+- id: packing
+  title: Packing
+- id: hosting
+  title: Hosting
+- id: versioning
+  title: Versioning

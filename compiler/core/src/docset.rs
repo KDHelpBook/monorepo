@@ -19,7 +19,7 @@ pub struct Page {
 }
 
 /// One node of the table-of-contents tree (flat; reconstruct the tree from
-/// `parent_id` + `position`). `page_id` is `None` for a pure folder node (v6).
+/// `parent_id` + `position`). `page_id` is `None` for a pure folder node.
 #[derive(Debug, Clone)]
 pub struct TocEntry {
     pub id: i64,

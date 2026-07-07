@@ -1,0 +1,19 @@
+# The whole book hangs under its index page (one collapsible root per volume —
+# the three volumes share a collection and merge into one tree, so each needs
+# its own root).
+- page: index
+  children:
+    - page: getting-published
+    - page: pack
+      children:
+        - page: pack-profiles
+        - page: pack-home
+        - page: pack-stream
+        - page: pack-llms
+        - page: pack-mode
+    - page: patch
+    - page: distribution
+    - page: hosting
+    - page: ci
+    - page: versioning
+    - page: khbm-manifests

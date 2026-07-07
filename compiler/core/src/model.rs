@@ -57,7 +57,7 @@ pub struct SourceDocset {
 // ---------------------------------------------------------------------------
 
 /// A node in the table-of-contents tree. `page_id` points at a page — or is `None`
-/// for a pure folder node (format v6), which only groups its children and cannot be
+/// for a pure folder node, which only groups its children and cannot be
 /// opened. `title` overrides the page title for display; for a folder it is the only
 /// label there is.
 #[derive(Debug, Clone, Serialize, Deserialize)]

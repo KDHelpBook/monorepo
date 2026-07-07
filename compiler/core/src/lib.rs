@@ -21,13 +21,10 @@ pub use docset::{Attachments, Docset, KeywordEntry, Page, SearchHit, TocEntry};
 pub use model::{Asset, Category, RenderedDocset, RenderedPage, SourceDocset, SourcePage, TocNode};
 pub use vfs::{FileRangeReader, RangeReader};
 
-/// The on-disk `.khb`/`.khbb` format version this build reads and writes. Bumped to
-/// 2 for binary attachments (the `assets` table / sidecar `.khba`), to 3 for family
-/// metadata (`collection`), to 4 for the `related` ("See also") table, to 5 for
-/// the optional per-page `md` column (clean Markdown for llms.txt / MCP), and to 6
-/// for page-less TOC folder nodes (`toc.page_id` nullable) — each changed the
-/// rendered-docset layout that `.khbb` encodes.
-pub const FORMAT_VERSION: u32 = 6;
+/// The on-disk `.khb`/`.khbb` format version this build reads and writes. Bump it
+/// whenever the schema or the rendered-docset layout that `.khbb` encodes changes
+/// incompatibly. (Pre-release development iterated within version 1.)
+pub const FORMAT_VERSION: u32 = 1;
 
 /// The crate version, surfaced in a docset's `meta.generator`.
 pub fn generator() -> String {
@@ -73,7 +70,7 @@ mod tests {
                 page_id: Some("intro".into()),
                 title: "Introduction".into(),
                 children: vec![
-                    // A pure folder node (v6): title-only, groups its children.
+                    // A pure folder node: title-only, groups its children.
                     TocNode {
                         page_id: None,
                         title: "More".into(),

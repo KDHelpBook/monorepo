@@ -150,9 +150,10 @@ pub fn render_html(markdown: &str, highlighter: Option<&SyntectAdapter>) -> Stri
     // Math also via code syntax: `` $`x`$ `` inline and ```math blocks — comrak emits
     // the same `data-math-style` marker, converted to MathML alongside `$…$`.
     options.extension.math_code = true;
-    // Inline text marks. `==x==` → <mark> (already styled), `++x++` → <ins>, `x^2^` →
-    // <sup>, `~x~` → <sub> (double `~~` stays strikethrough — comrak distinguishes by
-    // tilde count), `__x__` → <u> (bold is `**`, so `__` is free), `||x||` → a spoiler.
+    // Inline text marks beyond GFM. `==x==` → <mark> (already styled), `++x++` → <ins>,
+    // `x^2^` → <sup>, `~x~` → <sub> (double `~~` stays strikethrough — comrak tells them
+    // apart by tilde count; a literal prose tilde is `\~`), `__x__` → <u> (bold is `**`,
+    // so `__` is free), `||x||` → a spoiler.
     options.extension.highlight = true;
     options.extension.insert = true;
     options.extension.superscript = true;
@@ -229,6 +230,23 @@ mod tests {
         let html = render_html("# Title\n\nSome **bold** text.", None);
         let plain = html_to_plain(&html);
         assert_eq!(plain, "Title Some bold text.");
+    }
+
+    #[test]
+    fn renders_inline_marks() {
+        let html = render_html(
+            "==marked== __underlined__ ++added++ H~2~O and E=mc^2^, **bold**, ~~gone~~, \\~5 min",
+            None,
+        );
+        assert!(html.contains("<mark>marked</mark>"));
+        assert!(html.contains("<u>underlined</u>"));
+        assert!(html.contains("<ins>added</ins>"));
+        assert!(html.contains("H<sub>2</sub>O"));
+        assert!(html.contains("mc<sup>2</sup>"));
+        assert!(html.contains("<strong>bold</strong>"));
+        assert!(html.contains("<del>gone</del>"));
+        // An escaped tilde stays literal prose.
+        assert!(html.contains("~5 min"));
     }
 
     #[test]

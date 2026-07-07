@@ -1,0 +1,12 @@
+# The whole book hangs under its index page (one collapsible root per volume —
+# the three volumes share a collection and merge into one tree, so each needs
+# its own root).
+- page: index
+  children:
+    - page: file-formats
+    - page: sqlite-schema
+    - page: full-text-search
+    - page: streaming
+    - page: security-model
+    - page: manifest-schemas
+    - page: building-a-compiler

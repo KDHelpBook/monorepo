@@ -1,0 +1,9 @@
+# Display titles for the category facet (ids used in page frontmatter).
+- id: authoring
+  title: Authoring
+- id: markdown
+  title: Markdown
+- id: extensions
+  title: Markdown Extensions
+- id: configuration
+  title: Configuration

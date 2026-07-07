@@ -1,8 +1,8 @@
 name: Build
 
 # Builds everything publishable: prebuilt `khb` CLI binaries for the
-# popular platforms, the viewer dist, and the project documentation
-# (docs/markdown) compiled to .khb. Runs standalone on push / PR / manual
+# popular platforms, the viewer dist, and the documentation volumes
+# (docs/*/docset.toml) compiled to .khb. Runs standalone on push / PR / manual
 # dispatch; when called by release.yml (release_tag set) it builds from the
 # tag and uploads the binaries + docs .khb as release assets. publish.yml
 # never builds — it consumes this workflow's artifacts.
@@ -129,23 +129,29 @@ jobs:
         run: cargo build --release -p khb-cli
         working-directory: compiler
 
-      - name: Compile docs/markdown
+      # Every docs/*/ directory with a docset.toml is a documentation volume
+      # (authoring, publishing, internals, …) — compile them all.
+      - name: Compile the documentation volumes
         shell: bash
         run: |
           BIN=compiler/target/release/khb
           mkdir -p out
           TAG="${{ inputs.release_tag }}"
-          if [[ -n "$TAG" ]]; then
-            VER="${TAG#v}"
-            # Suffix the docset id with the version (build-time only, never
-            # committed): archived books need unique ids to coexist with the
-            # current one in the viewer's version switcher (sample-sdk pattern).
-            sed -i "s/^id = \"khb-markdown\"$/id = \"khb-markdown-v${VER}\"/" docs/markdown/docset.toml
-            grep -q "^id = \"khb-markdown-v${VER}\"$" docs/markdown/docset.toml
-            "$BIN" compile docs/markdown -o "out/khb-markdown-v${VER}.khb"
-          else
-            "$BIN" compile docs/markdown -o out/markdown.khb
-          fi
+          for T in docs/*/docset.toml; do
+            DIR=$(dirname "$T")
+            ID=$(sed -n 's/^id = "\(.*\)"$/\1/p' "$T" | head -n1)
+            if [[ -n "$TAG" ]]; then
+              VER="${TAG#v}"
+              # Suffix the docset id with the version (build-time only, never
+              # committed): archived books need unique ids to coexist with the
+              # current one in the viewer's version switcher (sample-sdk pattern).
+              sed -i "s/^id = \"${ID}\"$/id = \"${ID}-v${VER}\"/" "$T"
+              grep -q "^id = \"${ID}-v${VER}\"$" "$T"
+              "$BIN" compile "$DIR" -o "out/${ID}-v${VER}.khb"
+            else
+              "$BIN" compile "$DIR" -o "out/${ID}.khb"
+            fi
+          done
 
       - uses: actions/upload-artifact@v7
         with:

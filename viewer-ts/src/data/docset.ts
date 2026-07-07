@@ -4,7 +4,7 @@ export interface TocNode {
   pageId: string;
   title: string;
   children: TocNode[];
-  /** True for a folder node: a book's page-less TOC folder (format v6) or a
+  /** True for a folder node: a book's page-less TOC folder or a
    *  synthetic family/product folder. Clicking it only expands/collapses. */
   group?: boolean;
 }

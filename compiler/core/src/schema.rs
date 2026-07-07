@@ -34,7 +34,7 @@ CREATE TABLE pages (
   md        TEXT
 );
 
--- `page_id` is NULL for a pure folder node (format v6): a grouping row that only
+-- `page_id` is NULL for a pure folder node: a grouping row that only
 -- holds children and cannot be opened. NULL passes the FK check by design.
 CREATE TABLE toc (
   id        INTEGER PRIMARY KEY,

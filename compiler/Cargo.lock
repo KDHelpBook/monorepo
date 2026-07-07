@@ -668,6 +668,7 @@ dependencies = [
  "clap",
  "flate2",
  "khb-core",
+ "libc",
  "serde",
  "serde_json",
  "tempfile",
@@ -681,6 +682,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "comrak",
+ "emojis",
  "latex2mathml",
  "layout-rs",
  "postcard",

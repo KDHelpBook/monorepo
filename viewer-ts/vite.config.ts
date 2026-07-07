@@ -10,6 +10,11 @@ export default defineConfig({
   define: {
     __BUILD_ID__: JSON.stringify(Date.now().toString(36)),
   },
+  // Dev-server port: honour a harness-assigned PORT (several sessions can then
+  // run their own dev servers side by side); default to Vite's 5173 otherwise.
+  server: process.env.PORT
+    ? { port: Number(process.env.PORT), strictPort: true }
+    : {},
   build: {
     target: "es2022",
     sourcemap: true,

@@ -61,7 +61,7 @@ that the TypeScript viewer reached parity; it lives in git history (commit
 - `.khbb` — minimal binary (no indexes); rebuilt into `.khb` in-browser by wasm,
   cached in IndexedDB.
 - `.khba` — sidecar SQLite file of attachments (images/downloads) for a `.khb`.
-  Attachments may instead be **embedded** in the `.khb` (`assets` table, format v2);
+  Attachments may instead be **embedded** in the `.khb` (`assets` table);
   one `.khb` can have several `.khba` packs. Pages link assets as `asset:<path>`;
   the viewer resolves them to `data:` URLs (`compiler/core/src/assets.rs`). Resolution
   is routed by the `asset_index` table (path → pack; `''` = embedded, else a sidecar's
@@ -85,7 +85,7 @@ that the TypeScript viewer reached parity; it lives in git history (commit
 - Content is **source-format-agnostic**: the canonical render in `.khb` is HTML +
   plain text (the viewer needs no Markdown). The bundled compiler takes Markdown +
   frontmatter. A producer *may* also fill the **optional, nullable `pages.md`
-  column** (format v5) with clean Markdown — an enrichment the viewer ignores,
+  column** with clean Markdown — an enrichment the viewer ignores,
   consumed only by AI-facing surfaces (llms.txt export, a future MCP `get_page`).
   Fetch it lazily via `Docset::page_markdown` (`md` is the last column, so the
   HTML/FTS hot paths never stream it).

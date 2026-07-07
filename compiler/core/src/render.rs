@@ -35,6 +35,9 @@ pub fn render(src: &SourceDocset) -> Result<RenderedDocset> {
             let html = render_line_highlight(&html);
             // `` `x`{:lang} `` → inline-highlighted code; `` `x`{.badge} `` → a badge.
             let html = render_inline_attrs(&html);
+            // Size hints (`#w=…`) bake into inline styles before the URL rewrite
+            // strips fragments from asset paths.
+            let html = assets::apply_image_size_hints(&html);
             let html = assets::rewrite_asset_urls(&html);
             let html = render_math(&html).with_context(ctx)?;
             // `:::tabs` / `:::tab` → an interactive tabbed panel. Runs last so each tab's
