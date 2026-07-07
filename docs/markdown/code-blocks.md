@@ -107,6 +107,32 @@ yarn add kdhelp
 
 A group with no inner code blocks is a **build error** (a likely authoring mistake).
 
+## Command + output (`code-preview`)
+
+A **`~~~code-preview … ~~~`** fence pairs a **command** (first inner block, syntax
+highlighted) with its **output** (second block), rendered as a terminal panel. Missing
+either block is a build error.
+
+`````md
+~~~code-preview
+```bash
+khb compile docs/markdown -o markdown.khb
+```
+```
+compiled khb-markdown (14 pages, language en) -> markdown.khb
+```
+~~~
+`````
+
+~~~code-preview
+```bash
+khb compile docs/markdown -o markdown.khb
+```
+```
+compiled khb-markdown (14 pages, language en) -> markdown.khb
+```
+~~~
+
 ## How highlighting works
 
 - The compiler emits **CSS classes** (not inline colours); the viewer injects the

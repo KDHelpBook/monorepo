@@ -74,12 +74,13 @@ genuinely generic non-code blocks (tabs / cards / steps outside code).
 
 Done so far: heading **anchors** + an **"On this page"** box, **emoji**, code-block
 **filenames**, a **copy** button, **collapsible** code (`collapse` flag), **code groups**
-(`~~~code-group` → tabs), **callouts** (comrak 0.53 native `alerts`), and **math**
-(`$…$` → build-time MathML). What's left:
+(`~~~code-group` → tabs), **command+output** (`~~~code-preview` → terminal panel),
+**callouts** (comrak 0.53 native `alerts`), and **math** (`$…$` → build-time MathML).
+What's left:
 
 | Want | How | Effort |
 |------|-----|--------|
-| **Code preview / tree** | the same opaque `~~~name … ~~~` fence, post-processed like the group | medium |
+| **Code tree** (file-tree view) | the same opaque `~~~name … ~~~` fence, post-processed like the group | medium |
 | **Tabs / cards / steps / badges** (non-code) | true `:::` generic directives → `<div class>` (not MDC) | medium |
 | **Video / embeds** | a `:video`/`:embed` directive → sandboxed `<iframe>`/`<video>` | medium |
 

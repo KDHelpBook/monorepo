@@ -19,14 +19,15 @@ pub fn render(src: &SourceDocset) -> Result<RenderedDocset> {
         .pages
         .iter()
         .map(|p| -> Result<RenderedPage> {
-            // Render Markdown, then expand `~~~code-group` blocks into tabbed panels,
-            // rewrite `assets/…` targets to the `asset:` scheme, and finally render
-            // `$…$` LaTeX spans to MathML.
+            // Render Markdown, expand `~~~code-group` (tabs) and `~~~code-preview`
+            // (command + terminal output) blocks, rewrite `assets/…` targets to the
+            // `asset:` scheme, and finally render `$…$` LaTeX spans to MathML.
+            let ctx = || format!("page `{}`", p.id);
             let html = markdown::render_html(&p.markdown, Some(&highlighter));
-            let html = render_code_groups(&html, &highlighter)
-                .with_context(|| format!("page `{}`", p.id))?;
+            let html = render_code_groups(&html, &highlighter).with_context(&ctx)?;
+            let html = render_code_preview(&html, &highlighter).with_context(&ctx)?;
             let html = assets::rewrite_asset_urls(&html);
-            let rendered = render_math(&html).with_context(|| format!("page `{}`", p.id))?;
+            let rendered = render_math(&html).with_context(&ctx)?;
             // Prepend an "On this page" nav built from the heading anchors, honouring
             // the page's `toc` frontmatter (auto when unset). It floats top-right, so
             // sitting before the H1 keeps the viewer's subtitle handling intact.
@@ -243,6 +244,49 @@ fn render_code_groups(html: &str, highlighter: &SyntectAdapter) -> Result<String
     Ok(out)
 }
 
+/// Expand `~~~code-preview … ~~~`: the first inner fence is a command (re-rendered with
+/// syntax highlighting), the second is its output, shown in a terminal-styled panel.
+/// Same opaque-block mechanism as [`render_code_groups`]. Missing either block is a
+/// build error.
+fn render_code_preview(html: &str, highlighter: &SyntectAdapter) -> Result<String> {
+    const OPEN: &str = "<pre class=\"syntax-highlighting\"><code class=\"language-code-preview\">";
+    const CLOSE: &str = "</code></pre>";
+    let mut out = String::with_capacity(html.len());
+    let mut i = 0;
+    while let Some(rel) = html[i..].find(OPEN) {
+        let start = i + rel;
+        let inner_start = start + OPEN.len();
+        let Some(end_rel) = html[inner_start..].find(CLOSE) else {
+            break;
+        };
+        let raw = unescape_html(&strip_tags(&html[inner_start..inner_start + end_rel]));
+        let blocks = split_group_fences(&raw);
+        if blocks.len() < 2 {
+            anyhow::bail!("`~~~code-preview` needs a command block and an output block");
+        }
+        let (cmd_info, cmd_code) = &blocks[0];
+        let (_out_info, out_code) = &blocks[1];
+        let (lang, _) = parse_code_info(cmd_info);
+        let cmd_md = if lang.is_empty() {
+            format!("```\n{cmd_code}\n```")
+        } else {
+            format!("```{lang}\n{cmd_code}\n```")
+        };
+        let cmd_html = markdown::render_html(&cmd_md, Some(highlighter));
+        out.push_str(&html[i..start]);
+        out.push_str(&format!(
+            "<div class=\"code-preview\"><div class=\"code-preview-cmd\">{}</div>\
+             <div class=\"code-terminal\"><div class=\"code-terminal-bar\" aria-hidden=\"true\">\
+             <span></span><span></span><span></span></div><pre class=\"code-terminal-out\">{}</pre></div></div>",
+            cmd_html.trim(),
+            esc(out_code)
+        ));
+        i = inner_start + end_rel + CLOSE.len();
+    }
+    out.push_str(&html[i..]);
+    Ok(out)
+}
+
 /// Split a code-group's raw body into `(info-string, code)` per inner ```` ``` ```` fence.
 fn split_group_fences(inner: &str) -> Vec<(String, String)> {
     let mut out = Vec::new();
@@ -374,6 +418,22 @@ mod tests {
         // A code-group with no inner fences is a build error.
         let empty = markdown::render_html("~~~code-group\n~~~\n", Some(&h));
         assert!(render_code_groups(&empty, &h).is_err());
+    }
+
+    #[test]
+    fn expands_code_preview() {
+        let h = markdown::highlighter();
+        let md = "~~~code-preview\n```bash\nkhb compile src -o out.khb\n```\n```\ncompiled ok -> out.khb\n```\n~~~\n";
+        let html = render_code_preview(&markdown::render_html(md, Some(&h)), &h).unwrap();
+        assert!(html.contains("class=\"code-preview\""));
+        assert!(!html.contains("language-code-preview")); // opaque block consumed
+        assert!(html.contains("language-bash")); // command highlighted
+        assert!(html.contains("class=\"code-terminal\"") && html.contains("code-terminal-out"));
+        assert!(html.contains("compiled ok -&gt; out.khb")); // output escaped, not highlighted
+
+        // A preview missing the output block fails the build.
+        let one = markdown::render_html("~~~code-preview\n```bash\nls\n```\n~~~\n", Some(&h));
+        assert!(render_code_preview(&one, &h).is_err());
     }
 
     #[test]
