@@ -29,6 +29,9 @@ pub fn render(src: &SourceDocset) -> Result<RenderedDocset> {
             let html = render_code_groups(&html, &highlighter).with_context(ctx)?;
             let html = render_code_preview(&html, &highlighter).with_context(ctx)?;
             let html = render_code_tree(&html, &highlighter).with_context(ctx)?;
+            // Size hints (`#w=…`) bake into inline styles before the URL rewrite
+            // strips fragments from asset paths.
+            let html = assets::apply_image_size_hints(&html);
             let html = assets::rewrite_asset_urls(&html);
             let rendered = render_math(&html).with_context(ctx)?;
             // Prepend an "On this page" nav built from the heading anchors, honouring
