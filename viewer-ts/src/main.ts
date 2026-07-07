@@ -143,9 +143,16 @@ function chooseLang(available: string[]): string {
   return available.includes("en") ? "en" : (available[0] ?? "en");
 }
 
+// config.json / docsets.json are fetched with a cache-busting query: the
+// previously shipped service worker cached them cache-first, so a stale
+// locked/unlocked state (or book list) could outlive every deploy. A unique
+// URL punches through that cache; the current sw.js treats both as
+// network-first and caches them under their bare pathname (see sw.js).
+const fresh = (file: string): string => `${file}?t=${Date.now()}`;
+
 async function loadConfig(): Promise<Config> {
   try {
-    const res = await fetch("config.json");
+    const res = await fetch(fresh("config.json"));
     if (res.ok) return (await res.json()) as Config;
   } catch {
     /* no config.json → defaults */
@@ -154,7 +161,7 @@ async function loadConfig(): Promise<Config> {
 }
 
 async function bootstrap(): Promise<void> {
-  const manifestRes = await fetch("docsets.json");
+  const manifestRes = await fetch(fresh("docsets.json"));
   const manifest = (await manifestRes.json()) as Manifest;
   const config = await loadConfig();
 
@@ -1873,11 +1880,14 @@ function start(
       case "find":
         status.textContent = "Use your browser Find (Ctrl/⌘-F).";
         break;
+      // The open affordances are hidden in a locked build, but guard the
+      // actions too — like openManagePage, they must not work if something
+      // (a stale UI state, a future dispatcher) still reaches them.
       case "open-docset":
-        pickDocset();
+        if (config.externalSources) pickDocset();
         break;
       case "open-url":
-        openUrl();
+        if (config.externalSources) openUrl();
         break;
       case "manage-docsets":
         openManagePage();
