@@ -2,8 +2,7 @@
 # Math
 
 Write LaTeX math between dollar signs. It is converted to **MathML at build time**, so
-the browser renders it natively — no KaTeX or MathJax at runtime (comrak's
-`math_dollars` extension + a LaTeX→MathML pass).
+the browser renders it natively — no KaTeX or MathJax at runtime.
 
 Inline math uses single `$…$`:
 
@@ -23,9 +22,8 @@ $$\int_0^1 x^2 \, dx = \frac{1}{3}$$
 
 ## Code-fence syntax
 
-If your text has literal `$` (currency), the **code syntax** avoids ambiguity (comrak's
-`math_code` extension) — inline `` $`…`$ `` and a ` ```math ` block. Both convert to the
-same MathML:
+If your text has literal `$` (currency), the **code syntax** avoids ambiguity — inline
+`` $`…`$ `` and a ` ```math ` block. Both convert to the same MathML:
 
 ````md
 Inline: $`a^2 + b^2 = c^2`$

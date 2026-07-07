@@ -87,8 +87,8 @@ backtick:
 | `` `Beta`{.badge} `` | a neutral badge pill |
 | `` `New`{.badge-green} `` | a coloured badge (`blue` / `green` / `amber` / `red`) |
 
-`{:lang}` highlights the code with the same engine as fenced blocks (build-time syntect,
-so no runtime highlighter). `{.badge…}` turns the code into a small pill — handy for
+`{:lang}` highlights the code with the same engine as fenced blocks (at build time, so
+no runtime highlighter). `{.badge…}` turns the code into a small pill — handy for
 version tags and status labels. The brace must touch the closing backtick; a `{…}` after
 a space is just text.
 

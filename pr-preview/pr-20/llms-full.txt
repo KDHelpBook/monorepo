@@ -359,8 +359,8 @@ backtick:
 | `` `Beta`{.badge} `` | a neutral badge pill |
 | `` `New`{.badge-green} `` | a coloured badge (`blue` / `green` / `amber` / `red`) |
 
-`{:lang}` highlights the code with the same engine as fenced blocks (build-time syntect,
-so no runtime highlighter). `{.badge…}` turns the code into a small pill — handy for
+`{:lang}` highlights the code with the same engine as fenced blocks (at build time, so
+no runtime highlighter). `{.badge…}` turns the code into a small pill — handy for
 version tags and status labels. The brace must touch the closing backtick; a `{…}` after
 a space is just text.
 
@@ -1027,9 +1027,9 @@ You can nest **Markdown**, lists, and `code` inside a directive.
 :::
 ```
 
-The compiler turns `:::name … :::` into `<div class="name">` (comrak's
-`block_directive` extension), and the viewer styles a curated set of names. The name is
-HTML-escaped when it becomes the class, so directive content can't inject markup.
+The compiler turns `:::name … :::` into `<div class="name">`, and the viewer styles a
+curated set of names. The name is HTML-escaped when it becomes the class, so directive
+content can't inject markup.
 
 ## Callout directives
 
@@ -3407,8 +3407,7 @@ them works.
 # Math
 
 Write LaTeX math between dollar signs. It is converted to **MathML at build time**, so
-the browser renders it natively — no KaTeX or MathJax at runtime (comrak's
-`math_dollars` extension + a LaTeX→MathML pass).
+the browser renders it natively — no KaTeX or MathJax at runtime.
 
 Inline math uses single `$…$`:
 
@@ -3428,9 +3427,8 @@ $$\int_0^1 x^2 \, dx = \frac{1}{3}$$
 
 ## Code-fence syntax
 
-If your text has literal `$` (currency), the **code syntax** avoids ambiguity (comrak's
-`math_code` extension) — inline `` $`…`$ `` and a ` ```math ` block. Both convert to the
-same MathML:
+If your text has literal `$` (currency), the **code syntax** avoids ambiguity — inline
+`` $`…`$ `` and a ` ```math ` block. Both convert to the same MathML:
 
 ````md
 Inline: $`a^2 + b^2 = c^2`$
