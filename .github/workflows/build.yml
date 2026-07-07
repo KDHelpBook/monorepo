@@ -156,13 +156,11 @@ jobs:
   release-assets:
     name: Upload release assets
     if: inputs.release_tag != ''
-    needs: [cli, docs]
+    needs: [cli, viewer, docs]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      # Only the binaries and the docs .khb — the viewer-dist artifact is for
-      # publish.yml, not a release asset.
       - uses: actions/download-artifact@v4
         with:
           pattern: kdhelp-*
@@ -172,6 +170,18 @@ jobs:
         with:
           name: docs-khb
           path: assets
+      # The viewer dist ships as its own versioned archive: `kdhelp pack`
+      # needs a built viewer, so a downloaded CLI alone couldn't assemble a
+      # distribution without it.
+      - uses: actions/download-artifact@v4
+        with:
+          name: viewer-dist
+          path: viewer-dist
+      - name: Package the viewer
+        run: |
+          NAME="kdhelp-viewer-${{ inputs.release_tag }}"
+          mv viewer-dist "$NAME"
+          tar czf "assets/${NAME}.tar.gz" "$NAME"
       - name: Upload to the release
         env:
           GH_TOKEN: ${{ github.token }}
