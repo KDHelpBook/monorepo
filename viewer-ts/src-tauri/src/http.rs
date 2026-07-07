@@ -44,6 +44,19 @@ impl HttpRangeReader {
     }
 }
 
+/// Download a whole file over HTTP (no Range) — the fallback for a host that doesn't
+/// honour `Range`. Native, so no CORS applies (unlike a browser `fetch`).
+pub fn fetch_all(url: &str) -> Result<Vec<u8>> {
+    let resp = ureq::get(url)
+        .call()
+        .with_context(|| format!("fetching {url}"))?;
+    let mut bytes = Vec::new();
+    resp.into_reader()
+        .read_to_end(&mut bytes)
+        .with_context(|| format!("reading {url}"))?;
+    Ok(bytes)
+}
+
 impl RangeReader for HttpRangeReader {
     fn size(&self) -> u64 {
         self.size

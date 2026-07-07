@@ -25,6 +25,11 @@ use tauri::{Emitter, Manager, State, Wry};
 struct Book {
     docset: Docset,
     attachments: Vec<Attachments>,
+    /// For a whole-fetched remote (a host without Range), the temp file its SQLite
+    /// connection reads from — kept alive here, and deleted when the Book drops. Fields
+    /// drop in order, so `docset` (the connection) closes before this file is removed.
+    #[allow(dead_code)]
+    temp: Option<tempfile::NamedTempFile>,
 }
 
 /// The open docsets, keyed by docset id. `rusqlite::Connection` is `Send` but not
@@ -127,18 +132,28 @@ fn is_url(s: &str) -> bool {
     s.starts_with("http://") || s.starts_with("https://")
 }
 
-/// Open a `.khb` from a local path or, for an `http(s)://` URL, stream it page-by-page
-/// over the Range-VFS — the same fork the CLI's `inspect` uses.
-fn open_docset(path: &str) -> Result<Docset> {
-    if is_url(path) {
-        Docset::open_reader(Arc::new(HttpRangeReader::open(path)?))
-    } else {
-        Docset::open(Path::new(path))
+/// Open a `.khb` from a local path or an `http(s)://` URL. A remote is streamed
+/// page-by-page over the Range-VFS when the host honours `Range` (the CLI `inspect`
+/// fork); otherwise it's downloaded **whole** into a temp file and opened from there.
+/// Either way the HTTP is native (`ureq`) — **no CORS** applies (a browser-only rule).
+fn open_docset(path: &str) -> Result<(Docset, Option<tempfile::NamedTempFile>)> {
+    if !is_url(path) {
+        return Ok((Docset::open(Path::new(path))?, None));
+    }
+    match HttpRangeReader::open(path) {
+        Ok(reader) => Ok((Docset::open_reader(Arc::new(reader))?, None)),
+        Err(_) => {
+            let bytes = http::fetch_all(path)?;
+            let mut tmp = tempfile::NamedTempFile::new()?;
+            std::io::Write::write_all(&mut tmp, &bytes)?;
+            let ds = Docset::open(tmp.path())?;
+            Ok((ds, Some(tmp)))
+        }
     }
 }
 
 fn open_one(spec: &OpenSpec) -> Result<Book> {
-    let docset = open_docset(&spec.path)?;
+    let (docset, temp) = open_docset(&spec.path)?;
     // Local sidecars only; a remote `.khba` would need Range support Attachments lacks yet,
     // so its assets simply show as missing (the Manage page offers "Add pack").
     let attachments = spec
@@ -150,6 +165,7 @@ fn open_one(spec: &OpenSpec) -> Result<Book> {
     Ok(Book {
         docset,
         attachments,
+        temp,
     })
 }
 
@@ -314,7 +330,12 @@ fn bundled_specs(app: tauri::AppHandle) -> Result<Vec<SpecDto>, String> {
 fn peek_docsets(specs: Vec<OpenSpec>) -> Vec<Option<DocsetMeta>> {
     specs
         .iter()
-        .map(|spec| open_docset(&spec.path).and_then(|ds| read_meta(&ds)).ok())
+        .map(|spec| {
+            // `(ds, _temp)` both live through read_meta, then drop (ds/connection first).
+            open_docset(&spec.path)
+                .ok()
+                .and_then(|(ds, _temp)| read_meta(&ds).ok())
+        })
         .collect()
 }
 

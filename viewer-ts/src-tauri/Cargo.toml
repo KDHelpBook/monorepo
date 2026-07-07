@@ -25,4 +25,5 @@ serde_json = "1"
 base64 = "0.22"
 anyhow = "1"
 ureq = "2"
+tempfile = "3"
 khb-core = { path = "../../compiler/core" }
