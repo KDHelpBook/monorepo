@@ -38,6 +38,11 @@ import {
 } from "./data/uistate";
 import { languagesByCollection, pickLanguages } from "./data/langselect";
 import {
+  resolveManifestUrl,
+  streamEligible,
+  type Manifest,
+} from "./data/manifest";
+import {
   compareVersions,
   detectUpdates,
   pickVersions,
@@ -119,26 +124,6 @@ const FILE_ICON =
   'fill="none" stroke="currentColor" stroke-width="1.2"/>' +
   '<path d="M9 1.8V5.5h3.7" fill="none" stroke="currentColor" stroke-width="1.2" ' +
   'stroke-linejoin="round"/></svg>';
-
-// ---------------------------------------------------------------------------
-// Manifest loading (single docset for now; collections come later)
-// ---------------------------------------------------------------------------
-interface ManifestEntry {
-  /** Path under the dist root; a trailing `.gz` marks a gzip-compressed file. */
-  file: string;
-  id: string;
-  title: string;
-  language: string;
-  /** Product/family key; older manifests omit it (fall back to `id`). */
-  collection?: string;
-  /** Content version (`meta.version`); may be absent. */
-  version?: string;
-  /** Sidecar `.khba` attachment packs (paths relative to the dist root). */
-  attachments?: string[];
-}
-interface Manifest {
-  docsets: ManifestEntry[];
-}
 
 const LANG_KEY = "kdhelp.lang";
 
@@ -255,29 +240,54 @@ async function bootstrap(): Promise<void> {
   const extraPacks = loadExtraPacks();
   const extraOf = (id: string): string[] => extraPacks[id] ?? [];
 
-  // Every available docset as a language "variant" of its collection, each paired
-  // with a ready-to-load source descriptor. We then pick one language per
-  // collection (override → UI language → fallback) so a book present only in
-  // another language stays visible instead of vanishing on a language switch.
-  const variants: DocVariant[] = [
-    ...manifest.docsets.map((d) => ({
+  // Bundled docsets are whole-fetched by default; an entry marked
+  // `"streaming": true` (kdhelp pack --stream) opens page-by-page over HTTP
+  // Range instead — even in a locked build, which never reaches the remotes
+  // path above. Same negotiation as a remote: the host must honour Range and a
+  // cheap streamed peek must succeed, else fall back to the whole fetch.
+  const bundled: DocVariant[] = [];
+  for (const d of manifest.docsets) {
+    const packs = [...(d.attachments ?? []), ...extraOf(d.id)];
+    let source: DocsetSource | null = null;
+    // The manifest `file` is dist-relative — resolve it (and the packs) against
+    // the site base so the Range probe and the streaming engine get real URLs.
+    const url = resolveManifestUrl(d.file, document.baseURI);
+    if (streamEligible(d, extraOf(d.id)) && (await rangeSupported(url))) {
+      try {
+        const { StreamingDocset } = await import("./data/streaming-docset");
+        await StreamingDocset.peek(url); // validates engine + host end-to-end
+        source = {
+          url,
+          mode: "streaming",
+          attachments: packs.map((p) =>
+            resolveManifestUrl(p, document.baseURI),
+          ),
+        };
+      } catch {
+        /* streaming open failed despite Range — fall back to a whole fetch */
+      }
+    }
+    bundled.push({
       id: d.id,
       collection: d.collection ?? d.id,
       language: d.language,
       version: d.version ?? "",
       title: d.title,
-      source: {
+      source: source ?? {
         file: d.file,
         // A `.gz` suffix (on the docset or a pack) decompresses on fetch.
-        attachments: [...(d.attachments ?? []), ...extraOf(d.id)].map(
-          (file) => ({ file }),
-        ),
-      } as DocsetSource,
-      origin: {
-        kind: "bundled",
-        packs: [...(d.attachments ?? []), ...extraOf(d.id)],
-      } as BookOrigin,
-    })),
+        attachments: packs.map((file) => ({ file })),
+      },
+      origin: { kind: "bundled", streaming: source != null, packs },
+    });
+  }
+
+  // Every available docset as a language "variant" of its collection, each paired
+  // with a ready-to-load source descriptor. We then pick one language per
+  // collection (override → UI language → fallback) so a book present only in
+  // another language stays visible instead of vanishing on a language switch.
+  const variants: DocVariant[] = [
+    ...bundled,
     ...uploadedAll.map((d) => ({
       id: d.id,
       collection: d.collection ?? d.id,
@@ -355,7 +365,8 @@ interface BookOrigin {
   kind: "bundled" | "uploaded" | "remote";
   /** Docset id (uploaded) or URL (remote) to remove by; absent ⇒ not removable. */
   removeKey?: string;
-  /** Remote transport preference (remote only). */
+  /** Page-level streaming: the remote's transport preference, or — for a
+   *  bundled book — the transport actually negotiated at load. */
   streaming?: boolean;
   /** Attachment packs: `.khba` paths/URLs (bundled/remote) or generic labels. */
   packs: string[];
@@ -2074,12 +2085,15 @@ function start(
     address.value = "manage:";
     const langLabel = (l: string): string =>
       ({ en: "English", pl: "Polski" })[l] ?? l;
-    const badge = (o: BookOrigin): string =>
-      o.kind === "uploaded"
-        ? s.uploadedBadge
-        : o.kind === "remote"
-          ? s.remoteBadge + (o.streaming ? ` ${s.streamingBadge}` : "")
-          : s.bundledBadge;
+    const badge = (o: BookOrigin): string => {
+      const kind =
+        o.kind === "uploaded"
+          ? s.uploadedBadge
+          : o.kind === "remote"
+            ? s.remoteBadge
+            : s.bundledBadge;
+      return o.streaming ? `${kind} ${s.streamingBadge}` : kind;
+    };
 
     // Show every edition (variant) grouped by product, the loaded ones marked
     // active — so a multi-version × multi-language product shows its whole matrix,
