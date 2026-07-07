@@ -163,6 +163,7 @@ khb pack --viewer viewer-ts/dist \
 | `--pwa` / `--no-pwa` | force the service worker on/off |
 | `--home <id\|search>` | cold-start landing: a page id (`docsetId:localId`) or `search`; omitted → the viewer opens the Search page (search-first) |
 | `--llms` | also emit an AI-facing export (see below) |
+| `--base-url <url>` | absolute base URL of the deploy, trailing slash optional — e.g. `https://acme.github.io/` (root) or `https://acme.github.io/docs/` (project subpath). With `--llms`, adds `sitemap.xml` + `robots.txt` so the exported Markdown is crawler-discoverable; omitted → those two are skipped (the relative in-page hooks still work). See below. |
 | `--stream [<path>…]` | mark docset(s) for **page-level streaming**: writes `"streaming": true` into their `docsets.json` entries, so the viewer opens them over HTTP `Range` instead of downloading the whole file (worth it for big books; the host must honour `Range`, else the viewer auto-falls back to a whole fetch). Bare `--stream` marks every docset; `--stream <path>` (repeatable) marks only the named `--docset`s. Streamed files (and their packs) are shipped **uncompressed** even under `--mode compact` — `Range` addresses raw SQLite pages |
 | `-o <dir>` | output directory |
 
@@ -181,6 +182,40 @@ The Markdown is the page's original source (the optional `pages.md` column, form
 v5), falling back to plain text for a docset that carries none. It's the **static**
 counterpart to a future MCP server: plain files a static host serves as-is, no
 backend. Nothing here is loaded by the viewer.
+
+##### Making the export discoverable (`--base-url`)
+
+The viewer is a client-side, hash-routed SPA, so a crawler that lands on the site
+sees only the shell — the `#…` route is a fragment the server never receives, and
+the `.md` files above aren't linked from anywhere. Two things fix that:
+
+- The viewer's `index.html` ships a `<noscript>` landing block and
+  `<link rel="llms-txt">` / `<link rel="sitemap">` hooks (relative hrefs, so they
+  resolve at the deploy base). These are always present — a JS-less client reading
+  the raw HTML is handed `llms.txt`, `llms-full.txt`, and `sitemap.xml`.
+- Passing **`--base-url`** alongside `--llms` writes two more files into the dist
+  root:
+  - **`sitemap.xml`** — lists the landing page, `llms.txt`, `llms-full.txt`, and
+    every `md/…` page as **absolute** URLs (`<loc>` requires the full URL, hence the
+    base). This is the highest-value item: real content at real, crawlable
+    addresses.
+  - **`robots.txt`** — allows the AI/search crawlers explicitly and advertises the
+    sitemap.
+
+```bash
+khb pack --profile bundled --viewer viewer-ts/dist \
+            --docset docs.khb \
+            --llms --base-url https://acme.github.io/ \
+            -o publish/
+```
+
+**Subpath caveat.** `--base-url` handles both a domain root and a project subpath
+(`https://acme.github.io/docs/`): the sitemap's absolute URLs and the relative
+in-page hooks are correct either way. `robots.txt` is the exception — crawlers read
+it **only** from the host root (`/robots.txt`), so on a subpath deploy the emitted
+`/docs/robots.txt` is ignored (a root deploy honours it). There, discovery rests on
+the sitemap and the relative `<link>` hooks; `robots.txt` is still written (correct
+for a root deploy, harmless on a subpath).
 
 ### `patch` — update a built distribution
 

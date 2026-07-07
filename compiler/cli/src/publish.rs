@@ -71,6 +71,11 @@ pub struct PackOptions {
     pub home: Option<String>,
     /// Also emit `llms.txt` + `llms-full.txt` + per-page Markdown (AI-facing export).
     pub llms: bool,
+    /// Absolute base URL of the deploy (trailing slash added if missing). When set
+    /// alongside `llms`, the export also writes `sitemap.xml` + `robots.txt` — the
+    /// crawler-facing discovery layer that turns the exported `.md` into findable
+    /// URLs. `None` skips those two (the relative in-page hooks still work).
+    pub base_url: Option<String>,
     /// `--stream`: `None` = no streaming, `Some([])` = mark every docset, else mark
     /// only the listed `--docset` paths.
     pub stream: Option<Vec<PathBuf>>,
@@ -108,7 +113,7 @@ pub fn pack(opts: &PackOptions) -> Result<()> {
         },
     )?;
     if opts.llms {
-        write_llms(&opts.out, &opts.docsets)?;
+        write_llms(&opts.out, &opts.docsets, opts.base_url.as_deref())?;
     }
     println!(
         "packed {} docset(s) + viewer -> {}",
@@ -120,8 +125,10 @@ pub fn pack(opts: &PackOptions) -> Result<()> {
 
 /// Emit the `llms.txt` family into the dist root: the link index, the full inline
 /// concatenation, and per-page Markdown under `md/<docset>/<page>.md`. Plain text
-/// even in compact mode — these are meant to be fetched and read as-is.
-fn write_llms(out: &Path, docsets: &[PathBuf]) -> Result<()> {
+/// even in compact mode — these are meant to be fetched and read as-is. With a
+/// `base_url`, also write the crawler-facing discovery layer (`sitemap.xml` +
+/// `robots.txt`) so those `.md` become findable URLs, not just llms.txt entries.
+fn write_llms(out: &Path, docsets: &[PathBuf], base_url: Option<&str>) -> Result<()> {
     let opened = docsets
         .iter()
         .map(|p| Docset::open(p).with_context(|| format!("opening {}", p.display())))
@@ -142,7 +149,98 @@ fn write_llms(out: &Path, docsets: &[PathBuf]) -> Result<()> {
         "wrote llms.txt + llms-full.txt + {} page file(s)",
         export.pages.len()
     );
+
+    match base_url {
+        Some(raw) => {
+            let base = normalize_base(raw);
+            // Sitemap lists every static, crawlable URL of the export: the landing
+            // page, the two llms.txt files, and each per-page `.md` — everything a
+            // crawler could actually fetch (hash routes can't appear; they're
+            // fragments the server never sees).
+            let mut paths = vec![
+                String::new(), // the landing (base itself)
+                "llms.txt".to_string(),
+                "llms-full.txt".to_string(),
+            ];
+            paths.extend(export.pages.iter().map(|p| p.path.clone()));
+            fs::write(out.join("sitemap.xml"), sitemap_xml(&base, &paths))?;
+            fs::write(out.join("robots.txt"), robots_txt(&base))?;
+            println!("wrote sitemap.xml + robots.txt (base {base})");
+        }
+        None => {
+            println!(
+                "no --base-url: skipped sitemap.xml + robots.txt \
+                 (relative in-page hooks still emitted by the viewer)"
+            );
+        }
+    }
     Ok(())
+}
+
+/// Ensure the base URL ends in a single `/`, so joining a relative path is plain
+/// concatenation (`base + "md/x.md"`).
+fn normalize_base(base: &str) -> String {
+    let trimmed = base.trim_end_matches('/');
+    format!("{trimmed}/")
+}
+
+/// XML-escape a `<loc>` value. Export paths are already sanitized to
+/// `[A-Za-z0-9._-/]`, but a user-supplied base URL might carry `&`, so escape
+/// defensively to keep the sitemap well-formed.
+fn xml_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}
+
+/// Build `sitemap.xml` from absolute URLs (`base` + each relative path). Listing
+/// the real `.md` files is what makes the docs crawlable on a hash-routed SPA —
+/// they're the only genuine, fetchable URLs.
+fn sitemap_xml(base: &str, paths: &[String]) -> String {
+    let mut out = String::from(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+         <urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n",
+    );
+    for path in paths {
+        let loc = xml_escape(&format!("{base}{path}"));
+        out.push_str(&format!("  <url><loc>{loc}</loc></url>\n"));
+    }
+    out.push_str("</urlset>\n");
+    out
+}
+
+/// Build `robots.txt`: don't block anyone (AI crawlers named explicitly for
+/// clarity, then a catch-all), and advertise the sitemap by absolute URL.
+///
+/// Caveat baked into the header comment: crawlers read `robots.txt` **only** from
+/// the host root (`/robots.txt`), so on a project-subpath deploy this file lands
+/// at `/<sub>/robots.txt` and is ignored. It's correct-and-honoured for root
+/// deploys and harmless (just unread) on a subpath.
+fn robots_txt(base: &str) -> String {
+    let bots = [
+        "GPTBot",
+        "OAI-SearchBot",
+        "ChatGPT-User",
+        "ClaudeBot",
+        "Claude-SearchBot",
+        "PerplexityBot",
+        "CCBot",
+        "Google-Extended",
+    ];
+    let mut out = String::from(
+        "# KD Help Book — AI-facing documentation export.\n\
+         # Crawlers read robots.txt only from the host root (/robots.txt); on a\n\
+         # project-subpath deploy this copy is ignored — the sitemap and the\n\
+         # relative <link> hooks in index.html carry discovery there.\n\n",
+    );
+    for bot in bots {
+        out.push_str(&format!("User-agent: {bot}\nAllow: /\n\n"));
+    }
+    out.push_str("User-agent: *\nAllow: /\n\n");
+    out.push_str(&format!("Sitemap: {base}sitemap.xml\n"));
+    out
 }
 
 /// Add or replace docsets in an already-built distribution, updating its manifest.
@@ -344,4 +442,51 @@ fn copy_dir(src: &Path, dst: &Path) -> Result<()> {
 fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<()> {
     fs::write(path, serde_json::to_string_pretty(value)? + "\n")
         .with_context(|| format!("writing {}", path.display()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_base_forces_one_trailing_slash() {
+        assert_eq!(normalize_base("https://x.io"), "https://x.io/");
+        assert_eq!(normalize_base("https://x.io/"), "https://x.io/");
+        assert_eq!(normalize_base("https://x.io/docs"), "https://x.io/docs/");
+        assert_eq!(normalize_base("https://x.io/docs///"), "https://x.io/docs/");
+    }
+
+    #[test]
+    fn sitemap_lists_absolute_urls_under_a_subpath_base() {
+        let base = normalize_base("https://acme.github.io/proj");
+        let paths = [
+            String::new(),
+            "llms.txt".to_string(),
+            "md/book/index.md".to_string(),
+        ];
+        let xml = sitemap_xml(&base, &paths);
+        assert!(xml.starts_with("<?xml"));
+        assert!(xml.contains("<loc>https://acme.github.io/proj/</loc>"));
+        assert!(xml.contains("<loc>https://acme.github.io/proj/llms.txt</loc>"));
+        assert!(xml.contains("<loc>https://acme.github.io/proj/md/book/index.md</loc>"));
+        assert!(xml.trim_end().ends_with("</urlset>"));
+    }
+
+    #[test]
+    fn sitemap_escapes_xml_specials_in_the_base() {
+        let xml = sitemap_xml("https://x.io/a&b/", &["llms.txt".to_string()]);
+        assert!(xml.contains("https://x.io/a&amp;b/llms.txt"));
+        assert!(!xml.contains("a&b/llms")); // the raw ampersand must not survive
+    }
+
+    #[test]
+    fn robots_allows_ai_bots_and_points_at_the_sitemap() {
+        let robots = robots_txt("https://acme.github.io/proj/");
+        assert!(robots.contains("User-agent: GPTBot\nAllow: /"));
+        assert!(robots.contains("User-agent: ClaudeBot\nAllow: /"));
+        assert!(robots.contains("User-agent: *\nAllow: /"));
+        assert!(robots.contains("Sitemap: https://acme.github.io/proj/sitemap.xml"));
+        // The subpath caveat must stay documented in the emitted file.
+        assert!(robots.contains("host root"));
+    }
 }
