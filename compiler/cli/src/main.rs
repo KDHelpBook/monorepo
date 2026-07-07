@@ -141,7 +141,20 @@ enum Command {
     Inspect { src: String },
 }
 
+/// Rust ignores SIGPIPE by default, so `khb inspect … | head` panics with
+/// "failed printing to stdout: Broken pipe" once the pipe closes. Restore the
+/// default disposition (die quietly, like every other CLI) before any output.
+#[cfg(unix)]
+fn reset_sigpipe() {
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
+}
+#[cfg(not(unix))]
+fn reset_sigpipe() {}
+
 fn main() -> Result<()> {
+    reset_sigpipe();
     match Cli::parse().command {
         Command::Compile {
             src,
