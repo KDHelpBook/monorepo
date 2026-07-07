@@ -1,0 +1,8 @@
+# Compiles this folder into a docset:  khb compile docs/authoring -o authoring.khb
+# Pages are the flat *.md files; toc.yaml shapes the tree, categories.yaml names the facet.
+id = "khb-authoring"
+title = "Authoring KD Help Books"
+version = "0.1.0"
+language = "en"
+collection = "khb-docs"
+collection_title = "KD Help Book"

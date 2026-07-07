@@ -67,10 +67,12 @@ jobs:
           grep -q "^version = \"${NEW}\"$" compiler/Cargo.toml
           (cd compiler && cargo update --workspace)
           (cd viewer-ts && npm version "$NEW" --no-git-tag-version)
-          # The published documentation book; the compiler/examples/* fixtures
-          # keep their static demo versions.
-          sed -i "s/^version = \".*\"$/version = \"${NEW}\"/" docs/markdown/docset.toml
-          grep -q "^version = \"${NEW}\"$" docs/markdown/docset.toml
+          # Every published documentation volume (docs/*/docset.toml); the
+          # compiler/examples/* fixtures keep their static demo versions.
+          for T in docs/*/docset.toml; do
+            sed -i "s/^version = \".*\"$/version = \"${NEW}\"/" "$T"
+            grep -q "^version = \"${NEW}\"$" "$T"
+          done
           git diff --stat
 
       - name: Commit, tag, push

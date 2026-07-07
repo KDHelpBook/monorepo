@@ -75,6 +75,16 @@ pub fn render_html(markdown: &str, highlighter: Option<&SyntectAdapter>) -> Stri
     options.extension.alerts = true;
     // `$…$` / `$$…$$` math (parsed to LaTeX; rendered to MathML in [`crate::render`]).
     options.extension.math_dollars = true;
+    // Inline marks beyond GFM: `==x==` → <mark>, `__x__` → <u>, `^x^` → <sup>,
+    // `~x~` → <sub>, `++x++` → <ins>. Two of these repurpose CommonMark syntax on
+    // purpose: `__x__` stops meaning bold (bold is `**x**` only), and a single
+    // tilde stops meaning strikethrough (that is `~~x~~` only) — a literal prose
+    // tilde is `\~`.
+    options.extension.highlight = true;
+    options.extension.underline = true;
+    options.extension.superscript = true;
+    options.extension.subscript = true;
+    options.extension.insert = true;
     // Keep the info-string text *after* the language on the `<code>` as `data-meta`,
     // so ```ts [nuxt.config.ts] surfaces a filename the viewer shows above the block.
     options.render.full_info_string = true;
@@ -133,6 +143,23 @@ mod tests {
         let html = render_html("# Title\n\nSome **bold** text.", None);
         let plain = html_to_plain(&html);
         assert_eq!(plain, "Title Some bold text.");
+    }
+
+    #[test]
+    fn renders_inline_marks() {
+        let html = render_html(
+            "==marked== __underlined__ ++added++ H~2~O and E=mc^2^, **bold**, ~~gone~~, \\~5 min",
+            None,
+        );
+        assert!(html.contains("<mark>marked</mark>"));
+        assert!(html.contains("<u>underlined</u>"));
+        assert!(html.contains("<ins>added</ins>"));
+        assert!(html.contains("H<sub>2</sub>O"));
+        assert!(html.contains("mc<sup>2</sup>"));
+        assert!(html.contains("<strong>bold</strong>"));
+        assert!(html.contains("<del>gone</del>"));
+        // An escaped tilde stays literal prose.
+        assert!(html.contains("~5 min"));
     }
 
     #[test]
