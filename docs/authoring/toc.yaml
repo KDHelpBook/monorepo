@@ -20,11 +20,14 @@
             - page: lists
             - page: links
             - page: images
+            - page: galleries
             - page: tables
             - page: blockquotes
             - page: callouts
+            - page: directives
             - page: code-blocks
             - page: code-extensions
+            - page: diagrams
             - page: footnotes
             - page: emoji
             - page: math

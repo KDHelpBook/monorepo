@@ -29,6 +29,9 @@ pub fn render(src: &SourceDocset) -> Result<RenderedDocset> {
             let html = render_code_groups(&html, &highlighter).with_context(ctx)?;
             let html = render_code_preview(&html, &highlighter).with_context(ctx)?;
             let html = render_code_tree(&html, &highlighter).with_context(ctx)?;
+            // `~~~gallery` → a uniform-tile captioned image strip. Runs before the asset
+            // URL rewrite so each tile's `assets/…` image resolves like any other.
+            let html = render_gallery(&html, &highlighter).with_context(ctx)?;
             // ` ```dot ` / ` ```graphviz ` → a Graphviz graph laid out to inline SVG at
             // build time (pure-Rust `layout`). Fails the build on unparseable DOT.
             let html = render_diagrams(&html).with_context(ctx)?;
@@ -423,6 +426,157 @@ fn render_code_tree(html: &str, highlighter: &SyntectAdapter) -> Result<String> 
     }
     out.push_str(&html[i..]);
     Ok(out)
+}
+
+/// One tile of a [`render_gallery`] strip: an image, its caption (the image's alt text),
+/// and an optional description (the inline-Markdown lines that follow the image).
+struct GalleryTile {
+    src: String,
+    alt: String,
+    desc: Option<String>,
+}
+
+/// Expand `~~~gallery … ~~~` into a uniform-tile captioned image strip. Each `![alt](src)`
+/// inside starts a tile — the alt becomes the caption; the non-image lines after it (until
+/// the next image or the fence end) become that tile's inline-Markdown description. Flags in
+/// the info string: `w=<px>` sets the shared tile width, and `scroll` keeps a single
+/// horizontally scrolling row (`wrap`, the default, flows tiles into rows). Same opaque-fence
+/// mechanism as the code widgets; runs before the asset rewrite so tile images resolve. A
+/// gallery with no images is a build error.
+fn render_gallery(html: &str, highlighter: &SyntectAdapter) -> Result<String> {
+    const PRE: &str = "<pre class=\"syntax-highlighting\"><code ";
+    const CLOSE: &str = "</code></pre>";
+    let mut out = String::with_capacity(html.len());
+    let mut i = 0;
+    while let Some(rel) = html[i..].find(PRE) {
+        let block_start = i + rel;
+        let attrs_start = block_start + PRE.len();
+        let Some(gtrel) = html[attrs_start..].find('>') else {
+            break;
+        };
+        let inner_start = attrs_start + gtrel + 1;
+        let Some(crel) = html[inner_start..].find(CLOSE) else {
+            break;
+        };
+        let code_attrs = &html[attrs_start..inner_start];
+        let lang = attr_value(code_attrs, "class")
+            .and_then(|c| c.strip_prefix("language-").map(str::to_string));
+        out.push_str(&html[i..block_start]);
+        if lang.as_deref() == Some("gallery") {
+            let meta = attr_value(code_attrs, "data-meta").unwrap_or_default();
+            let raw = unescape_html(&strip_tags(&html[inner_start..inner_start + crel]));
+            out.push_str(&build_gallery(&raw, &meta, highlighter)?);
+        } else {
+            out.push_str(&html[block_start..inner_start + crel + CLOSE.len()]);
+        }
+        i = inner_start + crel + CLOSE.len();
+    }
+    out.push_str(&html[i..]);
+    Ok(out)
+}
+
+/// Assemble the `.gallery` markup from a gallery fence's raw body and info-string flags.
+/// `w=<px>` sets `--gallery-w` (the shared tile width); `scroll` selects the single-row
+/// overflow mode, `wrap` (default) flows into rows. Descriptions render as inline Markdown.
+fn build_gallery(raw: &str, meta: &str, highlighter: &SyntectAdapter) -> Result<String> {
+    let mut width: Option<u32> = None;
+    let mut scroll = false;
+    for tok in meta.split_whitespace() {
+        if let Some(w) = tok.strip_prefix("w=") {
+            width = w.trim_end_matches("px").parse().ok();
+        } else if tok == "scroll" {
+            scroll = true;
+        } else if tok == "wrap" {
+            scroll = false;
+        }
+    }
+    let tiles = parse_gallery_tiles(raw);
+    if tiles.is_empty() {
+        anyhow::bail!("`~~~gallery` contains no images");
+    }
+    let mode = if scroll { "scroll" } else { "wrap" };
+    let style = match width {
+        Some(px) => format!(" style=\"--gallery-w:{px}px\""),
+        None => String::new(),
+    };
+    let mut html = format!("<div class=\"gallery gallery-{mode}\"{style}>");
+    for tile in &tiles {
+        html.push_str("<figure class=\"gallery-tile\">");
+        html.push_str(&format!(
+            "<img src=\"{}\" alt=\"{}\" loading=\"lazy\">",
+            esc(&tile.src),
+            esc(&tile.alt)
+        ));
+        if !tile.alt.is_empty() {
+            html.push_str(&format!("<figcaption>{}</figcaption>", esc(&tile.alt)));
+        }
+        if let Some(desc) = &tile.desc {
+            // Inline Markdown only: render, then unwrap a lone `<p>…</p>` so the caption
+            // and description read as one tile, not a paragraph with block margins.
+            let rendered = markdown::render_html(desc, Some(highlighter));
+            let rendered = rendered.trim();
+            let inner = rendered
+                .strip_prefix("<p>")
+                .and_then(|s| s.strip_suffix("</p>"))
+                .filter(|s| !s.contains("<p>"))
+                .unwrap_or(rendered);
+            html.push_str(&format!("<p class=\"gallery-desc\">{}</p>", inner.trim()));
+        }
+        html.push_str("</figure>");
+    }
+    html.push_str("</div>");
+    Ok(html)
+}
+
+/// Split a gallery body into tiles. A line that is a single `![alt](src)` image opens a
+/// tile; the non-blank, non-image lines that follow are joined (soft-wrapped with spaces)
+/// into that tile's description. Description lines before the first image have no tile to
+/// attach to and are dropped.
+fn parse_gallery_tiles(raw: &str) -> Vec<GalleryTile> {
+    let mut tiles: Vec<GalleryTile> = Vec::new();
+    for line in raw.lines() {
+        let t = line.trim();
+        if t.is_empty() {
+            continue;
+        }
+        if let Some((alt, src)) = parse_image_line(t) {
+            tiles.push(GalleryTile {
+                src,
+                alt,
+                desc: None,
+            });
+        } else if let Some(last) = tiles.last_mut() {
+            match &mut last.desc {
+                Some(d) => {
+                    d.push(' ');
+                    d.push_str(t);
+                }
+                None => last.desc = Some(t.to_string()),
+            }
+        }
+    }
+    tiles
+}
+
+/// Parse a lone `![alt](src)` line into `(alt, src)`. The alt is the caption; a trailing
+/// `"title"` inside the parens is ignored (the alt already is the caption). `None` if the
+/// line isn't exactly one image (trailing prose would make it a description line instead).
+fn parse_image_line(line: &str) -> Option<(String, String)> {
+    let rest = line.strip_prefix("![")?;
+    let close_alt = rest.find("](")?;
+    let alt = rest[..close_alt].to_string();
+    let after = &rest[close_alt + 2..];
+    let close_paren = after.rfind(')')?;
+    if close_paren + 1 != after.len() {
+        return None; // something after the image → treat the whole line as description
+    }
+    let target = after[..close_paren].trim();
+    let src = target
+        .split_whitespace()
+        .next()
+        .unwrap_or(target)
+        .to_string();
+    (!src.is_empty()).then_some((alt, src))
 }
 
 /// Render ` ```dot ` / ` ```graphviz ` fenced blocks to inline SVG with the pure-Rust
@@ -896,6 +1050,42 @@ mod tests {
 
         let empty = markdown::render_html("~~~code-tree\n~~~\n", Some(&h));
         assert!(render_code_tree(&empty, &h).is_err());
+    }
+
+    #[test]
+    fn expands_gallery() {
+        let h = markdown::highlighter();
+        let md = "~~~gallery w=160 scroll\n\
+                  ![1. Waiting](assets/a.png)\n\
+                  Tap the card — the **UID** appears.\n\n\
+                  ![2. UHF check](assets/b.png)\n\n\
+                  ![3. Confirm](assets/c.png)\n~~~\n";
+        let html = render_gallery(&markdown::render_html(md, Some(&h)), &h).unwrap();
+        assert!(html.contains("class=\"gallery gallery-scroll\"")); // scroll flag honoured
+        assert!(html.contains("--gallery-w:160px")); // w= flag → tile width
+        assert!(!html.contains("language-gallery")); // opaque block consumed
+                                                     // Three tiles: alt → both the img alt and the caption.
+        assert_eq!(html.matches("class=\"gallery-tile\"").count(), 3);
+        assert!(html.contains("<img src=\"assets/a.png\" alt=\"1. Waiting\""));
+        assert!(html.contains("<figcaption>1. Waiting</figcaption>"));
+        // The line after an image is its description (inline Markdown rendered).
+        assert!(html.contains(
+            "<p class=\"gallery-desc\">Tap the card — the <strong>UID</strong> appears.</p>"
+        ));
+        // A tile with no following prose has no description paragraph.
+        assert!(html.contains("<figcaption>2. UHF check</figcaption>"));
+
+        // Default width + wrap mode when no flags are given.
+        let plain = render_gallery(
+            &markdown::render_html("~~~gallery\n![x](assets/x.png)\n~~~\n", Some(&h)),
+            &h,
+        )
+        .unwrap();
+        assert!(plain.contains("class=\"gallery gallery-wrap\"") && !plain.contains("--gallery-w"));
+
+        // A gallery with no images is a build error.
+        let empty = markdown::render_html("~~~gallery\njust prose, no image\n~~~\n", Some(&h));
+        assert!(render_gallery(&empty, &h).is_err());
     }
 
     #[test]
