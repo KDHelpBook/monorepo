@@ -414,14 +414,34 @@ async function bootstrap(): Promise<void> {
  * switchers are follow-ups (they'd reuse the same `TauriDocset` path). See docs/tauri.md.
  */
 async function bootstrapTauri(): Promise<void> {
-  const all = await TauriDocset.bundled();
-  const lang = chooseLang([...new Set(all.map((d) => d.language))]);
-  document.documentElement.lang = lang;
-  applyStatic(lang);
-  unregisterServiceWorker();
-  const shown = pickTauriEditions(all, lang);
-  const config: Config = { externalSources: false, pwa: false };
-  start(Collection.of(shown, lang), lang, [lang], config, [], [], [], []);
+  // The window starts hidden (tauri.conf.json) so the user never sees the unstyled
+  // shell while Vite/main.ts load; reveal it once the UI is built (or on error, so a
+  // failure is visible, not a permanently blank window). The timer is a last-resort
+  // fallback in case anything hangs.
+  const reveal = setTimeout(() => void showTauriWindow(), 4000);
+  try {
+    const all = await TauriDocset.bundled();
+    const lang = chooseLang([...new Set(all.map((d) => d.language))]);
+    document.documentElement.lang = lang;
+    applyStatic(lang);
+    unregisterServiceWorker();
+    const shown = pickTauriEditions(all, lang);
+    const config: Config = { externalSources: false, pwa: false };
+    start(Collection.of(shown, lang), lang, [lang], config, [], [], [], []);
+  } finally {
+    clearTimeout(reveal);
+    void showTauriWindow();
+  }
+}
+
+/** Reveal the Tauri window (it starts hidden to avoid a flash of the unstyled shell). */
+async function showTauriWindow(): Promise<void> {
+  try {
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    await getCurrentWindow().show();
+  } catch {
+    /* not Tauri, or already shown */
+  }
 }
 
 /** One edition per family (`collection`): prefer `lang`, then `en`, then any — and the
