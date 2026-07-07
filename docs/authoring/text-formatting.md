@@ -132,19 +132,22 @@ Renders as: H~2~O, x~1~ … x~n~.
 > In GitHub Markdown a single tilde can mean strikethrough — here it means
 > subscript; strikethrough is `~~x~~` only.
 
-## Literal tildes
+## Literal characters
 
-Because a single tilde is subscript syntax, a tilde meant *as a character* —
-"about this much", a home-directory path — is escaped with a backslash. Inside
-`inline code` and code blocks nothing is ever escaped.
+Every marker on this page is just a character until it pairs up — and when you mean
+the *character*, a backslash before it turns the syntax off: `\~`, `\*`, `\_`,
+`\+`, `\=`, `\\` for the backslash itself. In practice the tilde needs this most
+(a single `~` is subscript syntax), asterisks and underscores occasionally, the
+rest rarely.
 
 ```md
-Takes \~5 minutes. In code no escape is needed: `~/books/my-docs`.
+Takes \~5 minutes; required fields are marked with \*.
 ```
 
-Renders as: Takes \~5 minutes. In code no escape is needed: `~/books/my-docs`.
+Renders as: Takes \~5 minutes; required fields are marked with \*.
 
-The same backslash escape works for any marker character: `\*`, `\_`, `\+`, `\=`.
+Inside `inline code` and code blocks nothing is ever escaped — write `~/books`,
+`a * b` or `__init__` there as-is.
 
 ## Line breaks
 
