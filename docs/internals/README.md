@@ -28,7 +28,7 @@ Come back here when you need to know what those tools actually produce.
 | Page | Covers |
 |------|--------|
 | [File formats](file-formats) | `.khb`, `.khbb`, `.khba`, and the `.gz` transfer suffix |
-| [SQLite schema](sqlite-schema) | every table, the `meta` keys, format versions v1–v6 |
+| [SQLite schema](sqlite-schema) | every table, the `meta` keys, the format version |
 | [Full-text search](full-text-search) | FTS5 external content, bm25, per-language tokenizers |
 | [Streaming](streaming) | the Range-VFS: reading a remote book page-by-page |
 | [Security model](security-model) | rendering untrusted books in a sandboxed frame |

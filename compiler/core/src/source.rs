@@ -54,7 +54,7 @@ struct CategoryYaml {
 }
 
 /// A `toc.yaml` node: `page` + optional display `title`, or — a pure folder node —
-/// a `title` alone with `children` (no page to open; format v6).
+/// a `title` alone with `children` (no page to open).
 #[derive(Deserialize)]
 struct TocYaml {
     #[serde(default)]

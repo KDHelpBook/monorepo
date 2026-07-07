@@ -7,7 +7,7 @@ export interface TocNode {
   pageId: string;
   title: string;
   children: TocNode[];
-  /** True for a folder node: a book's page-less TOC folder (format v6) or a
+  /** True for a folder node: a book's page-less TOC folder or a
    *  synthetic family/product folder. Clicking it only expands/collapses. */
   group?: boolean;
 }
@@ -297,7 +297,7 @@ type Row = Record<string, unknown>;
 
 /**
  * Build the TOC tree from flat `toc` rows (shared by the sql.js and streaming
- * engines). A row with a NULL `page_id` is a pure folder node (format v6): it gets
+ * engines). A row with a NULL `page_id` is a pure folder node: it gets
  * `group: true` and a synthetic `@folder:<slug-path>` key — stable across reloads
  * (it derives from the title path, not from rowids), so the tree's persisted
  * expanded-state keeps working, and never navigable (folder keys are excluded from
