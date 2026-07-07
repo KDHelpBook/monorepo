@@ -1,19 +1,21 @@
 // @ts-nocheck — the vendored wa-sqlite JS ships no `.d.ts`; this module is
 // verified against a live docset over HTTP Range instead (see docs/streaming.md).
 //
-// Browser page-level streaming engine (wa-sqlite + async Range VFS).
+// The one browser SQLite engine (wa-sqlite + async VFS) — real FTS5 for every book.
 //
 // This is the browser counterpart of `compiler/core/src/vfs.rs`: a read-only
-// SQLite VFS that turns each "give me page N" into an HTTP `Range:` request, so
-// a query downloads only the pages it touches instead of the whole `.khb`. On a
-// 618 KB demo docset, opening + reading one page by primary key fetches ~21 % of
-// the file (64 KiB blocks) — the same win the native VFS shows on a 2 MB file.
+// SQLite VFS behind a pluggable byte source ({@link BlockReader}). A remote `.khb`
+// reads over HTTP `Range` so a query downloads only the pages it touches (on a
+// 618 KB demo docset, open + one page ≈ 21 % of the file, 64 KiB blocks); a
+// whole-file docset (upload / bundled) reads the same way from an in-memory
+// `Uint8Array` (no network). Both get genuine bm25 FTS5 — the whole point of the
+// custom build; there is no second engine.
 //
 // Engine: a **custom wa-sqlite 1.1.1 Asyncify build WITH FTS5** (SQLite 3.53
-// `--enable-all`), vendored under `viewer-ts/vendor/wa-sqlite/`. Unlike stock
-// sql.js (and the prebuilt wa-sqlite), this restores real in-browser FTS5 —
-// bm25-ranked `MATCH` over the streamed index. The Asyncify build lets a VFS
-// method `await` a `fetch()`, which is what makes streaming from JS possible.
+// `--enable-all`), vendored under `viewer-ts/vendor/wa-sqlite/`. Stock sql.js and
+// the prebuilt wa-sqlite ship *without* FTS5; this build restores it. The Asyncify
+// build lets a VFS method `await` a `fetch()`, which is what makes streaming from
+// JS possible.
 //
 // wa-sqlite 1.1's VFS authoring model: extend `FacadeVFS` and implement the
 // JS-friendly `jOpen/jRead/…` methods; any declared `async` one is detected and
@@ -27,47 +29,28 @@ import wasmUrl from "../../vendor/wa-sqlite/dist/wa-sqlite-async.wasm?url";
 
 const DEFAULT_BLOCK = 65536; // coalesce reads into 64 KiB cached blocks, like vfs.rs
 
-/** A read-only SQLite VFS that reads a single remote file over HTTP Range. */
-export class RangeVFS extends FacadeVFS {
-  url: string;
-  block_size: number;
-  size = 0;
-  cache = new Map<number, Uint8Array>(); // blockIndex -> bytes
-  bytesRead = 0; // instrumentation: total bytes fetched over the wire
+/**
+ * The byte source a {@link RangeVFS} reads through — the JS mirror of core's
+ * `vfs.rs` `RangeReader` (size + read-at). Two impls back the one wa-sqlite
+ * engine: HTTP `Range` for a remote `.khb` (fetch only touched pages) and an
+ * in-memory `Uint8Array` for a whole-file docset (upload / bundled / whole-fetch).
+ */
+export interface BlockReader {
+  /** A stable name for the open (URL or synthetic) — the VFS is single-file. */
+  name(): string;
+  /** Total size in bytes, probed once up front. */
+  probeSize(): Promise<number>;
+  /** Bytes for the inclusive byte range [start, end]. */
+  read(start: number, end: number): Promise<Uint8Array>;
+}
 
-  static async create(
-    name: string,
-    module: unknown,
-    url: string,
-    blockSize = DEFAULT_BLOCK,
-  ): Promise<RangeVFS> {
-    const vfs = new RangeVFS(name, module, url, blockSize);
-    await vfs.isReady();
-    return vfs;
-  }
-
-  constructor(
-    name: string,
-    module: unknown,
-    url: string,
-    blockSize: number,
-  ) {
-    super(name, module);
-    this.url = url;
-    this.block_size = blockSize;
-  }
-
-  /** Total file size (known after the first open). */
-  get fileSize(): number {
-    return this.size;
-  }
-
-  getFilename(): string {
+/** Reads a remote file over HTTP `Range` (the host must return 206). */
+export class HttpRangeReader implements BlockReader {
+  constructor(private readonly url: string) {}
+  name(): string {
     return this.url;
   }
-
-  /** Probe the file size once, up front (via a 1-byte Range GET). */
-  private async probe(): Promise<number> {
+  async probeSize(): Promise<number> {
     const res = await fetch(this.url, { headers: { Range: "bytes=0-0" } });
     if (res.status !== 206) {
       throw new Error(
@@ -78,21 +61,87 @@ export class RangeVFS extends FacadeVFS {
     const total = cr && cr.split("/")[1];
     if (!total) throw new Error("no Content-Range total in probe response");
     await res.arrayBuffer(); // drain
-    this.bytesRead += 1;
     return Number(total);
   }
+  async read(start: number, end: number): Promise<Uint8Array> {
+    const res = await fetch(this.url, {
+      headers: { Range: `bytes=${start}-${end}` },
+    });
+    if (res.status !== 206)
+      throw new Error(`range read failed (${res.status})`);
+    return new Uint8Array(await res.arrayBuffer());
+  }
+}
 
-  /** Fetch (and cache) the block containing `offset`. */
+let bytesSeq = 0;
+/** Reads a whole `.khb` already in memory — slices, no network. */
+export class BytesReader implements BlockReader {
+  private readonly label = `mem-${bytesSeq++}.khb`;
+  constructor(private readonly bytes: Uint8Array) {}
+  name(): string {
+    return this.label;
+  }
+  probeSize(): Promise<number> {
+    return Promise.resolve(this.bytes.byteLength);
+  }
+  read(start: number, end: number): Promise<Uint8Array> {
+    return Promise.resolve(this.bytes.subarray(start, end + 1));
+  }
+}
+
+/** A read-only SQLite VFS that reads one file through a pluggable {@link BlockReader}. */
+export class RangeVFS extends FacadeVFS {
+  reader: BlockReader;
+  block_size: number;
+  size = 0;
+  cache = new Map<number, Uint8Array>(); // blockIndex -> bytes
+  bytesRead = 0; // instrumentation: total bytes read (fetched or sliced)
+
+  static async create(
+    name: string,
+    module: unknown,
+    reader: BlockReader,
+    blockSize = DEFAULT_BLOCK,
+  ): Promise<RangeVFS> {
+    const vfs = new RangeVFS(name, module, reader, blockSize);
+    await vfs.isReady();
+    return vfs;
+  }
+
+  constructor(
+    name: string,
+    module: unknown,
+    reader: BlockReader,
+    blockSize: number,
+  ) {
+    super(name, module);
+    this.reader = reader;
+    this.block_size = blockSize;
+  }
+
+  /** Total file size (known after the first open). */
+  get fileSize(): number {
+    return this.size;
+  }
+
+  getFilename(): string {
+    return this.reader.name();
+  }
+
+  /** Probe the file size once, up front. */
+  private async probe(): Promise<number> {
+    const total = await this.reader.probeSize();
+    this.bytesRead += 1; // the probe request (a no-op read for in-memory)
+    return total;
+  }
+
+  /** Read (and cache) the block containing `offset`. */
   private async block(index: number): Promise<Uint8Array> {
     const cached = this.cache.get(index);
     if (cached) return cached;
     const start = index * this.block_size;
     const end = Math.min(start + this.block_size, this.size) - 1;
-    const res = await fetch(this.url, {
-      headers: { Range: `bytes=${start}-${end}` },
-    });
-    if (res.status !== 206) throw new Error(`range read failed (${res.status})`);
-    const bytes = new Uint8Array(await res.arrayBuffer());
+    const bytes = await this.reader.read(start, end);
     this.bytesRead += bytes.byteLength;
     this.cache.set(index, bytes);
     return bytes;
@@ -207,9 +256,9 @@ function serialize<T>(task: () => Promise<T>): Promise<T> {
 type SqlParams = (string | number | null)[];
 
 /**
- * A remote `.khb` opened over the Range VFS: an async query surface (`all` /
- * `one`) mirroring the sql.js helpers in `docset.ts`, so the same SQL runs on
- * either engine. Only touched pages are fetched; `bytesRead` tracks the total.
+ * One `.khb` opened over the VFS (Range or in-memory): an async query surface
+ * (`all` / `one`). `bytesRead` tracks bytes read — over the wire when streaming,
+ * or sliced from memory for a whole-file book.
  */
 export class StreamingDb {
   private constructor(
@@ -218,17 +267,34 @@ export class StreamingDb {
     private readonly vfs: RangeVFS,
   ) {}
 
-  static async open(
-    url: string,
+  /** Open a remote `.khb` streamed page-by-page over HTTP `Range`. */
+  static open(url: string, blockSize = DEFAULT_BLOCK): Promise<StreamingDb> {
+    return StreamingDb.openReader(new HttpRangeReader(url), blockSize);
+  }
+
+  /** Open a whole `.khb` already in memory (upload / bundled) — real FTS5, no network. */
+  static openBytes(
+    bytes: Uint8Array,
+    blockSize = DEFAULT_BLOCK,
+  ): Promise<StreamingDb> {
+    return StreamingDb.openReader(new BytesReader(bytes), blockSize);
+  }
+
+  private static async openReader(
+    reader: BlockReader,
     blockSize = DEFAULT_BLOCK,
   ): Promise<StreamingDb> {
     const { module, sqlite3 } = await sqliteApi();
     const vfsName = `khb-range-${vfsSeq++}`;
-    const vfs = await RangeVFS.create(vfsName, module, url, blockSize);
+    const vfs = await RangeVFS.create(vfsName, module, reader, blockSize);
     // Register + open touch the shared wasm runtime, so run them on the queue too.
     const db = await serialize(async () => {
       sqlite3.vfs_register(vfs, false);
-      return sqlite3.open_v2(url, SQLite.SQLITE_OPEN_READONLY, vfsName);
+      return sqlite3.open_v2(
+        reader.name(),
+        SQLite.SQLITE_OPEN_READONLY,
+        vfsName,
+      );
     });
     return new StreamingDb(sqlite3, db, vfs);
   }
@@ -241,10 +307,7 @@ export class StreamingDb {
   }
 
   /** Run `sql` (optionally bound) and return every row as a `{col: value}`. */
-  all(
-    sql: string,
-    params: SqlParams = [],
-  ): Promise<Record<string, unknown>[]> {
+  all(sql: string, params: SqlParams = []): Promise<Record<string, unknown>[]> {
     // Serialised module-wide: concurrent callers queue instead of corrupting the
     // shared Asyncify runtime (see `serialize`).
     return serialize(async () => {

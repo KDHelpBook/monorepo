@@ -11,11 +11,7 @@
     "test": "vitest run",
     "format": "prettier --write ."
   },
-  "dependencies": {
-    "sql.js": "^1.13.0"
-  },
   "devDependencies": {
-    "@types/sql.js": "^1.4.9",
     "prettier": "^3.4.2",
     "typescript": "^5.7.2",
     "vite": "^6.0.7",

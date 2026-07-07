@@ -75,20 +75,22 @@ Streaming needs a **SQLite VFS over byte ranges**:
   FTS5** (SQLite 3.53, `-DSQLITE_ENABLE_FTS5`), vendored under
   `viewer-ts/vendor/wa-sqlite/` with a reproducible build recipe — because the
   *prebuilt* `wa-sqlite` ships without FTS5 (`MATCH` → *"no such module: fts5"*). So a
-  streamed docset gets genuine bm25-ranked full-text search, not the `plain`-column
-  fallback the sql.js path uses (see [format.md](format.md)).
+  docset gets genuine bm25-ranked full-text search.
 
-  **Merged into the live collection.** `StreamingDocset` (`streaming-docset.ts`)
-  wraps this engine as an `IDocset`: it **eager-loads the small structure** at open
-  (toc/categories/keywords/related — sync thereafter) and **streams the heavy parts**
-  (`page`/`asset`/`search`) on demand. That split kept the sync→async change small:
-  only `page`/`asset`/`search` went async across `Docset`/`Collection` and their
-  call sites; structure stayed synchronous, so local (sql.js) books are unaffected.
-  A streamed book therefore drops into the same TOC / index / search as the whole-file
-  books. The engine is **code-split** (loaded only when a streamed docset is opened),
-  and `Collection.search` **normalizes each book's scores** before merging so FTS5
-  bm25 and the sql.js heuristic interleave fairly instead of one crowding out the
-  other.
+  > **Update:** sql.js has since been **retired**. This one wa-sqlite engine now backs
+  > **every** browser book — whole-file (bundled/uploaded) via an in-memory `BlockReader`
+  > and remote via HTTP Range — so whole-file books get the same real FTS5, not the old
+  > JS `plain`-column heuristic. The "sql.js" mentions below are historical.
+
+  **Merged into the live collection.** `StreamingDocset` (`streaming-docset.ts`) is the
+  sole browser `IDocset` engine: it **eager-loads the small structure** at open
+  (toc/categories/keywords/related — sync thereafter) and reads the **heavy parts**
+  (`page`/`asset`/`search`) on demand — streamed over Range, or from memory for a
+  whole-file book. That split kept the sync→async change small: only
+  `page`/`asset`/`search` are async across `Docset`/`Collection` and their call sites;
+  structure stays synchronous. The engine is **code-split** (one chunk, loaded on the
+  first docset open), and `Collection.search` **normalizes each book's bm25 scores**
+  before merging so books interleave fairly instead of one crowding out the others.
 
 ## Wiring it into the existing seams
 
@@ -222,7 +224,7 @@ small fully-fetched index for a remote book).
    stays sync), so a streamed book **merges into the live collection** — verified: it
    appears as its own family folder, its pages + graphics stream on click (~21 % of a
    618 KB file to open + read a page), and its bm25 FTS5 hits interleave with the
-   sql.js books (per-book score normalization keeps the merge fair). Opt-in via *File →
+   other books (per-book score normalization keeps the merge fair). Opt-in via *File →
    Open from URL… → Stream* for remotes, or `"streaming": true` in `docsets.json`
    (`khb pack --stream`) for bundled books; the engine is code-split so
    non-streaming sessions never load it. Whole-file (step 2) stays the default and
