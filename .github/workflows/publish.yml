@@ -1,0 +1,150 @@
+name: Publish
+
+# Assembles and deploys the GitHub Pages site from build.yml's artifacts —
+# nothing is built here: the kdhelp CLI and the viewer dist both come from
+# build.yml (this very run when called by release.yml, the triggering run on
+# workflow_run, or the latest successful main build on manual dispatch). The
+# CLI then compiles the project documentation (docs/markdown) from the
+# checked-out ref, packs the distribution (with the llms.txt export) and
+# merges archived documentation versions downloaded from past releases.
+#
+# Requires: repo Settings → Pages → Source = "GitHub Actions".
+
+on:
+  # After every successful build of main — guarantees the deployed viewer and
+  # docsets come from the same commit (a plain push trigger would race
+  # build.yml and could only use artifacts from a previous build).
+  workflow_run:
+    workflows: [Build]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        description: Git ref to publish from
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  actions: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    # On workflow_run, deploy only after a successful build.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.event.workflow_run.head_sha || github.ref }}
+
+      # Same-run artifacts exist when release.yml calls this workflow after
+      # build.yml; the other trigger paths fall through to `gh run download`
+      # in the next step.
+      - name: Fetch the CLI from this run
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: kdhelp-x86_64-unknown-linux-gnu
+          path: cli-dl
+      - name: Fetch the viewer from this run
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: viewer-dist
+          path: viewer-dist
+
+      - name: Ensure the build.yml artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RUN="${{ github.event.workflow_run.id }}"
+          if [[ -z "$RUN" ]]; then
+            RUN=$(gh run list -R "${{ github.repository }}" --workflow build.yml \
+              --branch main --status success --limit 1 \
+              --json databaseId --jq '.[0].databaseId' || true)
+          fi
+          if ! ls cli-dl/*.tar.gz >/dev/null 2>&1 && [[ -n "$RUN" ]]; then
+            gh run download "$RUN" -R "${{ github.repository }}" \
+              -n kdhelp-x86_64-unknown-linux-gnu -D cli-dl || true
+          fi
+          if [[ ! -e viewer-dist/index.html && -n "$RUN" ]]; then
+            gh run download "$RUN" -R "${{ github.repository }}" \
+              -n viewer-dist -D viewer-dist || true
+          fi
+          ls cli-dl/*.tar.gz >/dev/null 2>&1 \
+            || { echo "::error::no kdhelp CLI artifact found — run build.yml first"; exit 1; }
+          [[ -e viewer-dist/index.html ]] \
+            || { echo "::error::no viewer-dist artifact found — run build.yml first"; exit 1; }
+          mkdir -p cli
+          tar xzf cli-dl/*.tar.gz -C cli --strip-components=1
+          BIN="$PWD/cli/kdhelp"
+          "$BIN" --version
+          echo "BIN=$BIN" >> "$GITHUB_ENV"
+
+      # The site ships only the project documentation (docs/markdown); the
+      # compiler/examples/* books are dev/test fixtures and stay out of it.
+      # Compiled here (not taken from the docs-khb artifact) because the
+      # release build of that artifact carries a version-suffixed id — it is
+      # the archive asset, not the current book.
+      - name: Compile the docs
+        run: |
+          mkdir -p out
+          # The current book is published as version "latest" (workspace-only
+          # sed, never committed): non-numeric strings sort above numeric
+          # versions in the viewer's compareVersions, so "latest" is the
+          # default pick in the version switcher, with the released X.Y.Z
+          # books from the step below selectable behind it.
+          sed -i 's/^version = ".*"$/version = "latest"/' docs/markdown/docset.toml
+          grep -q '^version = "latest"$' docs/markdown/docset.toml
+          "$BIN" compile docs/markdown -o out/markdown.khb
+
+      - name: Pack the distribution
+        run: |
+          "$BIN" pack --profile reader --viewer viewer-dist \
+            --docset out/markdown.khb \
+            --llms \
+            -o publish
+
+      - name: Merge archived doc versions from releases
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Every release carries a kdhelp-markdown-vX.Y.Z.khb (versioned id
+          # and version). All of them — including the newest — are merged in:
+          # the current book is "latest", so no release can collide with it.
+          mkdir -p old
+          for TAG in $(gh release list -R "${{ github.repository }}" --json tagName --jq '.[].tagName'); do
+            gh release download "$TAG" -R "${{ github.repository }}" \
+              --pattern 'kdhelp-markdown-*.khb' -D "old/$TAG" || true
+          done
+          shopt -s nullglob
+          for F in old/*/*.khb; do
+            echo "patching in $F"
+            "$BIN" patch publish --docset "$F"
+          done
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: publish
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

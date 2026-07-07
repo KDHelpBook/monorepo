@@ -1,0 +1,112 @@
+name: Release
+
+# Bumps the version everywhere it lives, commits + tags on main, creates the
+# GitHub release, then chains build.yml (binaries + docs .khb as release
+# assets) and publish.yml (GitHub Pages). The chain uses workflow_call because
+# a push/tag made with GITHUB_TOKEN does not trigger other workflows.
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Semver part to bump
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+      version:
+        description: Explicit version (X.Y.Z) — overrides bump
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+
+jobs:
+  tag:
+    name: Bump, commit, tag
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Compute the new version
+        id: version
+        shell: bash
+        run: |
+          CUR=$(sed -n 's/^version = "\(.*\)"$/\1/p' compiler/Cargo.toml | head -n1)
+          NEW="${{ inputs.version }}"
+          NEW="${NEW#v}"
+          if [[ -z "$NEW" ]]; then
+            IFS=. read -r MAJ MIN PAT <<<"$CUR"
+            case "${{ inputs.bump }}" in
+              major) NEW="$((MAJ + 1)).0.0" ;;
+              minor) NEW="${MAJ}.$((MIN + 1)).0" ;;
+              patch) NEW="${MAJ}.${MIN}.$((PAT + 1))" ;;
+            esac
+          fi
+          [[ "$NEW" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "bad version: '$NEW'" >&2; exit 1; }
+          [[ "$NEW" != "$CUR" ]] || { echo "version $NEW is already current" >&2; exit 1; }
+          echo "bump: $CUR -> $NEW"
+          echo "new=$NEW" >> "$GITHUB_OUTPUT"
+          echo "tag=v$NEW" >> "$GITHUB_OUTPUT"
+
+      - name: Set the version in code
+        shell: bash
+        run: |
+          NEW="${{ steps.version.outputs.new }}"
+          # Workspace version — the single source; every crate inherits it.
+          sed -i "0,/^version = \".*\"$/s//version = \"${NEW}\"/" compiler/Cargo.toml
+          grep -q "^version = \"${NEW}\"$" compiler/Cargo.toml
+          (cd compiler && cargo update --workspace)
+          (cd viewer-ts && npm version "$NEW" --no-git-tag-version)
+          # The published documentation book; the compiler/examples/* fixtures
+          # keep their static demo versions.
+          sed -i "s/^version = \".*\"$/version = \"${NEW}\"/" docs/markdown/docset.toml
+          grep -q "^version = \"${NEW}\"$" docs/markdown/docset.toml
+          git diff --stat
+
+      - name: Commit, tag, push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "release: ${{ steps.version.outputs.tag }}"
+          git tag "${{ steps.version.outputs.tag }}"
+          git push origin HEAD:main --follow-tags
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" \
+            --title "${{ steps.version.outputs.tag }}" --generate-notes \
+            -R "${{ github.repository }}"
+
+  build:
+    needs: tag
+    uses: ./.github/workflows/build.yml
+    with:
+      release_tag: ${{ needs.tag.outputs.tag }}
+    permissions:
+      contents: write
+    secrets: inherit
+
+  publish:
+    needs: [tag, build]
+    uses: ./.github/workflows/publish.yml
+    with:
+      ref: ${{ needs.tag.outputs.tag }}
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+      actions: read
+    secrets: inherit
