@@ -80,8 +80,8 @@ pub fn apply_image_size_hints(html: &str) -> String {
 }
 
 /// Rewrite one `<img …>` tag whose asset `src` carries a `#…` fragment: strip the
-/// fragment and, for a valid `w=` hint, inject the `max-width` style. `None` when
-/// the tag needs no change.
+/// fragment and, for valid `w=`/`h=` hints, inject the `max-width`/`max-height`
+/// styles. `None` when the tag needs no change.
 fn sized_img_tag(tag: &str) -> Option<String> {
     for quote in ['"', '\''] {
         let token = format!("src={quote}");
@@ -94,26 +94,14 @@ fn sized_img_tag(tag: &str) -> Option<String> {
             return None;
         }
         let (path, fragment) = value.split_once('#').unwrap();
-        let style = fragment.split('&').find_map(|hint| {
-            let w = hint.strip_prefix("w=")?;
-            // The Markdown renderer percent-encodes `%` in URLs, so `#w=50%`
-            // arrives as `#w=50%25`.
-            let (digits, unit) = match w.strip_suffix('%').or(w.strip_suffix("%25")) {
-                Some(d) => (d, "%"),
-                None => (w, "px"),
-            };
-            if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
-                return None;
-            }
-            Some(match unit {
-                "%" => format!("max-width:{digits}%"),
-                _ => format!("max-width:min({digits}px,100%)"),
-            })
-        });
+        // In an HTML attribute the renderer escapes `&` to `&amp;` — undo that
+        // before splitting combined hints (`#w=300&h=200`).
+        let fragment = fragment.replace("&amp;", "&");
+        let styles: Vec<String> = fragment.split('&').filter_map(size_hint_style).collect();
         let mut rebuilt = String::with_capacity(tag.len());
         rebuilt.push_str("<img ");
-        if let Some(style) = style {
-            rebuilt.push_str(&format!("style={quote}{style}{quote} "));
+        if !styles.is_empty() {
+            rebuilt.push_str(&format!("style={quote}{}{quote} ", styles.join(";")));
         }
         rebuilt.push_str(&tag["<img ".len()..v_start]);
         rebuilt.push_str(path);
@@ -121,6 +109,41 @@ fn sized_img_tag(tag: &str) -> Option<String> {
         return Some(rebuilt);
     }
     None
+}
+
+/// One `key=value` size hint → its CSS declaration. Width takes pixels or a
+/// percentage of the column (`w=300`, `w=50%`); height takes pixels or a share
+/// of the reading pane (`h=200`, `h=50vh` — inside the content frame, `vh` *is*
+/// the pane). A percentage height is rejected: in normal flow it has nothing to
+/// resolve against. With height and width both `auto` otherwise, either cap
+/// scales the image down proportionally.
+fn size_hint_style(hint: &str) -> Option<String> {
+    let (prop, raw) = if let Some(w) = hint.strip_prefix("w=") {
+        ("max-width", w)
+    } else if let Some(h) = hint.strip_prefix("h=") {
+        ("max-height", h)
+    } else {
+        return None;
+    };
+    // The Markdown renderer percent-encodes `%` in URLs, so `#w=50%` arrives
+    // as `#w=50%25`.
+    let (digits, unit) = if let Some(d) = raw.strip_suffix('%').or(raw.strip_suffix("%25")) {
+        (d, "%")
+    } else if let Some(d) = raw.strip_suffix("vh") {
+        (d, "vh")
+    } else {
+        (raw, "px")
+    };
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    match (prop, unit) {
+        ("max-width", "%") => Some(format!("max-width:{digits}%")),
+        ("max-width", "px") => Some(format!("max-width:min({digits}px,100%)")),
+        ("max-height", "px") => Some(format!("max-height:{digits}px")),
+        ("max-height", "vh") => Some(format!("max-height:{digits}vh")),
+        _ => None, // w=…vh / h=…% — no meaningful box to resolve against
+    }
 }
 
 /// Rewrite `src`/`href` attribute values that point under `assets/` into
@@ -213,6 +236,25 @@ mod tests {
         assert_eq!(out, r#"<img style="max-width:50%" src="assets/a.png">"#);
         let out = apply_image_size_hints(r#"<img src="assets/a.png#w=50%25">"#);
         assert_eq!(out, r#"<img style="max-width:50%" src="assets/a.png">"#);
+        // Height caps: pixels, and a share of the reading pane (vh); combined
+        // with a width hint via `&`.
+        let out = apply_image_size_hints(r#"<img src="assets/a.png#h=200">"#);
+        assert_eq!(out, r#"<img style="max-height:200px" src="assets/a.png">"#);
+        // Combined hints — as authored, and as the renderer escapes `&` in
+        // attributes (`&amp;`).
+        let out = apply_image_size_hints(r#"<img src="assets/a.png#w=300&h=50vh">"#);
+        assert_eq!(
+            out,
+            r#"<img style="max-width:min(300px,100%);max-height:50vh" src="assets/a.png">"#
+        );
+        let out = apply_image_size_hints(r#"<img src="assets/a.png#w=300&amp;h=200">"#);
+        assert_eq!(
+            out,
+            r#"<img style="max-width:min(300px,100%);max-height:200px" src="assets/a.png">"#
+        );
+        // A percentage height has nothing to resolve against — dropped.
+        let out = apply_image_size_hints(r#"<img src="assets/a.png#h=50%25">"#);
+        assert_eq!(out, r#"<img src="assets/a.png">"#);
         // Unknown hints are dropped with the fragment; no style appears.
         let out = apply_image_size_hints(r#"<img src="assets/a.png#zoom=2">"#);
         assert_eq!(out, r#"<img src="assets/a.png">"#);

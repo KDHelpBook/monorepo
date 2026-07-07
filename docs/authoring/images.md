@@ -37,16 +37,20 @@ readers announce and what search sees.
 
 By default an image displays at its natural size, capped at the column width — a
 full-resolution phone screenshot fills the whole page. Cap the *displayed* size
-with a `#w=` hint on the path: pixels, or a percentage of the column.
+with hints on the path: `#w=` takes pixels or a percentage of the column, `#h=`
+takes pixels or a share of the reading pane (`vh`), and `&` combines them.
 
 ```md
 ![Tap the card](assets/tap-screen.png#w=300)
 ![Result, half-width](assets/result.png#w=50%)
+![Tall screenshot](assets/settings.png#h=50vh)
+![Thumbnail](assets/full-flow.png#w=300&h=200)
 ```
 
-The hint never upscales a smaller image, still shrinks with narrow viewports, and
-keeps the aspect ratio. It only affects display: the stored file is untouched and
-the lightbox opens the full-size original.
+A hint never upscales a smaller image, still shrinks with narrow viewports, and
+keeps the aspect ratio (with both caps, the image fits inside the box). It only
+affects display: the stored file is untouched and the lightbox opens the
+full-size original.
 
 ## Downloads
 
