@@ -296,13 +296,41 @@ body {
   --callout-bg: #fdf3f3;
   --callout-border: #f3d0d0;
 }
-/* Compile-time MathML (`$…$` / `$$…$$`). Display math is already block-level
-   (`display: block math`) — don't override `display` or the browser stops laying it
-   out as math. Just add spacing and let wide equations scroll. */
+/* Compile-time MathML (`$…$` / `$$…$$`). Native MathML renders at the body font
+   size, which is too small for equations — bump both, more for display math. Don't
+   override `display` or the browser stops laying it out as math. */
+.content math[display="inline"] {
+  font-size: 1.1em;
+}
 .content math[display="block"] {
+  font-size: 1.5em;
   overflow-x: auto;
   overflow-y: hidden;
-  margin: 0.9em 0;
+  margin: 1em 0;
+  cursor: zoom-in; /* tap/click enlarges it (see FRAME_BRIDGE `mathZoom`) */
+}
+/* The math "lightbox": a tap on a display equation clones it into this overlay,
+   scaled up over the content frame's viewport. position:fixed is relative to the
+   frame, so it covers the reading pane; a click anywhere or Esc dismisses it. Kept
+   in-frame on purpose — content markup never crosses into the trusted app. */
+.math-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  box-sizing: border-box;
+  overflow: auto;
+  background: rgba(255, 255, 255, 0.97);
+  cursor: zoom-out;
+}
+.math-overlay math[display="block"] {
+  font-size: 2.8em;
+  margin: 0;
+  overflow: visible;
+  cursor: zoom-out;
 }
 .content table {
   border-collapse: collapse;

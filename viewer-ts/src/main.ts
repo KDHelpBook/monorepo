@@ -95,7 +95,17 @@ function img(e){var el=e.target;if(!el||el.tagName!=='IMG')return false;
  var src=el.currentSrc||el.getAttribute('src')||'';
  if(src.indexOf('data:image/')!==0)return false;
  e.preventDefault();post({t:'kdhelp',a:'img',src:src,alt:el.getAttribute('alt')||''});return true}
-addEventListener('click',function(e){if(copyBtn(e))return;if(img(e))return;link(e,false)},true);
+// A tap/click on a display equation enlarges it in an in-frame overlay (the math
+// "lightbox"). Handled here, not by the app: we never pass content markup to the
+// trusted parent, so this stays a scaled clone over this sandboxed frame.
+function mathZoom(e){var m=e.target&&e.target.closest&&e.target.closest('math[display="block"]');if(!m)return false;
+ e.preventDefault();var de=document.documentElement,prev=de.style.overflow;
+ var ov=document.createElement('div');ov.className='math-overlay';ov.appendChild(m.cloneNode(true));
+ function close(){ov.remove();de.style.overflow=prev;removeEventListener('keydown',key)}
+ function key(ev){if(ev.key==='Escape')close()}
+ ov.addEventListener('click',close);addEventListener('keydown',key);
+ de.style.overflow='hidden';document.body.appendChild(ov);return true}
+addEventListener('click',function(e){if(copyBtn(e))return;if(mathZoom(e))return;if(img(e))return;link(e,false)},true);
 addEventListener('auxclick',function(e){if(e.button===1)link(e,true)},true);
 // Pull-to-refresh: a downward drag started at the top of the page posts a 'pull'
 // to the app (the reading content lives in this sandboxed frame, so the app can't
