@@ -728,14 +728,22 @@ home for a step-by-step screenshot strip. Each image is one tile, its alt text i
 caption, and identical images all render at the same width (no cell-by-cell squeezing the
 way a table of images gives you).
 
+Here is a live gallery — three views of this very guide open in the viewer:
+
+~~~gallery
+![The authoring guide open in the viewer](assets/viewer-overview.png)
+![Syntax-highlighted code, with copy buttons and tabbed groups](assets/viewer-code.png)
+![Colour-coded callouts and blockquotes](assets/viewer-callouts.png)
+~~~
+
+Each `![alt](src)` on its own line starts a tile; the alt is shown as the caption
+beneath the image. In source, a gallery is a `~~~gallery` fence:
+
     ~~~gallery
     ![1. Waiting for the card](assets/step-wait.png)
     ![2. Scanning](assets/step-scan.png)
     ![3. Write confirmed](assets/step-done.png)
     ~~~
-
-Each `![alt](src)` on its own line starts a tile; the alt is shown as the caption beneath
-the image.
 
 ### Descriptions
 
