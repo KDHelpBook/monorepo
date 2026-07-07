@@ -23,10 +23,11 @@ pub use vfs::{FileRangeReader, RangeReader};
 
 /// The on-disk `.khb`/`.khbb` format version this build reads and writes. Bumped to
 /// 2 for binary attachments (the `assets` table / sidecar `.khba`), to 3 for family
-/// metadata (`collection`), to 4 for the `related` ("See also") table, and to 5 for
-/// the optional per-page `md` column (clean Markdown for llms.txt / MCP) — each
-/// changed the rendered-docset layout that `.khbb` encodes.
-pub const FORMAT_VERSION: u32 = 5;
+/// metadata (`collection`), to 4 for the `related` ("See also") table, to 5 for
+/// the optional per-page `md` column (clean Markdown for llms.txt / MCP), and to 6
+/// for page-less TOC folder nodes (`toc.page_id` nullable) — each changed the
+/// rendered-docset layout that `.khbb` encodes.
+pub const FORMAT_VERSION: u32 = 6;
 
 /// The crate version, surfaced in a docset's `meta.generator`.
 pub fn generator() -> String {
@@ -69,13 +70,20 @@ mod tests {
                 },
             ],
             toc: vec![TocNode {
-                page_id: "intro".into(),
+                page_id: Some("intro".into()),
                 title: "Introduction".into(),
-                children: vec![TocNode {
-                    page_id: "adv".into(),
-                    title: "Advanced".into(),
-                    children: vec![],
-                }],
+                children: vec![
+                    // A pure folder node (v6): title-only, groups its children.
+                    TocNode {
+                        page_id: None,
+                        title: "More".into(),
+                        children: vec![TocNode {
+                            page_id: Some("adv".into()),
+                            title: "Advanced".into(),
+                            children: vec![],
+                        }],
+                    },
+                ],
             }],
             categories: vec![Category {
                 id: "basics".into(),
@@ -111,14 +119,17 @@ mod tests {
             "porter unicode61 remove_diacritics 2"
         );
 
-        // TOC: two entries, one nested under the other.
+        // TOC: a page root, a page-less folder under it, and a page inside the folder.
         let toc = ds.toc().unwrap();
-        assert_eq!(toc.len(), 2);
+        assert_eq!(toc.len(), 3);
         let root = toc.iter().find(|t| t.parent_id.is_none()).unwrap();
-        assert_eq!(root.page_id, "intro");
+        assert_eq!(root.page_id.as_deref(), Some("intro"));
+        let folder = toc.iter().find(|t| t.parent_id == Some(root.id)).unwrap();
+        assert_eq!(folder.page_id, None);
+        assert_eq!(folder.title, "More");
         assert!(toc
             .iter()
-            .any(|t| t.parent_id == Some(root.id) && t.page_id == "adv"));
+            .any(|t| t.parent_id == Some(folder.id) && t.page_id.as_deref() == Some("adv")));
 
         // Page render.
         let page = ds.page("intro").unwrap().unwrap();
@@ -268,6 +279,8 @@ mod tests {
         let restored = binary::from_khbb(&bytes).unwrap();
         assert_eq!(restored.id, doc.id);
         assert_eq!(restored.pages.len(), doc.pages.len());
+        // The v6 page-less folder node survives the binary round-trip.
+        assert_eq!(restored.toc[0].children[0].page_id, None);
 
         // Rebuild a .khb from the restored data; search still works.
         let dir = tempfile::tempdir().unwrap();

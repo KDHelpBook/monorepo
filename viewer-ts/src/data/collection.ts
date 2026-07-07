@@ -224,9 +224,13 @@ export class Collection {
   }
 
   tocTree(forceFolders: Set<string> = new Set()): TocNode[] {
+    // Namespacing also covers a book's own folder nodes (`@folder:…` keys, v6):
+    // the prefix keeps them unique across books, and `group` must ride along so
+    // the tree renders them as expand/collapse-only rows.
     const nsNode = (docsetId: string, n: TocNode): TocNode => ({
       pageId: this.ns(docsetId, n.pageId),
       title: n.title,
+      ...(n.group ? { group: true } : {}),
       children: n.children.map((c) => nsNode(docsetId, c)),
     });
     const rootsFor = (docsetId: string): TocNode[] =>

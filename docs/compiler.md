@@ -82,18 +82,25 @@ but not declared in `categories.yaml` is auto-registered). `related` renders a
 time; cross-book ids are stored as-is and the viewer hides any whose book is not
 loaded.
 
-**`toc.yaml`** — the table-of-contents hierarchy, referencing pages by id:
+**`toc.yaml`** — the table-of-contents hierarchy, referencing pages by id. A node
+may instead omit `page:` and give just a `title:` — a **folder node** (format v6)
+that only groups its children and cannot be opened:
 
 ```yaml
 - page: getting-started
   children:
     - page: what-is-khb
-- page: reference
+- title: Reference          # folder node — no page, expand/collapse only
+  children:
+    - page: reference-a
+    - page: reference-b
 ```
 
-Order in the file is order in the tree. If `toc.yaml` is omitted, a flat table of
-contents in file-name order is produced (numeric filename prefixes such as
-`01-intro.md` therefore control ordering).
+A `page:` node's label defaults to the page title (`title:` overrides it); a folder
+node must have a `title:` — compiling fails otherwise. Order in the file is order in
+the tree. If `toc.yaml` is omitted, a flat table of contents in file-name order is
+produced (numeric filename prefixes such as `01-intro.md` therefore control
+ordering).
 
 **Attachments** — drop images and downloadable files under `assets/` (any depth)
 and reference them from Markdown by their `assets/…` path:

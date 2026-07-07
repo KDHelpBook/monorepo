@@ -108,6 +108,33 @@ describe("Collection tocTree", () => {
     expect(tree.some((n) => n.group)).toBe(false);
   });
 
+  it("namespaces a book's own folder nodes and keeps their group flag", () => {
+    // A page-less toc.yaml folder (format v6) arrives from the engine as a
+    // synthetic `@folder:…` key with `group: true`; the merge must namespace it
+    // like any id (unique across books) and carry the flag through.
+    const folder: TocNode = {
+      pageId: "@folder:/reference",
+      title: "Reference",
+      group: true,
+      children: [leaf("api")],
+    };
+    const c = Collection.of(
+      [
+        stub({ id: "a", collection: "p", toc: [folder] }),
+        stub({ id: "b", collection: "p", toc: [folder] }),
+      ],
+      "en",
+    );
+    const tree = c.tocTree();
+    expect(tree.map((n) => n.pageId)).toEqual([
+      "a:@folder:/reference",
+      "b:@folder:/reference",
+    ]);
+    expect(tree.every((n) => n.group)).toBe(true);
+    expect(tree[0]!.children[0]!.pageId).toBe("a:api");
+    expect(tree[0]!.children[0]!.group).toBeUndefined();
+  });
+
   it("wraps several families in collapsible group folders", () => {
     const c = Collection.of(
       [
