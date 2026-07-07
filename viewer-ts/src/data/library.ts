@@ -176,6 +176,60 @@ export function removeRemote(url: string): void {
   }
 }
 
+// Desktop (Tauri) opens docsets from disk as file **paths** (not bytes — the native
+// `khb-core` reads the file directly), persisted here so they reopen next launch.
+// `sidecars` are local `.khba` paths. The web has no equivalent (uploads → IndexedDB).
+const TAURI_FILES_KEY = "khb.tauriFiles";
+
+export interface TauriFile {
+  path: string;
+  sidecars: string[];
+}
+
+export function getTauriFiles(): TauriFile[] {
+  try {
+    const raw = localStorage.getItem(TAURI_FILES_KEY);
+    const list = raw ? (JSON.parse(raw) as unknown) : [];
+    if (!Array.isArray(list)) return [];
+    return list.flatMap((e): TauriFile[] => {
+      const f = e as TauriFile;
+      if (!e || typeof f.path !== "string") return [];
+      const sidecars = Array.isArray(f.sidecars)
+        ? f.sidecars.filter((x): x is string => typeof x === "string")
+        : [];
+      return [{ path: f.path, sidecars }];
+    });
+  } catch {
+    return [];
+  }
+}
+
+/** Add an opened file path. Returns true if newly added (not a duplicate). */
+export function addTauriFile(path: string, sidecars: string[] = []): boolean {
+  const list = getTauriFiles();
+  if (list.some((f) => f.path === path)) return false;
+  try {
+    localStorage.setItem(
+      TAURI_FILES_KEY,
+      JSON.stringify([...list, { path, sidecars }]),
+    );
+  } catch {
+    /* storage unavailable — it just won't persist */
+  }
+  return true;
+}
+
+export function removeTauriFile(path: string): void {
+  try {
+    localStorage.setItem(
+      TAURI_FILES_KEY,
+      JSON.stringify(getTauriFiles().filter((f) => f.path !== path)),
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
 // Extra `.khba` pack URLs the reader attached to a docset to supply its missing
 // assets (the pack `asset_index` routes to but that wasn't shipped). Keyed by
 // docset id, applied on load alongside the docset's own packs. localStorage.
@@ -183,7 +237,9 @@ const EXTRA_PACKS_KEY = "khb.extraPacks";
 
 export function loadExtraPacks(): Record<string, string[]> {
   try {
-    const v: unknown = JSON.parse(localStorage.getItem(EXTRA_PACKS_KEY) ?? "{}");
+    const v: unknown = JSON.parse(
+      localStorage.getItem(EXTRA_PACKS_KEY) ?? "{}",
+    );
     if (!v || typeof v !== "object") return {};
     const out: Record<string, string[]> = {};
     for (const [k, val] of Object.entries(v as Record<string, unknown>)) {

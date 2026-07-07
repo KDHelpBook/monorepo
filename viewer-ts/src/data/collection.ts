@@ -13,18 +13,20 @@ const SEP = ":";
 export type AttachmentSource = { bytes: Uint8Array } | { file: string };
 
 /**
- * A docset to load (all served by the one wa-sqlite engine, real FTS5):
+ * A docset to load. The web kinds are served by the wa-sqlite engine (real FTS5):
  * - `{ bytes }` — already-in-memory (upload / IndexedDB), read whole from memory;
  * - `{ file }` — a URL fetched **whole** (a `.gz` suffix is decompressed);
- * - `{ url, mode: "streaming" }` — a remote `.khb` opened **page-by-page** over
- *   HTTP `Range`, never fetched whole.
- * The first two may carry `.khba` attachment packs.
+ * - `{ url, mode: "streaming" }` — a remote `.khb` opened **page-by-page** over Range.
+ *   The first two may carry `.khba` attachment packs.
+ * - `{ native }` — **desktop only**: a local path *or* `http(s)://` URL opened through
+ *   the native Rust `khb-core` (`TauriDocset`); sidecars are local `.khba` paths.
  */
 export type DocsetSource =
   | (({ bytes: Uint8Array } | { file: string }) & {
       attachments?: AttachmentSource[];
     })
-  | { url: string; mode: "streaming"; attachments?: string[] };
+  | { url: string; mode: "streaming"; attachments?: string[] }
+  | { native: { path: string; sidecars?: string[] } };
 
 /** Decompress gzip bytes via the native DecompressionStream. */
 async function gunzip(bytes: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
@@ -103,6 +105,16 @@ export class Collection {
     // memory. Code-split so it loads once, on first docset open, not in the app shell.
     const { StreamingDocset } = await import("./streaming-docset");
     for (const src of sources) {
+      if ("native" in src) {
+        // Desktop: open through the native Rust core (local path or http(s):// URL).
+        const { TauriDocset } = await import("./tauri-docset");
+        docsets.push(
+          ...(await TauriDocset.open([
+            { path: src.native.path, sidecars: src.native.sidecars ?? [] },
+          ])),
+        );
+        continue;
+      }
       if (isStreaming(src)) {
         docsets.push(
           await StreamingDocset.open(src.url, src.attachments ?? []),

@@ -11,10 +11,26 @@ import {
   type TocNode,
 } from "./docset";
 
-/** A docset to open natively: the `.khb` path plus any sidecar `.khba` paths. */
+/** A docset to open natively: a `.khb` path *or* `http(s)://` URL, plus sidecar paths. */
 export interface OpenSpec {
   path: string;
   sidecars?: string[];
+}
+
+/** A bundled docset's spec (path + co-located sidecar paths), from `bundled_specs`. */
+export interface NativeSpec {
+  path: string;
+  sidecars: string[];
+}
+
+/** Metadata peeked from a docset (local or remote) — enough to build a variant. */
+export interface NativeMeta {
+  id: string;
+  language: string;
+  title: string;
+  collection: string;
+  collectionTitle: string;
+  version: string;
 }
 
 /** The `open_docsets`/`bundled_docsets` command payload (mirrors the Rust `DocsetInit`).
@@ -85,13 +101,19 @@ export class TauriDocset implements IDocset {
     );
   }
 
-  /** Open the demo docsets bundled with the app (resources/docsets), opened natively. */
-  static async bundled(): Promise<TauriDocset[]> {
-    const inits = await invoke<DocsetInit[]>("bundled_docsets");
-    return inits.map((i) => TauriDocset.fromInit(i));
+  /** The specs of the docsets bundled with the app (resources/docsets) — paths only. */
+  static bundledSpecs(): Promise<NativeSpec[]> {
+    return invoke<NativeSpec[]>("bundled_specs");
   }
 
-  /** Open `.khb` files chosen from disk (File → Open), with any sidecar `.khba`. */
+  /** Read each spec's metadata (local path or http(s):// URL) without opening it fully —
+   *  used to build the variant list before `Collection.load` opens the shown editions.
+   *  A spec that can't be opened (missing file / unreachable URL) yields `null`. */
+  static peek(specs: OpenSpec[]): Promise<(NativeMeta | null)[]> {
+    return invoke<(NativeMeta | null)[]>("peek_docsets", { specs });
+  }
+
+  /** Open docsets natively (local path or http(s):// URL), with any local sidecar `.khba`. */
   static async open(specs: OpenSpec[]): Promise<TauriDocset[]> {
     const inits = await invoke<DocsetInit[]>("open_docsets", { specs });
     return inits.map((i) => TauriDocset.fromInit(i));

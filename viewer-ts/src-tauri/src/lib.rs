@@ -7,15 +7,19 @@
 //! contract. Rust owns the open docsets — the one native source of truth the future
 //! embedded MCP server will share.
 
+mod http;
+
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use base64::Engine;
+use http::HttpRangeReader;
 use khb_core::docset::{resolve_asset, Attachments, Docset};
 use serde::{Deserialize, Serialize};
-use tauri::{Manager, State};
+use tauri::menu::{Menu, MenuBuilder, MenuItem, MenuItemBuilder, SubmenuBuilder};
+use tauri::{Emitter, Manager, State, Wry};
 
 /// One open book: its docset plus any sidecar `.khba` attachment packs.
 struct Book {
@@ -119,17 +123,66 @@ struct OpenSpec {
     sidecars: Vec<String>,
 }
 
+fn is_url(s: &str) -> bool {
+    s.starts_with("http://") || s.starts_with("https://")
+}
+
+/// Open a `.khb` from a local path or, for an `http(s)://` URL, stream it page-by-page
+/// over the Range-VFS — the same fork the CLI's `inspect` uses.
+fn open_docset(path: &str) -> Result<Docset> {
+    if is_url(path) {
+        Docset::open_reader(Arc::new(HttpRangeReader::open(path)?))
+    } else {
+        Docset::open(Path::new(path))
+    }
+}
+
 fn open_one(spec: &OpenSpec) -> Result<Book> {
-    let docset = Docset::open(Path::new(&spec.path))?;
+    let docset = open_docset(&spec.path)?;
+    // Local sidecars only; a remote `.khba` would need Range support Attachments lacks yet,
+    // so its assets simply show as missing (the Manage page offers "Add pack").
     let attachments = spec
         .sidecars
         .iter()
+        .filter(|s| !is_url(s))
         .filter_map(|s| Attachments::open(Path::new(s)).ok())
         .collect();
     Ok(Book {
         docset,
         attachments,
     })
+}
+
+/// Just the metadata a `DocVariant` needs — read, then the docset is dropped (closed).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DocsetMeta {
+    id: String,
+    language: String,
+    title: String,
+    collection: String,
+    collection_title: String,
+    version: String,
+}
+
+fn read_meta(ds: &Docset) -> Result<DocsetMeta> {
+    let id = ds.id()?;
+    Ok(DocsetMeta {
+        collection: ds.collection()?,
+        collection_title: ds.collection_title()?,
+        title: ds.meta("title")?.unwrap_or_else(|| id.clone()),
+        version: ds.meta("version")?.unwrap_or_default(),
+        language: ds.language()?,
+        id,
+    })
+}
+
+/// A docset spec (path/URL + sidecar paths) returned for the bundled set.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SpecDto {
+    path: String,
+    sidecars: Vec<String>,
 }
 
 /// Read the meta + all small structural tables into a [`DocsetInit`].
@@ -220,14 +273,12 @@ fn open_docsets(specs: Vec<OpenSpec>, state: State<AppState>) -> Result<Vec<Docs
     Ok(inits)
 }
 
-/// Open every `.khb` bundled in the app's `resources/docsets/` (offering all bundled
-/// `.khba` to each — `asset_index` routing keys by pack id, so only referenced packs
-/// are used). Called once at startup.
+/// The specs (paths + co-located sidecars) of every `.khb` bundled in the app's
+/// `resources/docsets/`. All bundled `.khba` are offered to each `.khb` — `asset_index`
+/// routing keys by pack id, so only referenced packs are used. The frontend peeks these
+/// to build variants, then opens the shown editions via `open_docsets`.
 #[tauri::command]
-fn bundled_docsets(
-    app: tauri::AppHandle,
-    state: State<AppState>,
-) -> Result<Vec<DocsetInit>, String> {
+fn bundled_specs(app: tauri::AppHandle) -> Result<Vec<SpecDto>, String> {
     let dir = app
         .path()
         .resource_dir()
@@ -246,14 +297,25 @@ fn bundled_docsets(
         }
     }
     khb.sort();
-    let specs = khb
+    Ok(khb
         .into_iter()
-        .map(|path| OpenSpec {
+        .map(|path| SpecDto {
             path,
             sidecars: khba.clone(),
         })
-        .collect();
-    open_docsets(specs, state)
+        .collect())
+}
+
+/// Read just the metadata of each spec (local path or `http(s)://` URL) — used to build
+/// the `DocVariant` list without opening full structure. Each docset is closed after.
+/// Per-spec `None` for a spec that can't be opened (missing file / unreachable URL), so a
+/// stale persisted entry doesn't break startup — the others still load.
+#[tauri::command]
+fn peek_docsets(specs: Vec<OpenSpec>) -> Vec<Option<DocsetMeta>> {
+    specs
+        .iter()
+        .map(|spec| open_docset(&spec.path).and_then(|ds| read_meta(&ds)).ok())
+        .collect()
 }
 
 #[tauri::command]
@@ -317,13 +379,86 @@ fn search(
         .collect())
 }
 
+/// The native application menu — it replaces the web menubar on desktop. Custom items
+/// carry the same ids as the web menu's `data-action`s, so a click emits the id and the
+/// frontend runs it through the same dispatcher. Copy/Paste/Quit/… are predefined items
+/// Tauri handles natively (so the search box gets working ⌘C/⌘V).
+fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<Wry>> {
+    let mk = |id: &str, label: &str, accel: &str| -> tauri::Result<MenuItem<Wry>> {
+        let mut b = MenuItemBuilder::with_id(id, label);
+        if !accel.is_empty() {
+            b = b.accelerator(accel);
+        }
+        b.build(app)
+    };
+
+    // macOS app menu (About/Quit/Hide live here); ignored where there's no app menu.
+    let app_menu = SubmenuBuilder::new(app, "KD Help Book")
+        .about(None)
+        .separator()
+        .hide()
+        .hide_others()
+        .show_all()
+        .separator()
+        .quit()
+        .build()?;
+    let file_menu = SubmenuBuilder::new(app, "File")
+        .item(&mk("open-docset", "Open docset…", "CmdOrCtrl+O")?)
+        .item(&mk("open-url", "Open from URL…", "")?)
+        .item(&mk("manage-docsets", "Manage docsets…", "")?)
+        .separator()
+        .item(&mk("print", "Print…", "CmdOrCtrl+P")?)
+        .build()?;
+    let edit_menu = SubmenuBuilder::new(app, "Edit")
+        .cut()
+        .copy()
+        .paste()
+        .select_all()
+        .build()?;
+    let view_menu = SubmenuBuilder::new(app, "View")
+        .item(&mk("mode-contents", "Contents", "")?)
+        .item(&mk("mode-index", "Index", "")?)
+        .item(&mk("mode-search", "Search", "")?)
+        .item(&mk("search-page", "Advanced search…", "")?)
+        .item(&mk("mode-favorites", "Favorites", "")?)
+        .separator()
+        .item(&mk("sync", "Sync with Contents", "")?)
+        .item(&mk("clear-highlight", "Clear search highlight", "")?)
+        .separator()
+        .item(&mk("font-up", "Larger text", "CmdOrCtrl+=")?)
+        .item(&mk("font-down", "Smaller text", "CmdOrCtrl+-")?)
+        .separator()
+        .item(&mk("back", "Back", "CmdOrCtrl+[")?)
+        .item(&mk("forward", "Forward", "CmdOrCtrl+]")?)
+        .build()?;
+    let help_menu = SubmenuBuilder::new(app, "Help")
+        .item(&mk("about", "About KD Help Book", "")?)
+        .build()?;
+
+    MenuBuilder::new(app)
+        .items(&[&app_menu, &file_menu, &edit_menu, &view_menu, &help_menu])
+        .build()
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState::default())
+        .setup(|app| {
+            let menu = build_menu(app.handle())?;
+            app.set_menu(menu)?;
+            Ok(())
+        })
+        .on_menu_event(|app, event| {
+            // Forward the clicked item's id to the frontend, which runs it through the
+            // same action dispatcher as the (hidden) web menu. Predefined items also
+            // perform their native action.
+            let _ = app.emit("menu", event.id().0.as_str());
+        })
         .invoke_handler(tauri::generate_handler![
+            bundled_specs,
+            peek_docsets,
             open_docsets,
-            bundled_docsets,
             page,
             asset,
             search

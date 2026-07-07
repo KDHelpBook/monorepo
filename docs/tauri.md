@@ -37,18 +37,22 @@ can check); the window itself needs a desktop session.
 
 ## What works today (MVP)
 
-- Opens the **bundled** docsets through native `khb-core` and shows **one edition per family**
-  in the chosen language (dedupes en/pl + v1/v2). TOC, index, search (native FTS5), tabs,
+- **Bundled** docsets through native `khb-core`; TOC, index, search (native FTS5), tabs,
   categories, and the sandboxed page frame all work through the shared UI.
+- **Full docset manager** (same as the web): **File → Open** a `.khb` from disk (native
+  `@tauri-apps/plugin-dialog`, remembered across launches), **Open from URL** a *remote* `.khb`
+  streamed page-by-page over HTTP Range (native `Docset::open_reader` + `HttpRangeReader`), the
+  **Manage docsets** page (list / remove), and live **version/language switchers**.
+- **How it reuses the web machinery:** the desktop path builds the same `variants` model
+  (peeking each docset's meta natively) and feeds `resolveVariants` → `Collection.load`, where a
+  new **`{ native }` `DocsetSource`** kind opens through `TauriDocset`. So the Manage page,
+  `rebuild()` switch, and remove work unchanged. Opened files persist in `khb.tauriFiles`;
+  remotes reuse the web's `khb.remotes`.
 
 ## Follow-ups (deliberately deferred)
 
-- **File → Open** a `.khb` from disk (native `@tauri-apps/plugin-dialog` → `open_docsets`).
-  Paths, not byte blobs, are the model — the same files the MCP server will reopen. Today the
-  web open/upload/remote affordances are hidden (`externalSources:false`).
-- **Live language / version switchers** on desktop — the web ones drive a rebuild through
-  `Collection.load` + `DocsetSource`; the desktop path needs that rebuild adapted to
-  `TauriDocset`.
+- **Remote sidecar `.khba`** — a remote `.khb`'s packs aren't streamed yet (no
+  `Attachments::open_reader`); they show as missing assets (use "Add pack" or a local pack).
 - **CSP.** `tauri.conf.json` sets `security.csp: null` for now — the reader's security boundary
   is the sandboxed `<iframe srcdoc>` (as on the web, which ships no CSP), so a page's untrusted
   HTML can't reach the app. Tighten to an explicit policy once validated that it still lets the
