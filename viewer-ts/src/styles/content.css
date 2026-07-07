@@ -134,6 +134,18 @@ body {
   font-size: 0.9em;
   line-height: 1.5;
 }
+/* Line-highlight (the `{2,4-6}` flag): the compiler re-renders the block with each line
+   wrapped in `.cl` (`.cl.hl` = highlighted). Tint the flagged lines full-width — the
+   `<pre>`'s horizontal padding is 13px, so bleed the background out by that much. */
+.content .cl {
+  display: block;
+}
+.content .cl.hl {
+  margin: 0 -13px;
+  padding: 0 13px;
+  background: #fff6d8;
+  box-shadow: inset 3px 0 0 var(--swoosh);
+}
 /* Code block wrapper: owns the block's margin + hosts the filename bar and Copy
    button. The <pre> keeps its box (see above), sans its own vertical margin. */
 .content .code-block {

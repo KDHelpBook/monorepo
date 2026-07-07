@@ -59,7 +59,7 @@ sandbox), while generic directives compile to plain `<div class="…">`. comrak 
 **Recommendation:** don't reach for a `:::` directive parser for the code features.
 Split by shape:
 
-- **Per-block properties** (filename, `collapse`, later line-highlight) → **flags on the
+- **Per-block properties** (filename, `collapse`, `{2,4-6}` line-highlight) → **flags on the
   fence info string** (`` ```rust [main.rs] collapse ``), which we already carry through
   to `data-meta`. No new grammar.
 - **Containers over several blocks** (code group / preview / tree) → an **opaque
@@ -73,17 +73,18 @@ genuinely generic non-code blocks (tabs / cards / steps outside code).
 ### Roadmap
 
 Done so far: heading **anchors** + an **"On this page"** box, **emoji**, code-block
-**filenames**, a **copy** button, **collapsible** code (`collapse` flag), and the full
-code-component set — **groups** (`~~~code-group` → tabs), **command+output**
-(`~~~code-preview` → terminal panel), and **file trees** (`~~~code-tree`) — plus
-**callouts** (comrak 0.53 native `alerts`) and **math** (`$…$` → build-time MathML).
+**filenames**, a **copy** button, **collapsible** code (`collapse` flag), **line-highlight**
+(`{2,4-6}`), and the full code-component set — **groups** (`~~~code-group` → tabs),
+**command+output** (`~~~code-preview` → terminal panel), and **file trees**
+(`~~~code-tree`) — plus **callouts** (comrak 0.53 native `alerts`) and **math** (`$…$` →
+build-time MathML).
 What's left (all non-code blocks):
 
 | Want | How | Effort |
 |------|-----|--------|
 | **Tabs / cards / steps / badges** (non-code) | true `:::` generic directives → `<div class>` (not MDC) | medium |
 | **Video / embeds** | a `:video`/`:embed` directive → sandboxed `<iframe>`/`<video>` | medium |
-| **Line-highlight** (`{2,4-6}`) / inline-code highlight | per-block info-string flags | small (deferred) |
+| **Inline-code highlight** (`` `x`{:ts} ``) | per-block info-string flag | small (deferred) |
 
 Deliberately **out of scope**: anything needing a live framework runtime — MDC's Vue
 components, Docus's `CodePreview` live *component* output, `NuxtImg`.

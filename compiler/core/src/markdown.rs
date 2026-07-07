@@ -26,6 +26,50 @@ pub fn highlighter() -> SyntectAdapter {
     SyntectAdapter::new(None)
 }
 
+/// Re-highlight `code` **line by line**, wrapping each line in `<span class="cl">` (or
+/// `cl hl` for a highlighted line). Used for the `{2,4-6}` line-highlight flag: syntect's
+/// normal output lets scope spans cross line boundaries, so there's no per-line element
+/// to tint — this rebuilds the block with self-contained lines (carried scopes are
+/// reopened at each line start and all open spans closed at its end). Same class scheme
+/// as [`highlighter`], so the existing stylesheet colours it. `hl` holds 1-based lines.
+pub fn highlight_lines(code: &str, lang: &str, hl: &std::collections::HashSet<usize>) -> String {
+    use std::sync::OnceLock;
+    use syntect::html::{line_tokens_to_classed_spans, ClassStyle};
+    use syntect::parsing::{ParseState, ScopeStack, SyntaxSet};
+    use syntect::util::LinesWithEndings;
+
+    // Loading the default syntax set is expensive; do it once (line-highlight is rare).
+    static SYNTAX_SET: OnceLock<SyntaxSet> = OnceLock::new();
+    let ss = SYNTAX_SET.get_or_init(SyntaxSet::load_defaults_newlines);
+    let syntax = ss
+        .find_syntax_by_token(lang)
+        .unwrap_or_else(|| ss.find_syntax_plain_text());
+    let mut parse = ParseState::new(syntax);
+    let mut stack = ScopeStack::new();
+    let mut out = String::with_capacity(code.len() * 4);
+    for (i, line) in LinesWithEndings::from(code).enumerate() {
+        let ops = parse.parse_line(line, ss).unwrap_or_default();
+        let carried: Vec<_> = stack.as_slice().to_vec();
+        let cls = if hl.contains(&(i + 1)) { "cl hl" } else { "cl" };
+        out.push_str(&format!("<span class=\"{cls}\">"));
+        // Reopen the scopes carried over from earlier lines (closed at the prev line end).
+        // `ClassStyle::Spaced` classes are the scope path with dots → spaces (e.g.
+        // `source.rust` → `source rust`), which is exactly `Scope`'s Display form.
+        for scope in &carried {
+            let classes = scope.to_string().replace('.', " ");
+            out.push_str(&format!("<span class=\"{classes}\">"));
+        }
+        let (tokens, _) =
+            line_tokens_to_classed_spans(line, ops.as_slice(), ClassStyle::Spaced, &mut stack)
+                .unwrap_or_else(|_| (String::new(), 0));
+        out.push_str(tokens.trim_end_matches('\n'));
+        // Close every span still open after this line (carried + net opened here).
+        out.push_str(&"</span>".repeat(stack.len()));
+        out.push_str("</span>");
+    }
+    out
+}
+
 /// The stylesheet that colours the class-tagged code spans: the light theme by
 /// default, and the dark theme under `[data-theme="dark"]` (dormant until the viewer
 /// sets that hook). Generated from syntect so it always matches the classes the

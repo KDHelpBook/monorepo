@@ -39,6 +39,33 @@ export default defineConfig({})
 ```
 ````
 
+## Highlight lines
+
+Add a **`{2,4-6}`** range after the language (and optional `[filename]`) to tint specific
+lines — single numbers and `start-end` ranges, comma-separated, 1-based.
+
+````md
+```rust {2,4-5}
+fn main() {
+    let base = 10;          // highlighted
+    let mut total = 0;
+    for i in 1..=base {     // highlighted
+        total += i;         // highlighted
+    }
+}
+```
+````
+
+```rust {2,4-5}
+fn main() {
+    let base = 10;          // highlighted
+    let mut total = 0;
+    for i in 1..=base {     // highlighted
+        total += i;         // highlighted
+    }
+}
+```
+
 ## Collapsible blocks
 
 Add the **`collapse`** flag after the language (and optional `[filename]`) to clamp a

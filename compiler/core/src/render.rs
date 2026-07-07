@@ -29,6 +29,7 @@ pub fn render(src: &SourceDocset) -> Result<RenderedDocset> {
             let html = render_code_groups(&html, &highlighter).with_context(ctx)?;
             let html = render_code_preview(&html, &highlighter).with_context(ctx)?;
             let html = render_code_tree(&html, &highlighter).with_context(ctx)?;
+            let html = render_line_highlight(&html);
             let html = assets::rewrite_asset_urls(&html);
             let rendered = render_math(&html).with_context(ctx)?;
             // Prepend an "On this page" nav built from the heading anchors, honouring
@@ -394,6 +395,70 @@ fn render_code_tree(html: &str, highlighter: &SyntectAdapter) -> Result<String> 
     Ok(out)
 }
 
+/// Apply the `{2,4-6}` line-highlight flag: for each highlighted code block whose
+/// `data-meta` carries a `{…}` range, recover the raw code (strip syntect's spans +
+/// decode entities) and re-highlight it line by line so the flagged lines can be tinted.
+/// Blocks without a `{…}` range are left untouched.
+fn render_line_highlight(html: &str) -> String {
+    // comrak emits the code tag's attributes in either order — `<code data-meta="…"
+    // class="language-…">` when there's meta, else `<code class="language-…">` — so
+    // match `<code ` and read the code tag's own attributes (not the `<pre>` class).
+    const PRE: &str = "<pre class=\"syntax-highlighting\"><code ";
+    const CLOSE: &str = "</code></pre>";
+    let mut out = String::with_capacity(html.len());
+    let mut i = 0;
+    while let Some(rel) = html[i..].find(PRE) {
+        let block_start = i + rel;
+        let attrs_start = block_start + PRE.len();
+        let Some(gtrel) = html[attrs_start..].find('>') else {
+            break;
+        };
+        let inner_start = attrs_start + gtrel + 1;
+        let Some(crel) = html[inner_start..].find(CLOSE) else {
+            break;
+        };
+        let code_attrs = &html[attrs_start..inner_start]; // just the `<code …>` attrs
+        let lang = attr_value(code_attrs, "class")
+            .and_then(|c| c.strip_prefix("language-").map(str::to_string));
+        let ranges = attr_value(code_attrs, "data-meta").and_then(|m| parse_line_ranges(&m));
+
+        out.push_str(&html[i..block_start]);
+        match (lang, ranges) {
+            (Some(lang), Some(rs)) => {
+                let raw = unescape_html(&strip_tags(&html[inner_start..inner_start + crel]));
+                out.push_str(&html[block_start..inner_start]); // keep the `<pre><code …>`
+                out.push_str(&markdown::highlight_lines(&raw, &lang, &rs));
+                out.push_str(CLOSE);
+            }
+            _ => out.push_str(&html[block_start..inner_start + crel + CLOSE.len()]),
+        }
+        i = inner_start + crel + CLOSE.len();
+    }
+    out.push_str(&html[i..]);
+    out
+}
+
+/// Parse a `{2,4-6}` line-range spec out of a code fence's `data-meta`, into a set of
+/// 1-based line numbers. `None` if there's no `{…}` (the block isn't line-highlighted).
+fn parse_line_ranges(meta: &str) -> Option<std::collections::HashSet<usize>> {
+    let open = meta.find('{')?;
+    let close = meta[open..].find('}')? + open;
+    let mut set = std::collections::HashSet::new();
+    for part in meta[open + 1..close].split(',') {
+        let part = part.trim();
+        if let Some((a, b)) = part.split_once('-') {
+            if let (Ok(a), Ok(b)) = (a.trim().parse::<usize>(), b.trim().parse::<usize>()) {
+                (a..=b).for_each(|n| {
+                    set.insert(n);
+                });
+            }
+        } else if let Ok(n) = part.parse::<usize>() {
+            set.insert(n);
+        }
+    }
+    (!set.is_empty()).then_some(set)
+}
+
 /// Split a code-group's raw body into `(info-string, code)` per inner ```` ``` ```` fence.
 fn split_group_fences(inner: &str) -> Vec<(String, String)> {
     let mut out = Vec::new();
@@ -558,6 +623,28 @@ mod tests {
 
         let empty = markdown::render_html("~~~code-tree\n~~~\n", Some(&h));
         assert!(render_code_tree(&empty, &h).is_err());
+    }
+
+    #[test]
+    fn line_ranges_parse() {
+        let r = parse_line_ranges("[main.rs] {2,4-6}").unwrap();
+        assert!(r.contains(&2) && r.contains(&4) && r.contains(&5) && r.contains(&6));
+        assert!(!r.contains(&3));
+        assert!(parse_line_ranges("[main.rs]").is_none()); // no range → untouched
+    }
+
+    #[test]
+    fn highlights_flagged_lines() {
+        let h = markdown::highlighter();
+        let md = "```rust {2}\nfn main() {\n    let x = 1;\n}\n```\n";
+        let html = render_line_highlight(&markdown::render_html(md, Some(&h)));
+        // Every line is wrapped in `.cl`; the flagged line (2) also gets `hl`.
+        assert!(html.contains("class=\"cl hl\"")); // line 2 highlighted
+        assert!(html.contains("class=\"cl\"")); // other lines wrapped, not highlighted
+        assert!(html.contains("storage type rust")); // still syntax-highlighted (let)
+                                                     // A block with no `{…}` range is left as-is (no `.cl` wrappers).
+        let plain = markdown::render_html("```rust\nlet y = 2;\n```\n", Some(&h));
+        assert!(!render_line_highlight(&plain).contains("class=\"cl\""));
     }
 
     #[test]
