@@ -16,7 +16,7 @@ adds book-aware constructs — and deliberately refuses a few things GFM tolerat
 | Addition | Looks like | Reference |
 |----------|------------|-----------|
 | In-book & cross-book page links | `[label](page-id)`, `[label](book:page)` | [Links](links) |
-| Bundled images & downloads | `![alt](assets/pic.svg)` | [Assets](assets) |
+| Bundled images & downloads | `![alt](assets/pic.svg)` | [Images & assets](images) |
 | Callouts | `> [!NOTE]` | [Callouts](callouts) |
 | Math, rendered to MathML at build time | `$E = mc^2$`, `$$…$$` | [Math](math) |
 | Code: `[filename]` bar, copy button, `collapse` / `open` flags | `` ```rust [main.rs] collapse `` | [Code extensions](code-extensions) |
@@ -33,7 +33,7 @@ adds book-aware constructs — and deliberately refuses a few things GFM tolerat
 | **Raw inline HTML** — escaped to literal text (`<b>x</b>` shows as-is) | Markdown + the extensions above — see [Text formatting](text-formatting) |
 | Attribute syntax (`{.class}` on a span or block) | nothing — there are no inline components |
 | MDC / `:::` directive blocks | fence flags and `~~~` blocks — see [Code extensions](code-extensions) |
-| Remote images (`![…](https://…)`) — never fetched | bundle the file under `assets/` — see [Images](images) |
+| Remote images (`![…](https://…)`) — never fetched | bundle the file under `assets/` — see [Images & assets](images) |
 | `__x__` as bold, single-tilde `~x~` as strikethrough | those marks mean **underline** / **subscript** here — bold is `**x**`, strikethrough `~~x~~` — see [Text formatting](text-formatting) |
 
 > [!NOTE]

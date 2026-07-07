@@ -28,10 +28,10 @@ each piece does in the viewer.
 - **Reference** — one page per construct and field:
   - **Markdown** — the GFM core: [headings](headings),
     [text formatting](text-formatting), [lists](lists), [links](links),
-    [images](images), [tables](tables), [blockquotes](blockquotes),
+    [images & assets](images), [tables](tables), [blockquotes](blockquotes),
     [code blocks](code-blocks), [footnotes](footnotes), [emoji](emoji).
   - **Markdown Extensions** — the KD Help Book additions: [callouts](callouts),
-    [math](math), [links](links), [assets](assets), and the
+    [math](math), [links](links), and the
     [code extensions](code-extensions).
   - **[Frontmatter](frontmatter)** — the per-page metadata fields.
   - **[docset.toml](docset-toml)** — the book manifest.
@@ -43,7 +43,7 @@ each piece does in the viewer.
 |------------|------|
 | Build my first book | [Getting started](getting-started) |
 | Link between pages and books | [Links](links) |
-| Bundle images or downloadable files | [Images](images) / [Assets](assets) |
+| Bundle images or downloadable files | [Images & assets](images) |
 | Put tabs, terminals, or file trees around code | [Code extensions](code-extensions) |
 | Get a page into the keyword index | [keywords (frontmatter)](frontmatter-keywords) |
 | Shape the table of contents | [toc.yaml](toc-yaml) |

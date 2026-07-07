@@ -67,6 +67,6 @@ pages join the Index and Search, and it's remembered for your next visit.
 - Fill in [keywords](frontmatter-keywords), [categories](frontmatter-categories) and
   [related](frontmatter-related) so the Index, the category filter and the See-also
   footers light up.
-- Bundle images and downloads under `assets/` — see [Assets](assets).
+- Bundle images and downloads under `assets/` — see [Images & assets](images).
 - Ready to put the book on a website? Continue with
   [Getting published](khb-publishing:getting-published) in *Publishing KD Help Books*.
