@@ -39,5 +39,5 @@ are neutralised — docsets are untrusted.
 
 ## Autolinks
 
-Bare URLs (a GitHub-flavoured extension, enabled) become links automatically:
+Bare URLs become links automatically, as on GitHub:
 `https://example.com`.

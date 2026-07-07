@@ -7,7 +7,7 @@ related: [links, blockquotes]
 
 # Footnotes
 
-Footnotes are a GitHub-flavoured extension, which KD Help Book enables. Place a reference
+Footnotes work exactly as on GitHub. Place a reference
 `[^id]` in the text and define it anywhere in the page.
 
 ```md

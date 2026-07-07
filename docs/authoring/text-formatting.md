@@ -7,8 +7,8 @@ related: [headings, code-blocks, differences]
 
 # Text formatting
 
-Inline styling uses the usual Markdown markers. Strikethrough is a GitHub-flavoured
-extension, which KD Help Book enables.
+Inline styling uses the usual Markdown markers, strikethrough included — exactly as
+on GitHub.
 
 ```md
 **bold**, *italic*, ***bold italic***

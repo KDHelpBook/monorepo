@@ -7,7 +7,7 @@ related: [lists, blockquotes]
 
 # Tables
 
-Pipe tables are a GitHub-flavoured extension, which KD Help Book enables. The header row is
+Pipe tables work exactly as on GitHub. The header row is
 separated from the body by a row of dashes; colons in that separator set column
 alignment.
 

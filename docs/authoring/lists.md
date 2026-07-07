@@ -27,7 +27,7 @@ and nested lists; indent continuation content to line up under the item's text.
 
 ## Task lists
 
-Task lists are a GitHub-flavoured extension (enabled): `- [ ]` for an open item and
+Task lists work exactly as on GitHub: `- [ ]` for an open item and
 `- [x]` for a done one.
 
 ```md
