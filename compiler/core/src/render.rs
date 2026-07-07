@@ -26,6 +26,7 @@ pub fn render(src: &SourceDocset) -> Result<RenderedDocset> {
             let html = markdown::render_html(&p.markdown, Some(&highlighter));
             let html = render_code_groups(&html, &highlighter).with_context(&ctx)?;
             let html = render_code_preview(&html, &highlighter).with_context(&ctx)?;
+            let html = render_code_tree(&html, &highlighter).with_context(&ctx)?;
             let html = assets::rewrite_asset_urls(&html);
             let rendered = render_math(&html).with_context(&ctx)?;
             // Prepend an "On this page" nav built from the heading anchors, honouring
@@ -287,6 +288,110 @@ fn render_code_preview(html: &str, highlighter: &SyntectAdapter) -> Result<Strin
     Ok(out)
 }
 
+/// A folder in a [`render_code_tree`] file tree: ordered subfolders + files (each a
+/// block index), built by inserting each `[path]` segment by segment.
+#[derive(Default)]
+struct Dir {
+    dirs: Vec<(String, Dir)>,
+    files: Vec<(String, usize)>,
+}
+
+impl Dir {
+    fn insert(&mut self, parts: &[&str], idx: usize) {
+        match parts {
+            [] => {}
+            [name] => self.files.push(((*name).to_string(), idx)),
+            [name, rest @ ..] => {
+                if let Some((_, d)) = self.dirs.iter_mut().find(|(n, _)| n == name) {
+                    d.insert(rest, idx);
+                } else {
+                    let mut d = Dir::default();
+                    d.insert(rest, idx);
+                    self.dirs.push(((*name).to_string(), d));
+                }
+            }
+        }
+    }
+
+    fn render(&self, out: &mut String) {
+        out.push_str("<ul class=\"tree-list\">");
+        for (name, d) in &self.dirs {
+            out.push_str(&format!(
+                "<li class=\"tree-dir\"><span class=\"tree-dir-name\">{}</span>",
+                esc(name)
+            ));
+            d.render(out);
+            out.push_str("</li>");
+        }
+        for (name, idx) in &self.files {
+            let active = if *idx == 0 { " active" } else { "" };
+            out.push_str(&format!(
+                "<li class=\"tree-file{active}\" data-tree-file=\"{idx}\">{}</li>",
+                esc(name)
+            ));
+        }
+        out.push_str("</ul>");
+    }
+}
+
+/// Expand `~~~code-tree … ~~~`: each inner fence's `[path]` builds a file tree; clicking
+/// a file shows its (highlighted) content in the panel. Same opaque-fence mechanism as
+/// code-group; the viewer wires the file switching. No files is a build error.
+fn render_code_tree(html: &str, highlighter: &SyntectAdapter) -> Result<String> {
+    const OPEN: &str = "<pre class=\"syntax-highlighting\"><code class=\"language-code-tree\">";
+    const CLOSE: &str = "</code></pre>";
+    let mut out = String::with_capacity(html.len());
+    let mut i = 0;
+    while let Some(rel) = html[i..].find(OPEN) {
+        let start = i + rel;
+        let inner_start = start + OPEN.len();
+        let Some(end_rel) = html[inner_start..].find(CLOSE) else {
+            break;
+        };
+        let raw = unescape_html(&strip_tags(&html[inner_start..inner_start + end_rel]));
+        let blocks = split_group_fences(&raw);
+        if blocks.is_empty() {
+            anyhow::bail!("`~~~code-tree` contains no files");
+        }
+        let mut tree = Dir::default();
+        let mut panels = String::new();
+        for (idx, (info, code)) in blocks.iter().enumerate() {
+            let (lang, label) = parse_code_info(info);
+            let path = if label.is_empty() {
+                format!("file{}", idx + 1)
+            } else {
+                label
+            };
+            let mut parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+            if parts.is_empty() {
+                parts.push(path.as_str());
+            }
+            tree.insert(&parts, idx);
+            let panel_md = if lang.is_empty() {
+                format!("```\n{code}\n```")
+            } else {
+                format!("```{lang}\n{code}\n```")
+            };
+            let panel_html = markdown::render_html(&panel_md, Some(highlighter));
+            let active = if idx == 0 { " active" } else { "" };
+            panels.push_str(&format!(
+                "<div class=\"tree-panel{active}\" data-tree-panel=\"{idx}\">{}</div>",
+                panel_html.trim()
+            ));
+        }
+        let mut tree_html = String::new();
+        tree.render(&mut tree_html);
+        out.push_str(&html[i..start]);
+        out.push_str(&format!(
+            "<div class=\"code-tree\"><div class=\"code-tree-aside\">{tree_html}</div>\
+             <div class=\"code-tree-main\">{panels}</div></div>"
+        ));
+        i = inner_start + end_rel + CLOSE.len();
+    }
+    out.push_str(&html[i..]);
+    Ok(out)
+}
+
 /// Split a code-group's raw body into `(info-string, code)` per inner ```` ``` ```` fence.
 fn split_group_fences(inner: &str) -> Vec<(String, String)> {
     let mut out = Vec::new();
@@ -434,6 +539,23 @@ mod tests {
         // A preview missing the output block fails the build.
         let one = markdown::render_html("~~~code-preview\n```bash\nls\n```\n~~~\n", Some(&h));
         assert!(render_code_preview(&one, &h).is_err());
+    }
+
+    #[test]
+    fn expands_code_tree() {
+        let h = markdown::highlighter();
+        let md = "~~~code-tree\n```ts [src/index.ts]\nexport const x = 1;\n```\n```json [package.json]\n{}\n```\n```ts [src/util/add.ts]\nexport const add = 1;\n```\n~~~\n";
+        let html = render_code_tree(&markdown::render_html(md, Some(&h)), &h).unwrap();
+        assert!(html.contains("class=\"code-tree\""));
+        assert!(!html.contains("language-code-tree")); // opaque block consumed
+                                                       // Folders nest by `/`; files are leaves; first file's panel starts active.
+        assert!(html.contains(">src<") && html.contains(">util<")); // folder names
+        assert!(html.contains(">index.ts<") && html.contains(">package.json<"));
+        assert!(html.contains("data-tree-file=\"0\"") && html.contains("tree-file active"));
+        assert!(html.contains("data-tree-panel=\"2\"") && html.contains("language-json"));
+
+        let empty = markdown::render_html("~~~code-tree\n~~~\n", Some(&h));
+        assert!(render_code_tree(&empty, &h).is_err());
     }
 
     #[test]

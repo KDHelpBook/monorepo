@@ -73,16 +73,17 @@ genuinely generic non-code blocks (tabs / cards / steps outside code).
 ### Roadmap
 
 Done so far: heading **anchors** + an **"On this page"** box, **emoji**, code-block
-**filenames**, a **copy** button, **collapsible** code (`collapse` flag), **code groups**
-(`~~~code-group` → tabs), **command+output** (`~~~code-preview` → terminal panel),
-**callouts** (comrak 0.53 native `alerts`), and **math** (`$…$` → build-time MathML).
-What's left:
+**filenames**, a **copy** button, **collapsible** code (`collapse` flag), and the full
+code-component set — **groups** (`~~~code-group` → tabs), **command+output**
+(`~~~code-preview` → terminal panel), and **file trees** (`~~~code-tree`) — plus
+**callouts** (comrak 0.53 native `alerts`) and **math** (`$…$` → build-time MathML).
+What's left (all non-code blocks):
 
 | Want | How | Effort |
 |------|-----|--------|
-| **Code tree** (file-tree view) | the same opaque `~~~name … ~~~` fence, post-processed like the group | medium |
 | **Tabs / cards / steps / badges** (non-code) | true `:::` generic directives → `<div class>` (not MDC) | medium |
 | **Video / embeds** | a `:video`/`:embed` directive → sandboxed `<iframe>`/`<video>` | medium |
+| **Line-highlight** (`{2,4-6}`) / inline-code highlight | per-block info-string flags | small (deferred) |
 
 Deliberately **out of scope**: anything needing a live framework runtime — MDC's Vue
 components, Docus's `CodePreview` live *component* output, `NuxtImg`.

@@ -133,6 +133,44 @@ compiled khb-markdown (14 pages, language en) -> markdown.khb
 ```
 ~~~
 
+## File tree (`code-tree`)
+
+A **`~~~code-tree … ~~~`** fence turns each block's `[path]` label into a **file tree**
+(folders nest by `/`) beside the selected file's code — click a file to switch. A tree
+with no files is a build error.
+
+`````md
+~~~code-tree
+```toml [docset.toml]
+id = "my-book"
+title = "My Book"
+```
+```md [pages/index.md]
+# Home
+Welcome.
+```
+```md [pages/guide/setup.md]
+# Setup
+Steps…
+```
+~~~
+`````
+
+~~~code-tree
+```toml [docset.toml]
+id = "my-book"
+title = "My Book"
+```
+```md [pages/index.md]
+# Home
+Welcome.
+```
+```md [pages/guide/setup.md]
+# Setup
+Steps…
+```
+~~~
+
 ## How highlighting works
 
 - The compiler emits **CSS classes** (not inline colours); the viewer injects the
