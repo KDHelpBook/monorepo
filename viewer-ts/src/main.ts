@@ -143,12 +143,14 @@ function chooseLang(available: string[]): string {
   return available.includes("en") ? "en" : (available[0] ?? "en");
 }
 
-// config.json / docsets.json are fetched with a cache-busting query: the
+// config.json / docsets.json are fetched with a build-stamped query: the
 // previously shipped service worker cached them cache-first, so a stale
-// locked/unlocked state (or book list) could outlive every deploy. A unique
-// URL punches through that cache; the current sw.js treats both as
-// network-first and caches them under their bare pathname (see sw.js).
-const fresh = (file: string): string => `${file}?t=${Date.now()}`;
+// locked/unlocked state (or book list) could outlive every deploy. A URL that
+// changes per build punches through that cache exactly when a new deploy
+// lands, while staying stable within one (HTTP caching keeps working); the
+// current sw.js treats both as network-first and caches them under their
+// bare pathname (see sw.js).
+const fresh = (file: string): string => `${file}?v=${__BUILD_ID__}`;
 
 async function loadConfig(): Promise<Config> {
   try {
