@@ -110,10 +110,14 @@ jobs:
           grep -q '^version = "latest"$' docs/markdown/docset.toml
           "$BIN" compile docs/markdown -o out/markdown.khb
 
+      # --lock hides the open/manage-docsets UI (the site serves exactly the
+      # books packed here) while the reader profile keeps the PWA on; --home
+      # lands cold starts on the docs overview page instead of Search.
       - name: Pack the distribution
         run: |
-          "$BIN" pack --profile reader --viewer viewer-dist \
+          "$BIN" pack --profile reader --lock --viewer viewer-dist \
             --docset out/markdown.khb \
+            --home kdhelp-markdown:overview \
             --llms \
             -o publish
 
