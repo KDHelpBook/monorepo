@@ -39,6 +39,6 @@ Body content…
 - This whole `docs/markdown/` folder is authored with these fields, so it can be
   compiled straight into a `.khb` (`kdhelp compile`).
 - `keywords` and `categories` power the Index and the "Filter by category" scope; see
-  [links](#links) for how `related` renders.
+  [links](links) for how `related` renders.
 - The frontmatter is stripped before rendering — it never appears in the page body,
   and it's what the optional `md` column stores the body *without*.

@@ -14,9 +14,9 @@ F1-style keyword index, offline full-text search, favorites, and tabs.
 
 ## Where to start
 
-- [What is a .khb docset?](#what-is-khb) explains the format.
-- [Writing pages](#writing-pages) shows how to author content.
-- [Packaging](#packaging) covers turning a docset into a publishable site.
+- [What is a .khb docset?](what-is-khb) explains the format.
+- [Writing pages](writing-pages) shows how to author content.
+- [Packaging](packaging) covers turning a docset into a publishable site.
 
 > Multiple docsets can be loaded at once and merge into a single table of
 > contents, index, and search — just like MS Help 2 collections.

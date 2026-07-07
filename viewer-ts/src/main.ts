@@ -76,7 +76,8 @@ const FRAME_BRIDGE = `(function(){
 var P=parent;
 function post(m){try{P.postMessage(m,'*')}catch(e){}}
 function link(e,mid){var a=e.target&&e.target.closest&&e.target.closest('a');if(!a)return;
- if(a.hasAttribute('data-target')){e.preventDefault();post({t:'kdhelp',a:'open',id:a.getAttribute('data-target'),newTab:!!(mid||e.ctrlKey||e.metaKey)})}
+ if(a.hasAttribute('data-anchor')){e.preventDefault();var t=document.getElementById(a.getAttribute('data-anchor'));if(t)t.scrollIntoView({behavior:'smooth',block:'start'})}
+ else if(a.hasAttribute('data-target')){e.preventDefault();post({t:'kdhelp',a:'open',id:a.getAttribute('data-target'),newTab:!!(mid||e.ctrlKey||e.metaKey)})}
  else if(a.hasAttribute('data-ext')){e.preventDefault();post({t:'kdhelp',a:'ext',url:a.getAttribute('data-ext')})}}
 // A tap/click on a standalone content image (not a linked one) asks the app to
 // open its zoomable lightbox. Only our resolved inline assets (data:image/…) —
@@ -1499,16 +1500,24 @@ function start(
         return;
       }
       const href = a.getAttribute("href") ?? "";
+      // Link conventions: `#slug` = an in-page heading anchor; a bare `page-id` = a
+      // page in this book; `docsetId:pageId` = a page in another book; http(s)/mail
+      // = external; `data:` = an already-resolved asset download (left alone).
       if (href.startsWith("#")) {
-        a.setAttribute(
-          "data-target",
-          collection.resolveLink(fromId, href.slice(1)),
-        );
+        a.setAttribute("data-anchor", href.slice(1));
         a.setAttribute("href", "#");
       } else if (/^(https?:|mailto:|tel:)/i.test(href)) {
         a.setAttribute("data-ext", href);
-      } else if (!href.startsWith("data:")) {
-        a.removeAttribute("href");
+      } else if (href.startsWith("data:")) {
+        /* resolved asset (download) — keep as-is */
+      } else if (href) {
+        // A page reference: cross-book ids already carry `docsetId:`; a bare id is
+        // namespaced to this book.
+        a.setAttribute(
+          "data-target",
+          href.includes(":") ? href : collection.resolveLink(fromId, href),
+        );
+        a.setAttribute("href", "#");
       }
     });
   }

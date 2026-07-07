@@ -35,4 +35,4 @@ forced onto a new line.
 - **Raw inline HTML is escaped, not rendered** — docsets may come from untrusted
   sources, so `<b>x</b>` in Markdown shows as literal text. Use Markdown, not HTML.
 - Attribute syntax (`{.class}` on a span) is **not** supported; there are no inline
-  components. See the MDC discussion in the [overview](#overview).
+  components. See the MDC discussion in the [overview](overview).

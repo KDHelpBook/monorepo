@@ -30,4 +30,4 @@ Blockquotes can contain other Markdown — lists, code, even nested quotes (pref
 
 - Styled **callouts** (note / tip / warning / caution) are **not** a plain blockquote;
   they need GitHub-alert syntax (`> [!NOTE]`), which is on the roadmap in the
-  [overview](#overview). For now a blockquote is the way to set text apart.
+  [overview](overview). For now a blockquote is the way to set text apart.

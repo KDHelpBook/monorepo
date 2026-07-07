@@ -14,9 +14,9 @@ z interfejsem w stylu MS Help 2: drzewem spisu treści, indeksem słów kluczowy
 
 ## Od czego zacząć
 
-- [Czym jest docset .khb?](#what-is-khb) wyjaśnia format.
-- [Pisanie stron](#writing-pages) pokazuje, jak redagować treść.
-- [Pakowanie](#packaging) opisuje przygotowanie witryny do publikacji.
+- [Czym jest docset .khb?](what-is-khb) wyjaśnia format.
+- [Pisanie stron](writing-pages) pokazuje, jak redagować treść.
+- [Pakowanie](packaging) opisuje przygotowanie witryny do publikacji.
 
 > Można wczytać wiele docsetów naraz — łączą się w jeden spis treści, indeks
 > i wyszukiwarkę, dokładnie jak kolekcje MS Help 2.

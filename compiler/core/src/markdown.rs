@@ -63,6 +63,13 @@ pub fn render_html(markdown: &str, highlighter: Option<&SyntectAdapter>) -> Stri
     options.extension.autolink = true;
     options.extension.tasklist = true;
     options.extension.footnotes = true;
+    // Give every heading a stable `id` (empty prefix → the heading text slug) plus a
+    // permalink anchor, so pages can be deep-linked to a section. The viewer resolves
+    // a `#slug` that matches a heading on the current page as an in-page scroll, and
+    // only a `#id` with no local match as a cross-page link (see rewriteFrameLinks).
+    options.extension.header_ids = Some(String::new());
+    // `:shortcode:` emoji, e.g. `:tada:` → 🎉.
+    options.extension.shortcodes = true;
 
     let mut plugins = Plugins::default();
     if let Some(h) = highlighter {

@@ -21,4 +21,4 @@ than one page, the viewer expands a small chooser.
 - Add synonyms (for example `scheduling` next to `Timer`).
 - A few precise keywords beat a dozen vague ones.
 
-Keywords are also weighted in [full-text search](#what-is-khb).
+Keywords are also weighted in [full-text search](what-is-khb).

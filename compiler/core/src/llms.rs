@@ -345,21 +345,25 @@ fn rewrite_line(line: &str, page_ids: &HashSet<String>, page_prefix: &str, out: 
     }
 }
 
-/// Rewrite a single link target (URL + optional ` "title"`), leaving anything that
-/// isn't a same-book page anchor or an `assets/…` reference unchanged.
+/// Rewrite a single link target (URL + optional ` "title"`): a bare same-book
+/// `page-id` becomes the page's `.md`, and an `assets/…` reference the `asset:`
+/// scheme. A `#slug` in-page anchor and anything else (external, cross-book) is left.
 fn rewrite_target(target: &str, page_ids: &HashSet<String>, page_prefix: &str) -> String {
     let (url, rest) = match target.find(char::is_whitespace) {
         Some(p) => (&target[..p], &target[p..]),
         None => (target, ""),
     };
-    if let Some(anchor) = url.strip_prefix('#') {
-        if page_ids.contains(anchor) {
-            return format!("{page_prefix}{}.md{rest}", sanitize(anchor));
-        }
+    if url.starts_with('#') {
+        // In-page heading anchor — valid Markdown as-is.
+        target.to_string()
     } else if url.starts_with("assets/") {
-        return format!("asset:{url}{rest}");
+        format!("asset:{url}{rest}")
+    } else if page_ids.contains(url) {
+        // A bare page id in this book → the page's Markdown file.
+        format!("{page_prefix}{}.md{rest}", sanitize(url))
+    } else {
+        target.to_string()
     }
-    target.to_string()
 }
 
 #[cfg(test)]
@@ -370,20 +374,22 @@ mod tests {
     fn rewrites_prose_links_but_leaves_code_verbatim() {
         let ids: HashSet<String> = ["adv"].iter().map(|s| s.to_string()).collect();
         let md = "\
-See [advanced](#adv) and the ![logo](assets/logo.svg).
-Inline `[x](#adv)` and `assets/y` stay.
+See [advanced](adv) and the ![logo](assets/logo.svg).
+Jump to [Setup](#setup) — an in-page anchor.
+Inline `[x](adv)` and `assets/y` stay.
 ```
-[x](#adv) links and assets/y paths stay in code
+[x](adv) links and assets/y paths stay in code
 ```
-An [unknown](#nope) anchor and [ext](https://x) stay.
+A [missing](nope) page and [ext](https://x) stay.
 ";
-        // Standalone page file: same-book links become sibling `.md`.
+        // Standalone page file: a bare same-book id becomes a sibling `.md`.
         let page = rewrite_md_links(md, &ids, "");
         assert!(page.contains("[advanced](adv.md)"));
         assert!(page.contains("![logo](asset:assets/logo.svg)"));
-        assert!(page.contains("Inline `[x](#adv)` and `assets/y` stay.")); // inline code
-        assert!(page.contains("[x](#adv) links and assets/y paths stay in code")); // fenced
-        assert!(page.contains("[unknown](#nope)")); // not a real page → left
+        assert!(page.contains("[Setup](#setup)")); // in-page anchor → left
+        assert!(page.contains("Inline `[x](adv)` and `assets/y` stay.")); // inline code
+        assert!(page.contains("[x](adv) links and assets/y paths stay in code")); // fenced
+        assert!(page.contains("[missing](nope)")); // not a real page → left
         assert!(page.contains("[ext](https://x)")); // external → left
 
         // llms-full.txt lives at the root, so links are `md/<book>/…`.

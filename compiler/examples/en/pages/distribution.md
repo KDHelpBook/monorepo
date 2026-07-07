@@ -7,7 +7,7 @@ categories: [distribution]
 
 A docset and the viewer are separate, so the same content ships two ways:
 
-- [Packaging](#packaging) a static site for the web.
-- An [offline desktop app](#offline-tauri) with Tauri.
+- [Packaging](packaging) a static site for the web.
+- An [offline desktop app](offline-tauri) with Tauri.
 
 Both use exactly the same `.khb` content — no changes required.

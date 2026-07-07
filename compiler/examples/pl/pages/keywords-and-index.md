@@ -21,4 +21,4 @@ więcej niż jedną stronę, przeglądarka rozwija listę wyboru.
 - Dodawaj synonimy (np. `harmonogram` obok `Timer`).
 - Kilka trafnych słów działa lepiej niż kilkanaście przypadkowych.
 
-Słowa kluczowe są też ważone w [wyszukiwaniu pełnotekstowym](#what-is-khb).
+Słowa kluczowe są też ważone w [wyszukiwaniu pełnotekstowym](what-is-khb).

@@ -62,6 +62,33 @@ body {
   font-family: var(--font-ui);
   margin: 1.2em 0 0.4em;
 }
+/* Heading permalink anchors (compiler-emitted <a class="anchor">): an empty link
+   at the start of each heading. Show a subtle # on hover for a copyable deep link. */
+.content h1,
+.content h2,
+.content h3,
+.content h4,
+.content h5,
+.content h6 {
+  position: relative;
+}
+.content .anchor {
+  position: absolute;
+  right: 100%;
+  padding-right: 0.25em;
+  border: 0;
+  opacity: 0;
+  color: var(--muted);
+  text-decoration: none;
+  font-weight: 400;
+}
+.content .anchor::before {
+  content: "#";
+}
+.content :is(h1, h2, h3, h4, h5, h6):hover .anchor,
+.content .anchor:focus {
+  opacity: 1;
+}
 .content p {
   margin: 0.55em 0;
 }

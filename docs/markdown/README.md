@@ -18,10 +18,11 @@ carries frontmatter, so this reference is itself a compilable docset.
 
 | Feature | Page |
 |---------|------|
-| Headings & paragraphs | [headings.md](headings.md) |
+| Headings, paragraphs, heading anchors | [headings.md](headings.md) |
 | Bold, italic, strikethrough, inline code, line breaks | [text-formatting.md](text-formatting.md) |
 | Ordered / unordered / nested lists, task lists | [lists.md](lists.md) |
-| Links: external, in-book (`#id`), cross-book, autolinks | [links.md](links.md) |
+| Links: in-page `#slug`, in-book `page-id`, cross-book, external, autolinks | [links.md](links.md) |
+| Emoji `:shortcode:` | [emoji.md](emoji.md) |
 | Images & downloadable files (the `asset:` scheme) | [images-and-assets.md](images-and-assets.md) |
 | Fenced code blocks + syntax highlighting | [code-blocks.md](code-blocks.md) |
 | Tables (GFM) | [tables.md](tables.md) |
@@ -52,24 +53,26 @@ MDC. Directives are framework-agnostic, compile to plain `<div class="…">`, ar
 de-facto standard outside Vue, and degrade gracefully. Authoring feels close to MDC
 (`::` blocks) but we own the static output.
 
-### Roadmap (what we *can* add, cheapest first)
+### Roadmap
 
-Most of the gap is closed by **turning on comrak extensions** — native, static HTML,
-zero new dependencies:
+Heading **anchors** and **emoji** are done (comrak `header_ids` + `shortcodes`). The
+rest, roughly by effort — note some earlier "tiny" guesses were wrong: comrak **0.29
+has no `alerts`** (callouts need a comrak upgrade), and `math_dollars` only *parses*
+math, so visual rendering needs a LaTeX→MathML step:
 
 | Want | How | Effort |
 |------|-----|--------|
-| **Callouts** (note / tip / warning / caution) | comrak `alerts` (GitHub `> [!NOTE]`) | tiny |
-| **Heading anchors** + in-page TOC | comrak `header_ids` | tiny |
-| **Emoji** `:tada:` | comrak `shortcodes` | tiny |
-| **Math** `$…$` | comrak `math_dollars` | tiny |
-| Code **filename** title bar | parse the ` ```ts [file.ts] ` tag | small |
-| Code **copy** button | viewer-side, in the frame bridge | small |
-| **Tabs / cards / steps / badges** | a **directive** renderer (not MDC) | medium |
+| **Callouts** (note / tip / warning / caution) | upgrade comrak → `alerts`, or a custom transform | small–medium |
+| **On-page TOC** ("On this page" rail) | viewer reads the heading anchors | small |
+| **Math** `$…$` | comrak `math_dollars` + a Rust LaTeX→MathML pass (native MathML) | medium |
+| Code **filename** title bar | parse the ` ```ts [file.ts] ` info string | small |
+| Code **copy** button | viewer-side, in the frame bridge (clipboard via parent) | small |
+| **Code group / collapse / preview / tree** | a **directive** renderer + interactive frame JS | medium–large |
+| **Tabs / cards / steps / badges** | the same **directive** renderer (not MDC) | medium |
 | **Video / embeds** | a `:video`/`:embed` directive → sandboxed `<iframe>`/`<video>` | medium |
 
 Deliberately **out of scope**: anything needing a live framework runtime — MDC's Vue
-components, Docus's `CodePreview` live output, `NuxtImg`.
+components, Docus's `CodePreview` live *component* output, `NuxtImg`.
 
 ## The pages
 
@@ -77,6 +80,7 @@ components, Docus's `CodePreview` live output, `NuxtImg`.
 - [Text formatting](text-formatting.md)
 - [Lists & task lists](lists.md)
 - [Links](links.md)
+- [Emoji](emoji.md)
 - [Images & assets](images-and-assets.md)
 - [Code blocks](code-blocks.md)
 - [Tables](tables.md)

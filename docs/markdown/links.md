@@ -7,23 +7,33 @@ related: [images-and-assets, frontmatter]
 
 # Links
 
-kdhelp understands four kinds of link.
+kdhelp understands five kinds of link, distinguished purely by the target:
 
 ```md
-External:   [Nuxt UI](https://ui.nuxt.com)
-In-book:    [Writing pages](#writing-pages)
-Cross-book: [SDK reference](sample-sdk:overview)
-Autolink:   https://example.com
+In-page anchor: [Setup](#setup)
+In-book page:   [Writing pages](writing-pages)
+Cross-book:     [SDK reference](sample-sdk:overview)
+External:       [Nuxt UI](https://ui.nuxt.com)
+Autolink:       https://example.com
 ```
 
-## In-book links — `#page-id`
+## In-page anchors — `#slug`
 
-A link whose target is `#some-id` points at **another page in the same book** with
-that id (not an in-page heading anchor). The viewer resolves it and navigates in the
-current tab.
+A `#slug` target scrolls to the **heading on the current page** whose id is `slug`.
+Every heading gets an id automatically (the slug of its text), and hovering a heading
+reveals a `#` permalink. See [headings](headings).
 
 ```md
-See [Writing pages](#writing-pages) for the frontmatter fields.
+Jump to [Setup](#setup), then read the [Notes](#notes).
+```
+
+## In-book pages — a bare `page-id`
+
+A bare target (no `#`, no scheme) is the **id of another page in the same book**. The
+viewer navigates to it in the current tab.
+
+```md
+See [Writing pages](writing-pages) for the frontmatter fields.
 ```
 
 ## Cross-book links — `docsetId:pageId`
@@ -45,4 +55,4 @@ Bare URLs (a GitHub-flavoured extension, enabled) become links automatically:
 - External links open per the viewer's link policy (a new tab with modifiers);
   `javascript:` and other unsafe schemes are neutralised.
 - For a curated **See also** footer instead of inline links, list related page ids in
-  the page's `related` frontmatter — see [frontmatter](#frontmatter).
+  the page's `related` frontmatter — see [frontmatter](frontmatter).

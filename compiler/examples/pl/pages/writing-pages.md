@@ -32,4 +32,5 @@ fn main() {
 }
 ```
 
-Strony łączysz odnośnikiem `#id`, np. [Kategorie](#categories).
+Strony łączysz po ich id, np. [Kategorie](categories); `#nagłówek` linkuje do sekcji
+na tej samej stronie.

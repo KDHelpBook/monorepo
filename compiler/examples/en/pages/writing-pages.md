@@ -32,4 +32,5 @@ fn main() {
 }
 ```
 
-Link between pages with `#id`, for example [Categories](#categories).
+Link between pages by their id, e.g. [Categories](categories); use `#heading` for an
+in-page section anchor.

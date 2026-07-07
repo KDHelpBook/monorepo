@@ -12,4 +12,4 @@ Pick **1.0** from the Version selector to see the older docs.
 ## What's new in 2.0
 
 - `sendAsync()` returns a promise that resolves on delivery acknowledgement.
-- `send()` is **deprecated** — see [Migrating from 1.0](#migration).
+- `send()` is **deprecated** — see [Migrating from 1.0](migration).
