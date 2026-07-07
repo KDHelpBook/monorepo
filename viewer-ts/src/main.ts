@@ -2580,12 +2580,17 @@ function start(
       const many = list.length > 1;
       prevBtn.hidden = !many;
       nextBtn.hidden = !many;
+      // No wrap-around: dim + disable the arrow that would run off the end.
+      prevBtn.disabled = cur === 0;
+      nextBtn.disabled = cur === list.length - 1;
       count.hidden = !many;
       if (many) count.textContent = `${cur + 1} / ${list.length}`;
     };
     const go = (delta: number): void => {
-      if (list.length < 2) return;
-      cur = (cur + delta + list.length) % list.length; // wrap around
+      // Clamp at the ends — no wrap-around from last back to first.
+      const next = Math.min(list.length - 1, Math.max(0, cur + delta));
+      if (next === cur) return;
+      cur = next;
       render();
     };
     prevBtn.addEventListener("click", (e) => {

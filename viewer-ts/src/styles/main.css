@@ -1405,6 +1405,13 @@ textarea {
 .lightbox-nav:hover {
   background: rgba(0, 0, 0, 0.6);
 }
+.lightbox-nav:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.lightbox-nav:disabled:hover {
+  background: rgba(0, 0, 0, 0.35);
+}
 .lightbox-prev {
   left: calc(10px + env(safe-area-inset-left, 0px));
 }
