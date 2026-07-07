@@ -250,6 +250,52 @@ body {
   border-left: 3px solid #7fa8dd;
   color: #2a3d55;
 }
+/* Callouts — comrak's GitHub-style `> [!NOTE]` alerts. The type sets --callout via
+   the modifier class; the title picks it up so border + heading share one colour. */
+.content .markdown-alert {
+  margin: 0.9em 0;
+  padding: 8px 14px;
+  border: 1px solid var(--callout-border);
+  border-left: 4px solid var(--callout);
+  border-radius: 3px;
+  background: var(--callout-bg);
+}
+.content .markdown-alert > :first-child {
+  margin-top: 0;
+}
+.content .markdown-alert > :last-child {
+  margin-bottom: 0;
+}
+.content .markdown-alert-title {
+  margin: 0 0 0.35em;
+  font-weight: 700;
+  color: var(--callout);
+}
+.content .markdown-alert-note {
+  --callout: #3b78c3;
+  --callout-bg: #f1f6fc;
+  --callout-border: #cfe0f2;
+}
+.content .markdown-alert-tip {
+  --callout: #2f8a45;
+  --callout-bg: #f1faf3;
+  --callout-border: #ccebd4;
+}
+.content .markdown-alert-important {
+  --callout: #8250df;
+  --callout-bg: #f8f4ff;
+  --callout-border: #e2d4fb;
+}
+.content .markdown-alert-warning {
+  --callout: #b7791f;
+  --callout-bg: #fffaf0;
+  --callout-border: #f0e0bd;
+}
+.content .markdown-alert-caution {
+  --callout: #cf3c3c;
+  --callout-bg: #fdf3f3;
+  --callout-border: #f3d0d0;
+}
 .content table {
   border-collapse: collapse;
   margin: 0.9em 0;

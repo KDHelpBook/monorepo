@@ -35,3 +35,10 @@ fn main() {
 
 Link between pages by their id, e.g. [Categories](categories); use `#heading` for an
 in-page section anchor.
+
+> [!NOTE]
+> Use `> [!NOTE]` (or `TIP`, `IMPORTANT`, `WARNING`, `CAUTION`) to set text apart in a
+> coloured callout.
+
+> [!WARNING]
+> A category referenced here but missing from `categories.yaml` is auto-registered.

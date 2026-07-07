@@ -27,6 +27,7 @@ carries frontmatter, so this reference is itself a compilable docset.
 | Fenced code blocks + syntax highlighting | [code-blocks.md](code-blocks.md) |
 | Tables (GFM) | [tables.md](tables.md) |
 | Blockquotes | [blockquotes.md](blockquotes.md) |
+| Callouts (`> [!NOTE]` alerts) | [callouts.md](callouts.md) |
 | Footnotes | [footnotes.md](footnotes.md) |
 | Page frontmatter (`title`, `keywords`, `categories`, `related`) | [frontmatter.md](frontmatter.md) |
 
@@ -56,13 +57,12 @@ de-facto standard outside Vue, and degrade gracefully. Authoring feels close to 
 ### Roadmap
 
 Done so far: heading **anchors** + an **"On this page"** box, **emoji**, code-block
-**filenames** and a **copy** button. The rest, roughly by effort — note some earlier
-"tiny" guesses were wrong: comrak **0.29 has no `alerts`** (callouts need a comrak
-upgrade), and `math_dollars` only *parses* math, so rendering needs a LaTeX→MathML step:
+**filenames** and a **copy** button, and **callouts** (comrak was upgraded to 0.53 for
+native `alerts`). The rest, roughly by effort — note `math_dollars` only *parses* math,
+so rendering needs a LaTeX→MathML step:
 
 | Want | How | Effort |
 |------|-----|--------|
-| **Callouts** (note / tip / warning / caution) | upgrade comrak → `alerts`, or a custom transform | small–medium |
 | **Math** `$…$` | comrak `math_dollars` + a Rust LaTeX→MathML pass (native MathML) | medium |
 | **Code group / collapse / preview / tree** | a **directive** renderer + interactive frame JS | medium–large |
 | **Tabs / cards / steps / badges** | the same **directive** renderer (not MDC) | medium |
@@ -82,5 +82,6 @@ components, Docus's `CodePreview` live *component* output, `NuxtImg`.
 - [Code blocks](code-blocks.md)
 - [Tables](tables.md)
 - [Blockquotes](blockquotes.md)
+- [Callouts](callouts.md)
 - [Footnotes](footnotes.md)
 - [Frontmatter](frontmatter.md)

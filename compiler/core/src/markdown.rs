@@ -4,8 +4,9 @@
 //! HTML in the docset. The viewer never needs a Markdown engine. We also derive a
 //! plain-text version of each page for the full-text index and snippets.
 
+use comrak::options::Plugins;
 use comrak::plugins::syntect::SyntectAdapter;
-use comrak::{Options, Plugins};
+use comrak::Options;
 
 /// The light and dark syntect themes the code-block CSS is generated from. Light is
 /// the default; dark is served under the viewer's dark hook. Kept here so the CSS
@@ -67,9 +68,11 @@ pub fn render_html(markdown: &str, highlighter: Option<&SyntectAdapter>) -> Stri
     // permalink anchor, so pages can be deep-linked to a section. The viewer resolves
     // a `#slug` that matches a heading on the current page as an in-page scroll, and
     // only a `#id` with no local match as a cross-page link (see rewriteFrameLinks).
-    options.extension.header_ids = Some(String::new());
+    options.extension.header_id_prefix = Some(String::new());
     // `:shortcode:` emoji, e.g. `:tada:` → 🎉.
     options.extension.shortcodes = true;
+    // GitHub-style callouts: `> [!NOTE]` → a labelled `markdown-alert` block.
+    options.extension.alerts = true;
     // Keep the info-string text *after* the language on the `<code>` as `data-meta`,
     // so ```ts [nuxt.config.ts] surfaces a filename the viewer shows above the block.
     options.render.full_info_string = true;

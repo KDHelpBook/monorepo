@@ -28,6 +28,5 @@ Blockquotes can contain other Markdown — lists, code, even nested quotes (pref
 
 ## Notes for kdhelp
 
-- Styled **callouts** (note / tip / warning / caution) are **not** a plain blockquote;
-  they need GitHub-alert syntax (`> [!NOTE]`), which is on the roadmap in the
-  [overview](overview). For now a blockquote is the way to set text apart.
+- For a coloured, labelled box (note / tip / warning / …) use a **[callout](callouts)**
+  — a blockquote whose first line is `[!TYPE]`. A plain blockquote stays neutral.
