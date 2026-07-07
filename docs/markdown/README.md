@@ -78,8 +78,10 @@ Done so far: heading **anchors** + an **"On this page"** box, **emoji**, code-bl
 **filenames**, a **copy** button, **collapsible** code (`collapse` flag), **line-highlight**
 (`{2,4-6}`), and the full code-component set — **groups** (`~~~code-group` → tabs),
 **command+output** (`~~~code-preview` → terminal panel), and **file trees**
-(`~~~code-tree`) — plus **callouts** (comrak 0.53 native `alerts`) and **math** (`$…$` →
-build-time MathML).
+(`~~~code-tree`) — plus **callouts** (comrak 0.53 native `alerts`), **math** (`$…$` and
+`` $`…`$ ``/```math → build-time MathML), **inline marks** (`==mark==`, `++ins++`,
+`^sup^`, `~sub~`, `__u__`, `||spoiler||`), **figures** (image title → `<figcaption>`),
+**description lists**, and **inline footnotes** (`^[…]`).
 What's left (all non-code blocks):
 
 | Want | How | Effort |

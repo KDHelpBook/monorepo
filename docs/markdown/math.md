@@ -27,6 +27,26 @@ $$\int_0^1 x^2 \, dx = \frac{1}{3}$$
 
 $$\int_0^1 x^2 \, dx = \frac{1}{3}$$
 
+## Code-fence syntax
+
+If your text has literal `$` (currency), the **code syntax** avoids ambiguity (comrak's
+`math_code` extension) — inline `` $`…`$ `` and a ` ```math ` block. Both convert to the
+same MathML:
+
+````md
+Inline: $`a^2 + b^2 = c^2`$
+
+```math
+\sum_{k=1}^n k = \frac{n(n+1)}{2}
+```
+````
+
+Inline: $`a^2 + b^2 = c^2`$
+
+```math
+\sum_{k=1}^n k = \frac{n(n+1)}{2}
+```
+
 ## Notes for KD Help Book
 
 - A formula the converter can't parse **fails the build** (with the page id and the

@@ -608,6 +608,60 @@ body {
   box-shadow: inset 0 0 0 1px #e0ac2a;
   border-radius: 2px;
 }
+/* Inline text marks from the new comrak extensions. `<mark>` (==x==) is above;
+   `<ins>` (++x++) reads as an addition, `<sub>`/`<sup>` keep the browser defaults. */
+.content ins {
+  text-decoration: underline;
+  text-decoration-color: #2f8a45;
+  background: #eaf7ee;
+  border-radius: 2px;
+}
+/* Spoiler (||x||): blacked out until clicked (the frame bridge adds `.revealed`). */
+.content .spoiler {
+  background: #16233b;
+  color: transparent;
+  border-radius: 2px;
+  padding: 0 2px;
+  cursor: pointer;
+}
+.content .spoiler.revealed {
+  background: #eef3fa;
+  color: inherit;
+  cursor: text;
+}
+/* Image with a title → <figure><figcaption>. */
+.content figure {
+  margin: 1em 0;
+  text-align: center;
+}
+.content figcaption {
+  margin-top: 0.4em;
+  color: var(--muted);
+  font-size: 0.9em;
+  font-style: italic;
+}
+/* Description / definition lists (Term / : details). */
+.content dl {
+  margin: 0.8em 0;
+}
+.content dt {
+  font-weight: 600;
+  color: var(--content-h);
+}
+.content dd {
+  margin: 0.15em 0 0.6em 1.5em;
+}
+/* Footnotes (also inline `^[…]`): a muted, ruled-off section at the page foot. */
+.content .footnotes {
+  margin-top: 2.4em;
+  padding-top: 0.6em;
+  border-top: 1px dashed var(--rule);
+  font-size: 0.9em;
+  color: var(--muted);
+}
+.content .footnotes ol {
+  margin: 0.3em 0;
+}
 .content .see-also {
   margin-top: 2em;
   padding: 0.55em 12px;

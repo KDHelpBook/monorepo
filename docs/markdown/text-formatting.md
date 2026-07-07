@@ -1,6 +1,6 @@
 ---
 title: Text formatting
-keywords: [bold, italic, strikethrough, inline code, emphasis, line break]
+keywords: [bold, italic, strikethrough, inline code, emphasis, line break, highlight, mark, insert, superscript, subscript, underline, spoiler]
 categories: [inline]
 related: [headings, code-blocks]
 ---
@@ -17,6 +17,23 @@ extension, which KD Help Book enables.
 ```
 
 Renders as: **bold**, *italic*, ***bold italic***, ~~strikethrough~~, `inline code`.
+
+## More inline marks
+
+Extra comrak extensions add a few more inline marks:
+
+| Write | Renders | Element |
+|-------|---------|---------|
+| `==highlight==` | ==highlight== | `<mark>` |
+| `++inserted++` | ++inserted++ | `<ins>` |
+| `super^script^` | super^script^ | `<sup>` |
+| `H~2~O` (single `~`) | H~2~O | `<sub>` |
+| `__underline__` | __underline__ | `<u>` |
+| `\|\|spoiler\|\|` | ||spoiler|| (click to reveal) | `<span class="spoiler">` |
+
+Two tildes stay **strikethrough** (`~~x~~`), one is **subscript** (`~x~`) — comrak tells
+them apart by count. **Bold is `**`**, so `__` is free for underline. A **spoiler** is
+blacked out until you click it.
 
 ## Line breaks & rules
 

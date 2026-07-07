@@ -119,9 +119,27 @@ pub fn render_html(markdown: &str, highlighter: Option<&SyntectAdapter>) -> Stri
     options.extension.alerts = true;
     // `$…$` / `$$…$$` math (parsed to LaTeX; rendered to MathML in [`crate::render`]).
     options.extension.math_dollars = true;
+    // Math also via code syntax: `` $`x`$ `` inline and ```math blocks — comrak emits
+    // the same `data-math-style` marker, converted to MathML alongside `$…$`.
+    options.extension.math_code = true;
+    // Inline text marks. `==x==` → <mark> (already styled), `++x++` → <ins>, `x^2^` →
+    // <sup>, `~x~` → <sub> (double `~~` stays strikethrough — comrak distinguishes by
+    // tilde count), `__x__` → <u> (bold is `**`, so `__` is free), `||x||` → a spoiler.
+    options.extension.highlight = true;
+    options.extension.insert = true;
+    options.extension.superscript = true;
+    options.extension.subscript = true;
+    options.extension.underline = true;
+    options.extension.spoiler = true;
+    // Description/definition lists (`Term` / `: details`) and inline footnotes (`^[…]`,
+    // sharing the footnote numbering already enabled above).
+    options.extension.description_lists = true;
+    options.extension.inline_footnotes = true;
     // Keep the info-string text *after* the language on the `<code>` as `data-meta`,
     // so ```ts [nuxt.config.ts] surfaces a filename the viewer shows above the block.
     options.render.full_info_string = true;
+    // `![alt](url "caption")` → <figure><figcaption>caption</figcaption>.
+    options.render.figure_with_caption = true;
 
     let mut plugins = Plugins::default();
     if let Some(h) = highlighter {
@@ -183,6 +201,25 @@ mod tests {
     fn finds_first_heading() {
         assert_eq!(first_h1("intro\n\n# Hello\n"), Some("Hello".to_string()));
         assert_eq!(first_h1("no heading here"), None);
+    }
+
+    #[test]
+    fn enables_the_inline_mark_extensions() {
+        let html = render_html("==h== ++i++ x^2^ H~2~O ~~d~~ __u__ ||s||", None);
+        assert!(html.contains("<mark>h</mark>"));
+        assert!(html.contains("<ins>i</ins>"));
+        assert!(html.contains("<sup>2</sup>"));
+        assert!(html.contains("<sub>2</sub>")); // single ~ → subscript
+        assert!(html.contains("<del>d</del>")); // double ~~ → strikethrough (coexists)
+        assert!(html.contains("<u>u</u>")); // __ → underline (bold is **)
+        assert!(html.contains("class=\"spoiler\">s</span>"));
+    }
+
+    #[test]
+    fn enables_figures_and_description_lists() {
+        assert!(render_html("![a](x.png \"cap\")", None).contains("<figcaption>cap</figcaption>"));
+        let dl = render_html("Term\n: Details\n", None);
+        assert!(dl.contains("<dt>Term</dt>") && dl.contains("<dd>Details</dd>"));
     }
 
     #[test]

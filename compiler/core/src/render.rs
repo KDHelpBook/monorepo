@@ -149,27 +149,40 @@ fn attr_value(html: &str, attr: &str) -> Option<String> {
     Some(html[start..end].to_string())
 }
 
-/// Replace comrak's math spans (`<span data-math-style="…">LaTeX</span>`) with native
-/// MathML, rendered at build time so the viewer needs no KaTeX/MathJax. Fails on a
-/// formula the converter can't parse — a build error beats a silently broken formula.
+/// Replace comrak's math markers with native MathML, rendered at build time so the
+/// viewer needs no KaTeX/MathJax. Handles both `math_dollars` (`<span data-math-style>`)
+/// and `math_code` (`<code data-math-style>` inline, and `<pre><code … data-math-style>`
+/// for a ```math block). Fails on a formula the converter can't parse — a build error
+/// beats a silently broken formula.
 fn render_math(html: &str) -> Result<String> {
     use latex2mathml::{latex_to_mathml, DisplayStyle};
-    const MARK: &str = "<span data-math-style=\"";
-    const CLOSE: &str = "</span>";
+    const ATTR: &str = "data-math-style=\"";
     let mut out = String::with_capacity(html.len());
     let mut i = 0;
-    while let Some(rel) = html[i..].find(MARK) {
-        let start = i + rel;
-        let after = start + MARK.len();
-        let Some(qpos) = html[after..].find("\">") else {
+    while let Some(rel) = html[i..].find(ATTR) {
+        let attr = i + rel;
+        // The enclosing element is the nearest `<` before the attribute (`<span`/`<code`).
+        let Some(tag_off) = html[i..attr].rfind('<') else {
             break;
         };
-        let style = &html[after..after + qpos];
-        let latex_start = after + qpos + 2; // skip `">`
-        let Some(end_rel) = html[latex_start..].find(CLOSE) else {
+        let tag = i + tag_off;
+        let is_code = html[tag..].starts_with("<code");
+        let close: &str = if is_code { "</code>" } else { "</span>" };
+        // A ```math block is `<pre><code … data-math-style="display">…</code></pre>`.
+        let block_pre = is_code && html[i..tag].ends_with("<pre>");
+        let sv = attr + ATTR.len();
+        let Some(qrel) = html[sv..].find('"') else {
             break;
         };
-        let latex = unescape_html(&html[latex_start..latex_start + end_rel]);
+        let style = &html[sv..sv + qrel];
+        let Some(gtrel) = html[sv + qrel..].find('>') else {
+            break;
+        };
+        let latex_start = sv + qrel + gtrel + 1; // just past the tag's `>`
+        let Some(crel) = html[latex_start..].find(close) else {
+            break;
+        };
+        let latex = unescape_html(html[latex_start..latex_start + crel].trim_end_matches('\n'));
         let display = if style == "display" {
             DisplayStyle::Block
         } else {
@@ -177,9 +190,15 @@ fn render_math(html: &str) -> Result<String> {
         };
         let mathml = latex_to_mathml(&latex, display)
             .map_err(|e| anyhow::anyhow!("invalid math `{latex}`: {e}"))?;
-        out.push_str(&html[i..start]);
+        // Drop the whole element: `<pre>…</pre>` for a block, else the `<span>`/`<code>`.
+        let elem_start = if block_pre { tag - "<pre>".len() } else { tag };
+        let mut elem_end = latex_start + crel + close.len();
+        if block_pre && html[elem_end..].starts_with("</pre>") {
+            elem_end += "</pre>".len();
+        }
+        out.push_str(&html[i..elem_start]);
         out.push_str(&mathml);
-        i = latex_start + end_rel + CLOSE.len();
+        i = elem_end;
     }
     out.push_str(&html[i..]);
     Ok(out)
@@ -570,6 +589,16 @@ mod tests {
         // than silently degrading to raw text.
         let bad = "<span data-math-style=\"inline\">\\begin{matrix}</span>";
         assert!(render_math(bad).is_err());
+
+        // `math_code`: inline `<code data-math-style>` and a `<pre><code>` block are
+        // both converted (and the surrounding `<pre>` dropped for the block).
+        let code = "<p>x <code data-math-style=\"inline\">a^2</code></p>\
+                    <pre><code class=\"language-math\" data-math-style=\"display\">a+b\n</code></pre>";
+        let out = render_math(code).unwrap();
+        assert!(out.contains("<math") && out.contains("display=\"inline\""));
+        assert!(out.contains("display=\"block\""));
+        assert!(!out.contains("data-math-style") && !out.contains("language-math"));
+        assert!(!out.contains("<pre>")); // the block's <pre> wrapper is gone
     }
 
     #[test]

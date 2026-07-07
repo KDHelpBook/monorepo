@@ -20,6 +20,8 @@ Download the [quick-reference card](assets/quick-reference.txt).
 
 - An **image** (`![alt](assets/…)`) renders inline; the viewer offers a lightbox.
 - A **link to a non-image asset** (`[label](assets/…)`) becomes a download.
+- Give an image a **title** (`![alt](assets/… "A caption")`) and it renders as a
+  `<figure>` with the title shown as a `<figcaption>` beneath it.
 
 ## How resolution works
 

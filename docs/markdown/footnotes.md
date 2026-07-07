@@ -21,6 +21,11 @@ page.
 
 [^demo]: This is the footnote's text; the viewer links the marker to it and back.
 
+## Inline footnotes
+
+For a short aside you don't want to define separately, write it inline with `^[…]`^[like
+this one] — it joins the same numbered list at the foot of the page.
+
 ## Notes for KD Help Book
 
 - Footnote ids are page-local; the same `[^1]` on two pages doesn't collide.
