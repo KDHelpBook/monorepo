@@ -75,8 +75,8 @@ Two practical notes:
 - The engine is **code-split**: sessions that never open a streamed docset never
   download it.
 
-Measured on a 618 KB demo docset: **~11 %** of the file to open, **~21 %** to also
-read a full page, **~32 %** to also run a bm25 search.
+Measured on a 618 KB demo docset: **\~11 %** of the file to open, **\~21 %** to also
+read a full page, **\~32 %** to also run a bm25 search.
 
 ## What a host must provide
 

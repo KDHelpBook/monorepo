@@ -23,6 +23,7 @@ come from untrusted sources, it deliberately refuses a few things GFM tolerates.
 | Code: `[filename]` bar, copy button, `collapse` / `open` flags | `` ```rust [main.rs] collapse `` | [Code extensions](code-extensions) |
 | Code groups (tabs), command+output panels, file trees | `~~~code-group`, `~~~code-preview`, `~~~code-tree` | [Code extensions](code-extensions) |
 | Emoji shortcodes | `:tada:` | [Emoji](emoji) |
+| Highlight, underline, super-/subscript | `==x==`, `__x__`, `^x^`, `~x~` | [Text formatting](text-formatting) |
 | Page metadata: keyword index, category facet, See-also footer | YAML frontmatter | [Frontmatter](frontmatter) |
 | Heading anchors + the "On this page" box | automatic | [Headings](headings) |
 
@@ -34,6 +35,7 @@ come from untrusted sources, it deliberately refuses a few things GFM tolerates.
 | Attribute syntax (`{.class}` on a span or block) | nothing — there are no inline components |
 | MDC / `:::` directive blocks | fence flags and `~~~` blocks — see [Code extensions](code-extensions) |
 | Remote images (`![…](https://…)`) — never fetched | bundle the file under `assets/` — see [Images](images) |
+| `__x__` as bold, single-tilde `~x~` as strikethrough | those marks mean **underline** / **subscript** here — bold is `**x**`, strikethrough `~~x~~` — see [Text formatting](text-formatting) |
 
 > [!NOTE]
 > These are security decisions, not gaps: docsets are treated as **untrusted**, pages
