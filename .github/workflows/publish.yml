@@ -111,15 +111,16 @@ jobs:
           "$BIN" compile docs/markdown -o out/markdown.khb
 
       # The bundled profile locks the dist (no open/manage-docsets UI — the
-      # site serves exactly the books packed here); --pwa re-enables the
-      # service worker that profile turns off, so the docs keep working
-      # offline. --home lands cold starts on the docs overview instead of
-      # Search. --stream marks the books for page-level streaming: Pages
-      # honours HTTP Range, so the viewer reads only the pages it touches
-      # (and falls back to a whole fetch where Range isn't available).
+      # site serves exactly the books packed here) and keeps the PWA off (no
+      # service worker — every deploy is picked up immediately, no stale
+      # offline copies). --home lands cold starts on the docs overview
+      # instead of Search. --stream marks the books for page-level
+      # streaming: Pages honours HTTP Range, so the viewer reads only the
+      # pages it touches (and falls back to a whole fetch where Range isn't
+      # available).
       - name: Pack the distribution
         run: |
-          "$BIN" pack --profile bundled --pwa --viewer viewer-dist \
+          "$BIN" pack --profile bundled --viewer viewer-dist \
             --docset out/markdown.khb \
             --home kdhelp-markdown:overview \
             --stream \
