@@ -135,6 +135,12 @@ pub fn render_html(markdown: &str, highlighter: Option<&SyntectAdapter>) -> Stri
     // sharing the footnote numbering already enabled above).
     options.extension.description_lists = true;
     options.extension.inline_footnotes = true;
+    // Container directives: `:::name … :::` → `<div class="name">` (styled for callouts
+    // and cards in the viewer). The whole word after `:::` becomes the class — comrak
+    // HTML-escapes it, so no injection — and more colons on the outer fence nest them.
+    options.extension.block_directive = true;
+    // Fenced multi-paragraph blockquotes: `>>> … >>>` (no `>` on every line).
+    options.extension.multiline_block_quotes = true;
     // Keep the info-string text *after* the language on the `<code>` as `data-meta`,
     // so ```ts [nuxt.config.ts] surfaces a filename the viewer shows above the block.
     options.render.full_info_string = true;
@@ -220,6 +226,18 @@ mod tests {
         assert!(render_html("![a](x.png \"cap\")", None).contains("<figcaption>cap</figcaption>"));
         let dl = render_html("Term\n: Details\n", None);
         assert!(dl.contains("<dt>Term</dt>") && dl.contains("<dd>Details</dd>"));
+    }
+
+    #[test]
+    fn enables_directives_and_multiline_quotes() {
+        let dir = render_html(":::warning\nCareful.\n:::\n", None);
+        assert!(dir.contains("<div class=\"warning\">") && dir.contains("<p>Careful.</p>"));
+        // The directive name → class is HTML-escaped, so no injection.
+        let evil = render_html(":::\"><b>x\ntext\n:::\n", None);
+        assert!(evil.contains("&quot;") && !evil.contains("<b>x"));
+        // `>>> … >>>` is one blockquote spanning both paragraphs.
+        let bq = render_html(">>>\nOne.\n\nTwo.\n>>>\n", None);
+        assert!(bq.contains("<blockquote>") && bq.matches("<p>").count() == 2);
     }
 
     #[test]

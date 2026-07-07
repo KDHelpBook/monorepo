@@ -26,7 +26,29 @@ Renders as:
 Blockquotes can contain other Markdown — lists, code, even nested quotes (prefix with
 `> >`).
 
+## Fenced (multi-paragraph) blockquotes
+
+For a long quote with several paragraphs, prefixing every line with `>` is tedious.
+Fence the whole quote with `>>>` instead — everything between the markers is quoted:
+
+```md
+>>>
+First paragraph of the quote.
+
+Second paragraph — no `>` on any line.
+>>>
+```
+
+Renders as:
+
+>>>
+First paragraph of the quote.
+
+Second paragraph — no `>` on any line.
+>>>
+
 ## Notes for KD Help Book
 
 - For a coloured, labelled box (note / tip / warning / …) use a **[callout](callouts)**
-  — a blockquote whose first line is `[!TYPE]`. A plain blockquote stays neutral.
+  — a blockquote whose first line is `[!TYPE]` — or a **[directive](directives)** like
+  `:::tip`. A plain blockquote stays neutral.

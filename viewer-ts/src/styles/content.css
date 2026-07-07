@@ -529,6 +529,110 @@ body {
   --callout-bg: #fdf3f3;
   --callout-border: #f3d0d0;
 }
+/* Container directives (`:::name … :::`, comrak block_directive). comrak makes the
+   name the div's class verbatim (HTML-escaped, so no injection); we style a curated
+   set. The callout kinds mirror the `> [!NOTE]` alerts above but self-label via
+   ::before, since a directive carries no title element. `:::card` is a plain framed
+   box; any name outside this set renders as an unstyled div. */
+.content .note,
+.content .tip,
+.content .info,
+.content .warning,
+.content .caution,
+.content .danger {
+  margin: 0.9em 0;
+  padding: 8px 14px;
+  border: 1px solid var(--callout-border);
+  border-left: 4px solid var(--callout);
+  border-radius: 3px;
+  background: var(--callout-bg);
+}
+.content .note > :first-child,
+.content .tip > :first-child,
+.content .info > :first-child,
+.content .warning > :first-child,
+.content .caution > :first-child,
+.content .danger > :first-child {
+  margin-top: 0;
+}
+.content .note > :last-child,
+.content .tip > :last-child,
+.content .info > :last-child,
+.content .warning > :last-child,
+.content .caution > :last-child,
+.content .danger > :last-child {
+  margin-bottom: 0;
+}
+.content .note::before,
+.content .tip::before,
+.content .info::before,
+.content .warning::before,
+.content .caution::before,
+.content .danger::before {
+  display: block;
+  margin-bottom: 0.35em;
+  font-weight: 700;
+  color: var(--callout);
+}
+.content .note {
+  --callout: #3b78c3;
+  --callout-bg: #f1f6fc;
+  --callout-border: #cfe0f2;
+}
+.content .note::before {
+  content: "Note";
+}
+.content .tip {
+  --callout: #2f8a45;
+  --callout-bg: #f1faf3;
+  --callout-border: #ccebd4;
+}
+.content .tip::before {
+  content: "Tip";
+}
+.content .info {
+  --callout: #2f7d92;
+  --callout-bg: #f0f8fa;
+  --callout-border: #cbe6ec;
+}
+.content .info::before {
+  content: "Info";
+}
+.content .warning {
+  --callout: #b7791f;
+  --callout-bg: #fffaf0;
+  --callout-border: #f0e0bd;
+}
+.content .warning::before {
+  content: "Warning";
+}
+.content .caution,
+.content .danger {
+  --callout: #cf3c3c;
+  --callout-bg: #fdf3f3;
+  --callout-border: #f3d0d0;
+}
+.content .caution::before {
+  content: "Caution";
+}
+.content .danger::before {
+  content: "Danger";
+}
+/* `:::card` — a plain framed container (no accent bar, no auto-title). */
+.content .card {
+  margin: 0.9em 0;
+  padding: 12px 16px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.content .card > :first-child {
+  margin-top: 0;
+}
+.content .card > :last-child {
+  margin-bottom: 0;
+}
 /* Compile-time MathML (`$…$` / `$$…$$`). Native MathML renders at the body font
    size, which is too small for equations — bump both, more for display math. Don't
    override `display` or the browser stops laying it out as math. */

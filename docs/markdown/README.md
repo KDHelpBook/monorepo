@@ -26,8 +26,9 @@ carries frontmatter, so this reference is itself a compilable docset.
 | Images & downloadable files (the `asset:` scheme) | [images-and-assets.md](images-and-assets.md) |
 | Fenced code blocks + syntax highlighting | [code-blocks.md](code-blocks.md) |
 | Tables (GFM) | [tables.md](tables.md) |
-| Blockquotes | [blockquotes.md](blockquotes.md) |
+| Blockquotes, fenced `>>>` quotes | [blockquotes.md](blockquotes.md) |
 | Callouts (`> [!NOTE]` alerts) | [callouts.md](callouts.md) |
+| Directives (`:::note`, `:::card`) | [directives.md](directives.md) |
 | Math (`$…$` → MathML) | [math.md](math.md) |
 | Footnotes | [footnotes.md](footnotes.md) |
 | Page frontmatter (`title`, `keywords`, `categories`, `related`) | [frontmatter.md](frontmatter.md) |
@@ -53,10 +54,10 @@ That is the crux of why MDC is *not* the right target for KD Help Book:
 (with `:::` for nesting), and **CommonMark generic directives** use `:::name`. But the
 difference that matters isn't the colon count — it's the **semantics**: MDC resolves a
 name to a **Vue component mounted at runtime** (what we can't do in a no-framework
-sandbox), while generic directives compile to plain `<div class="…">`. And comrak 0.53
+sandbox), while generic directives compile to plain `<div class="…">`. comrak 0.53
 **has a native `block_directive` extension** (`:::warning … :::` → `<div class="warning">`),
-so the container-directive form is a flag away — no custom parser needed for the static
-blocks (tabs still need frame JS for the interactivity).
+which we **enable** — it powers the callout and card [directives](directives.md) with no
+custom parser. Only the *interactive* containers (tabs, steps) still need frame JS.
 
 **Recommendation:** don't reach for a `:::` directive parser for the code features.
 Split by shape:
@@ -69,8 +70,9 @@ Split by shape:
   post-process its verbatim body exactly like the math pass — no `render.unsafe`, no AST
   surgery, no directive parser.
 
-Reserve true `:::` **generic directives** (never MDC) for a later day, if we add
-genuinely generic non-code blocks (tabs / cards / steps outside code).
+The static half of true `:::` **generic directives** (never MDC) now ships — callouts
+and cards (see [directives.md](directives.md)); the interactive ones (tabs / steps)
+remain a later day, when we layer frame JS over the same `<div class>` output.
 
 ### Roadmap
 
@@ -81,12 +83,14 @@ Done so far: heading **anchors** + an **"On this page"** box, **emoji**, code-bl
 (`~~~code-tree`) — plus **callouts** (comrak 0.53 native `alerts`), **math** (`$…$` and
 `` $`…`$ ``/```math → build-time MathML), **inline marks** (`==mark==`, `++ins++`,
 `^sup^`, `~sub~`, `__u__`, `||spoiler||`), **figures** (image title → `<figcaption>`),
-**description lists**, and **inline footnotes** (`^[…]`).
+**description lists**, **inline footnotes** (`^[…]`), **container directives**
+(`:::note` / `:::card` callouts + cards via comrak `block_directive`), and **fenced
+blockquotes** (`>>>`).
 What's left (all non-code blocks):
 
 | Want | How | Effort |
 |------|-----|--------|
-| **Tabs / cards / steps / badges** (non-code) | true `:::` generic directives → `<div class>` (not MDC; comrak 0.53 has a native `block_directive` extension) | medium |
+| **Interactive tabs / steps / badges** | frame-bridge JS over `:::` directives (the static container form already ships — see [directives.md](directives.md)) | medium |
 | **Diagrams** (`` ```mermaid ``) | render to **SVG at build time** (like math → MathML), so it stays static + sandbox-safe. Engine TBD — Mermaid needs node/`mmdc`; Graphviz/D2 have native CLIs | medium–large |
 | **Video / embeds** | a `:video`/`:embed` directive → sandboxed `<iframe>`/`<video>` | medium |
 | **Inline-code highlight** (`` `x`{:ts} ``) | per-block info-string flag | small (deferred) |
@@ -106,6 +110,7 @@ components, Docus's `CodePreview` live *component* output, `NuxtImg`.
 - [Tables](tables.md)
 - [Blockquotes](blockquotes.md)
 - [Callouts](callouts.md)
+- [Directives](directives.md)
 - [Math](math.md)
 - [Footnotes](footnotes.md)
 - [Frontmatter](frontmatter.md)
