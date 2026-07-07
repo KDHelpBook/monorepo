@@ -1,6 +1,6 @@
 ---
 title: Directives
-keywords: [directive, container, callout, card, note, tip, warning, block_directive]
+keywords: [directive, container, callout, card, note, tip, warning]
 categories: [blocks]
 related: [blockquotes, code-blocks]
 ---
@@ -16,9 +16,9 @@ You can nest **Markdown**, lists, and `code` inside a directive.
 :::
 ```
 
-The compiler turns `:::name … :::` into `<div class="name">` (comrak's
-`block_directive` extension), and the viewer styles a curated set of names. The name is
-HTML-escaped when it becomes the class, so directive content can't inject markup.
+The compiler turns `:::name … :::` into `<div class="name">`, and the viewer styles a
+curated set of names. The name is HTML-escaped when it becomes the class, so directive
+content can't inject markup.
 
 ## Callout directives
 
