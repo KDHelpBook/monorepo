@@ -10,11 +10,6 @@ export default defineConfig({
   define: {
     __BUILD_ID__: JSON.stringify(Date.now().toString(36)),
   },
-  // sql.js is CommonJS — pre-bundle it to ESM *eagerly* at server start (via
-  // `include`) so a page reload never races an on-demand optimize (which would
-  // transiently break the main module and leave the page unstyled). Its wasm is
-  // imported separately via `sql-wasm.wasm?url`.
-  optimizeDeps: { include: ["sql.js"] },
   // Dev-server port: honour a harness-assigned PORT (several sessions can then
   // run their own dev servers side by side); default to Vite's 5173 otherwise.
   server: process.env.PORT

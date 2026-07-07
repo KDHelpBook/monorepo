@@ -21,3 +21,8 @@ page — definitions are gathered into that footnotes section regardless of wher
 wrote them. Ids are page-local; the same `[^1]` on two pages doesn't collide.
 
 [^demo]: This is the footnote's text; the viewer links the marker to it and back.
+
+## Inline footnotes
+
+For a short aside you don't want to define separately, write it inline with `^[…]`^[like
+this one] — it joins the same numbered list at the foot of the page.

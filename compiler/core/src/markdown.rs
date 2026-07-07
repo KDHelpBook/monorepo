@@ -26,6 +26,78 @@ pub fn highlighter() -> SyntectAdapter {
     SyntectAdapter::new(None)
 }
 
+/// Re-highlight `code` **line by line**, wrapping each line in `<span class="cl">` (or
+/// `cl hl` for a highlighted line). Used for the `{2,4-6}` line-highlight flag: syntect's
+/// normal output lets scope spans cross line boundaries, so there's no per-line element
+/// to tint — this rebuilds the block with self-contained lines (carried scopes are
+/// reopened at each line start and all open spans closed at its end). Same class scheme
+/// as [`highlighter`], so the existing stylesheet colours it. `hl` holds 1-based lines.
+pub fn highlight_lines(code: &str, lang: &str, hl: &std::collections::HashSet<usize>) -> String {
+    use std::sync::OnceLock;
+    use syntect::html::{line_tokens_to_classed_spans, ClassStyle};
+    use syntect::parsing::{ParseState, ScopeStack, SyntaxSet};
+    use syntect::util::LinesWithEndings;
+
+    // Loading the default syntax set is expensive; do it once (line-highlight is rare).
+    static SYNTAX_SET: OnceLock<SyntaxSet> = OnceLock::new();
+    let ss = SYNTAX_SET.get_or_init(SyntaxSet::load_defaults_newlines);
+    let syntax = ss
+        .find_syntax_by_token(lang)
+        .unwrap_or_else(|| ss.find_syntax_plain_text());
+    let mut parse = ParseState::new(syntax);
+    let mut stack = ScopeStack::new();
+    let mut out = String::with_capacity(code.len() * 4);
+    for (i, line) in LinesWithEndings::from(code).enumerate() {
+        let ops = parse.parse_line(line, ss).unwrap_or_default();
+        let carried: Vec<_> = stack.as_slice().to_vec();
+        let cls = if hl.contains(&(i + 1)) { "cl hl" } else { "cl" };
+        out.push_str(&format!("<span class=\"{cls}\">"));
+        // Reopen the scopes carried over from earlier lines (closed at the prev line end).
+        // `ClassStyle::Spaced` classes are the scope path with dots → spaces (e.g.
+        // `source.rust` → `source rust`), which is exactly `Scope`'s Display form.
+        for scope in &carried {
+            let classes = scope.to_string().replace('.', " ");
+            out.push_str(&format!("<span class=\"{classes}\">"));
+        }
+        let (tokens, _) =
+            line_tokens_to_classed_spans(line, ops.as_slice(), ClassStyle::Spaced, &mut stack)
+                .unwrap_or_else(|_| (String::new(), 0));
+        out.push_str(tokens.trim_end_matches('\n'));
+        // Close every span still open after this line (carried + net opened here).
+        out.push_str(&"</span>".repeat(stack.len()));
+        out.push_str("</span>");
+    }
+    out
+}
+
+/// Syntax-highlight a short **inline** snippet (the `` `x`{:lang} `` flag), returning the
+/// classed `<span>`s to drop inside a `<code>` — no `<pre>`, no line wrappers. Same
+/// `ClassStyle::Spaced` scheme as [`highlighter`], so [`syntax_theme_css`] colours it.
+pub fn highlight_inline(code: &str, lang: &str) -> String {
+    use std::sync::OnceLock;
+    use syntect::html::{ClassStyle, ClassedHTMLGenerator};
+    use syntect::parsing::SyntaxSet;
+    use syntect::util::LinesWithEndings;
+
+    static SYNTAX_SET: OnceLock<SyntaxSet> = OnceLock::new();
+    let ss = SYNTAX_SET.get_or_init(SyntaxSet::load_defaults_newlines);
+    let syntax = ss
+        .find_syntax_by_token(lang)
+        .unwrap_or_else(|| ss.find_syntax_plain_text());
+    let mut gen = ClassedHTMLGenerator::new_with_class_style(syntax, ss, ClassStyle::Spaced);
+    // The generator parses whole lines; inline code has none, so give it a newline and
+    // trim the trailing text back off.
+    let src = if code.ends_with('\n') {
+        code.to_string()
+    } else {
+        format!("{code}\n")
+    };
+    for line in LinesWithEndings::from(&src) {
+        let _ = gen.parse_html_for_line_which_includes_newline(line);
+    }
+    gen.finalize().trim_end().to_string()
+}
+
 /// The stylesheet that colours the class-tagged code spans: the light theme by
 /// default, and the dark theme under `[data-theme="dark"]` (dormant until the viewer
 /// sets that hook). Generated from syntect so it always matches the classes the
@@ -75,19 +147,34 @@ pub fn render_html(markdown: &str, highlighter: Option<&SyntectAdapter>) -> Stri
     options.extension.alerts = true;
     // `$…$` / `$$…$$` math (parsed to LaTeX; rendered to MathML in [`crate::render`]).
     options.extension.math_dollars = true;
-    // Inline marks beyond GFM: `==x==` → <mark>, `__x__` → <u>, `^x^` → <sup>,
-    // `~x~` → <sub>, `++x++` → <ins>. Two of these repurpose CommonMark syntax on
-    // purpose: `__x__` stops meaning bold (bold is `**x**` only), and a single
-    // tilde stops meaning strikethrough (that is `~~x~~` only) — a literal prose
-    // tilde is `\~`.
+    // Math also via code syntax: `` $`x`$ `` inline and ```math blocks — comrak emits
+    // the same `data-math-style` marker, converted to MathML alongside `$…$`.
+    options.extension.math_code = true;
+    // Inline text marks beyond GFM. `==x==` → <mark> (already styled), `++x++` → <ins>,
+    // `x^2^` → <sup>, `~x~` → <sub> (double `~~` stays strikethrough — comrak tells them
+    // apart by tilde count; a literal prose tilde is `\~`), `__x__` → <u> (bold is `**`,
+    // so `__` is free), `||x||` → a spoiler.
     options.extension.highlight = true;
-    options.extension.underline = true;
+    options.extension.insert = true;
     options.extension.superscript = true;
     options.extension.subscript = true;
-    options.extension.insert = true;
+    options.extension.underline = true;
+    options.extension.spoiler = true;
+    // Description/definition lists (`Term` / `: details`) and inline footnotes (`^[…]`,
+    // sharing the footnote numbering already enabled above).
+    options.extension.description_lists = true;
+    options.extension.inline_footnotes = true;
+    // Container directives: `:::name … :::` → `<div class="name">` (styled for callouts
+    // and cards in the viewer). The whole word after `:::` becomes the class — comrak
+    // HTML-escapes it, so no injection — and more colons on the outer fence nest them.
+    options.extension.block_directive = true;
+    // Fenced multi-paragraph blockquotes: `>>> … >>>` (no `>` on every line).
+    options.extension.multiline_block_quotes = true;
     // Keep the info-string text *after* the language on the `<code>` as `data-meta`,
     // so ```ts [nuxt.config.ts] surfaces a filename the viewer shows above the block.
     options.render.full_info_string = true;
+    // `![alt](url "caption")` → <figure><figcaption>caption</figcaption>.
+    options.render.figure_with_caption = true;
 
     let mut plugins = Plugins::default();
     if let Some(h) = highlighter {
@@ -166,6 +253,37 @@ mod tests {
     fn finds_first_heading() {
         assert_eq!(first_h1("intro\n\n# Hello\n"), Some("Hello".to_string()));
         assert_eq!(first_h1("no heading here"), None);
+    }
+
+    #[test]
+    fn enables_the_inline_mark_extensions() {
+        let html = render_html("==h== ++i++ x^2^ H~2~O ~~d~~ __u__ ||s||", None);
+        assert!(html.contains("<mark>h</mark>"));
+        assert!(html.contains("<ins>i</ins>"));
+        assert!(html.contains("<sup>2</sup>"));
+        assert!(html.contains("<sub>2</sub>")); // single ~ → subscript
+        assert!(html.contains("<del>d</del>")); // double ~~ → strikethrough (coexists)
+        assert!(html.contains("<u>u</u>")); // __ → underline (bold is **)
+        assert!(html.contains("class=\"spoiler\">s</span>"));
+    }
+
+    #[test]
+    fn enables_figures_and_description_lists() {
+        assert!(render_html("![a](x.png \"cap\")", None).contains("<figcaption>cap</figcaption>"));
+        let dl = render_html("Term\n: Details\n", None);
+        assert!(dl.contains("<dt>Term</dt>") && dl.contains("<dd>Details</dd>"));
+    }
+
+    #[test]
+    fn enables_directives_and_multiline_quotes() {
+        let dir = render_html(":::warning\nCareful.\n:::\n", None);
+        assert!(dir.contains("<div class=\"warning\">") && dir.contains("<p>Careful.</p>"));
+        // The directive name → class is HTML-escaped, so no injection.
+        let evil = render_html(":::\"><b>x\ntext\n:::\n", None);
+        assert!(evil.contains("&quot;") && !evil.contains("<b>x"));
+        // `>>> … >>>` is one blockquote spanning both paragraphs.
+        let bq = render_html(">>>\nOne.\n\nTwo.\n>>>\n", None);
+        assert!(bq.contains("<blockquote>") && bq.matches("<p>").count() == 2);
     }
 
     #[test]

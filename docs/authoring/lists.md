@@ -94,3 +94,22 @@ Renders as:
 
 - [x] Compile the docset
 - [ ] Publish it
+
+## Description lists
+
+A **term** on its own line, then a line starting with `: ` for its **definition**, makes
+a description list (`<dl>`):
+
+```md
+Docset
+: A compiled `.khb` — one book.
+
+Collection
+: Several docsets that merge into one tree.
+```
+
+Docset
+: A compiled `.khb` — one book.
+
+Collection
+: Several docsets that merge into one tree.

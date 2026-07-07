@@ -29,11 +29,20 @@ pub fn render(src: &SourceDocset) -> Result<RenderedDocset> {
             let html = render_code_groups(&html, &highlighter).with_context(ctx)?;
             let html = render_code_preview(&html, &highlighter).with_context(ctx)?;
             let html = render_code_tree(&html, &highlighter).with_context(ctx)?;
+            // ` ```dot ` / ` ```graphviz ` → a Graphviz graph laid out to inline SVG at
+            // build time (pure-Rust `layout`). Fails the build on unparseable DOT.
+            let html = render_diagrams(&html).with_context(ctx)?;
+            let html = render_line_highlight(&html);
+            // `` `x`{:lang} `` → inline-highlighted code; `` `x`{.badge} `` → a badge.
+            let html = render_inline_attrs(&html);
             // Size hints (`#w=…`) bake into inline styles before the URL rewrite
             // strips fragments from asset paths.
             let html = assets::apply_image_size_hints(&html);
             let html = assets::rewrite_asset_urls(&html);
-            let rendered = render_math(&html).with_context(ctx)?;
+            let html = render_math(&html).with_context(ctx)?;
+            // `:::tabs` / `:::tab` → an interactive tabbed panel. Runs last so each tab's
+            // body already has its code blocks, math, and callouts rendered.
+            let rendered = render_tabs(&html);
             // Prepend an "On this page" nav built from the heading anchors, honouring
             // the page's `toc` frontmatter (auto when unset). It floats top-right, so
             // sitting before the H1 keeps the viewer's subtitle handling intact.
@@ -151,27 +160,40 @@ fn attr_value(html: &str, attr: &str) -> Option<String> {
     Some(html[start..end].to_string())
 }
 
-/// Replace comrak's math spans (`<span data-math-style="…">LaTeX</span>`) with native
-/// MathML, rendered at build time so the viewer needs no KaTeX/MathJax. Fails on a
-/// formula the converter can't parse — a build error beats a silently broken formula.
+/// Replace comrak's math markers with native MathML, rendered at build time so the
+/// viewer needs no KaTeX/MathJax. Handles both `math_dollars` (`<span data-math-style>`)
+/// and `math_code` (`<code data-math-style>` inline, and `<pre><code … data-math-style>`
+/// for a ```math block). Fails on a formula the converter can't parse — a build error
+/// beats a silently broken formula.
 fn render_math(html: &str) -> Result<String> {
     use latex2mathml::{latex_to_mathml, DisplayStyle};
-    const MARK: &str = "<span data-math-style=\"";
-    const CLOSE: &str = "</span>";
+    const ATTR: &str = "data-math-style=\"";
     let mut out = String::with_capacity(html.len());
     let mut i = 0;
-    while let Some(rel) = html[i..].find(MARK) {
-        let start = i + rel;
-        let after = start + MARK.len();
-        let Some(qpos) = html[after..].find("\">") else {
+    while let Some(rel) = html[i..].find(ATTR) {
+        let attr = i + rel;
+        // The enclosing element is the nearest `<` before the attribute (`<span`/`<code`).
+        let Some(tag_off) = html[i..attr].rfind('<') else {
             break;
         };
-        let style = &html[after..after + qpos];
-        let latex_start = after + qpos + 2; // skip `">`
-        let Some(end_rel) = html[latex_start..].find(CLOSE) else {
+        let tag = i + tag_off;
+        let is_code = html[tag..].starts_with("<code");
+        let close: &str = if is_code { "</code>" } else { "</span>" };
+        // A ```math block is `<pre><code … data-math-style="display">…</code></pre>`.
+        let block_pre = is_code && html[i..tag].ends_with("<pre>");
+        let sv = attr + ATTR.len();
+        let Some(qrel) = html[sv..].find('"') else {
             break;
         };
-        let latex = unescape_html(&html[latex_start..latex_start + end_rel]);
+        let style = &html[sv..sv + qrel];
+        let Some(gtrel) = html[sv + qrel..].find('>') else {
+            break;
+        };
+        let latex_start = sv + qrel + gtrel + 1; // just past the tag's `>`
+        let Some(crel) = html[latex_start..].find(close) else {
+            break;
+        };
+        let latex = unescape_html(html[latex_start..latex_start + crel].trim_end_matches('\n'));
         let display = if style == "display" {
             DisplayStyle::Block
         } else {
@@ -179,9 +201,15 @@ fn render_math(html: &str) -> Result<String> {
         };
         let mathml = latex_to_mathml(&latex, display)
             .map_err(|e| anyhow::anyhow!("invalid math `{latex}`: {e}"))?;
-        out.push_str(&html[i..start]);
+        // Drop the whole element: `<pre>…</pre>` for a block, else the `<span>`/`<code>`.
+        let elem_start = if block_pre { tag - "<pre>".len() } else { tag };
+        let mut elem_end = latex_start + crel + close.len();
+        if block_pre && html[elem_end..].starts_with("</pre>") {
+            elem_end += "</pre>".len();
+        }
+        out.push_str(&html[i..elem_start]);
         out.push_str(&mathml);
-        i = latex_start + end_rel + CLOSE.len();
+        i = elem_end;
     }
     out.push_str(&html[i..]);
     Ok(out)
@@ -397,6 +425,303 @@ fn render_code_tree(html: &str, highlighter: &SyntectAdapter) -> Result<String> 
     Ok(out)
 }
 
+/// Render ` ```dot ` / ` ```graphviz ` fenced blocks to inline SVG with the pure-Rust
+/// `layout` engine — a static diagram baked in at build time, like math → MathML, so the
+/// viewer needs no JS renderer and the SVG is sandbox-safe (no scripts / foreignObject).
+/// comrak emits the fence as an opaque `language-dot` block; we recover its verbatim body
+/// (strip syntect spans + decode entities) and lay it out. Unparseable DOT is a build error.
+fn render_diagrams(html: &str) -> Result<String> {
+    const PRE: &str = "<pre class=\"syntax-highlighting\"><code ";
+    const CLOSE: &str = "</code></pre>";
+    let mut out = String::with_capacity(html.len());
+    let mut i = 0;
+    while let Some(rel) = html[i..].find(PRE) {
+        let block_start = i + rel;
+        let attrs_start = block_start + PRE.len();
+        let Some(gtrel) = html[attrs_start..].find('>') else {
+            break;
+        };
+        let inner_start = attrs_start + gtrel + 1;
+        let Some(crel) = html[inner_start..].find(CLOSE) else {
+            break;
+        };
+        let lang = attr_value(&html[attrs_start..inner_start], "class")
+            .and_then(|c| c.strip_prefix("language-").map(str::to_string));
+        out.push_str(&html[i..block_start]);
+        if matches!(lang.as_deref(), Some("dot") | Some("graphviz")) {
+            let raw = unescape_html(&strip_tags(&html[inner_start..inner_start + crel]));
+            let svg = render_dot(&raw)?;
+            out.push_str(&format!("<figure class=\"diagram\">{svg}</figure>"));
+        } else {
+            out.push_str(&html[block_start..inner_start + crel + CLOSE.len()]);
+        }
+        i = inner_start + crel + CLOSE.len();
+    }
+    out.push_str(&html[i..]);
+    Ok(out)
+}
+
+/// Lay out one DOT graph to an inline `<svg>` (XML prolog stripped). A parse error, or a
+/// panic from the layout engine on a graph it can't handle, becomes a clean build error
+/// rather than aborting the compile.
+fn render_dot(dot: &str) -> Result<String> {
+    use layout::backends::svg::SVGWriter;
+    use layout::gv::{DotParser, GraphBuilder};
+
+    // The layout engine panics on some inputs it parses but can't lay out; catch it (with
+    // a silenced hook so no backtrace spills) and report it as a build error. render() is
+    // sequential, so swapping the global panic hook here is safe.
+    let prev = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> Result<String> {
+        let mut parser = DotParser::new(dot);
+        let graph = parser
+            .process()
+            .map_err(|e| anyhow::anyhow!("invalid DOT diagram: {e}"))?;
+        let mut gb = GraphBuilder::new();
+        gb.visit_graph(&graph);
+        let mut svg = SVGWriter::new();
+        gb.get().do_it(false, false, false, &mut svg);
+        Ok(svg.finalize())
+    }));
+    std::panic::set_hook(prev);
+    let svg = match result {
+        Ok(inner) => inner?,
+        Err(_) => anyhow::bail!("DOT diagram engine failed to lay out the graph"),
+    };
+    // Drop the `<?xml …?>` prolog so the SVG embeds inline cleanly.
+    Ok(svg[svg.find("<svg").unwrap_or(0)..].to_string())
+}
+
+/// Apply the `{2,4-6}` line-highlight flag: for each highlighted code block whose
+/// `data-meta` carries a `{…}` range, recover the raw code (strip syntect's spans +
+/// decode entities) and re-highlight it line by line so the flagged lines can be tinted.
+/// Blocks without a `{…}` range are left untouched.
+fn render_line_highlight(html: &str) -> String {
+    // comrak emits the code tag's attributes in either order — `<code data-meta="…"
+    // class="language-…">` when there's meta, else `<code class="language-…">` — so
+    // match `<code ` and read the code tag's own attributes (not the `<pre>` class).
+    const PRE: &str = "<pre class=\"syntax-highlighting\"><code ";
+    const CLOSE: &str = "</code></pre>";
+    let mut out = String::with_capacity(html.len());
+    let mut i = 0;
+    while let Some(rel) = html[i..].find(PRE) {
+        let block_start = i + rel;
+        let attrs_start = block_start + PRE.len();
+        let Some(gtrel) = html[attrs_start..].find('>') else {
+            break;
+        };
+        let inner_start = attrs_start + gtrel + 1;
+        let Some(crel) = html[inner_start..].find(CLOSE) else {
+            break;
+        };
+        let code_attrs = &html[attrs_start..inner_start]; // just the `<code …>` attrs
+        let lang = attr_value(code_attrs, "class")
+            .and_then(|c| c.strip_prefix("language-").map(str::to_string));
+        let ranges = attr_value(code_attrs, "data-meta").and_then(|m| parse_line_ranges(&m));
+
+        out.push_str(&html[i..block_start]);
+        match (lang, ranges) {
+            (Some(lang), Some(rs)) => {
+                let raw = unescape_html(&strip_tags(&html[inner_start..inner_start + crel]));
+                out.push_str(&html[block_start..inner_start]); // keep the `<pre><code …>`
+                out.push_str(&markdown::highlight_lines(&raw, &lang, &rs));
+                out.push_str(CLOSE);
+            }
+            _ => out.push_str(&html[block_start..inner_start + crel + CLOSE.len()]),
+        }
+        i = inner_start + crel + CLOSE.len();
+    }
+    out.push_str(&html[i..]);
+    out
+}
+
+/// Parse a `{2,4-6}` line-range spec out of a code fence's `data-meta`, into a set of
+/// 1-based line numbers. `None` if there's no `{…}` (the block isn't line-highlighted).
+fn parse_line_ranges(meta: &str) -> Option<std::collections::HashSet<usize>> {
+    let open = meta.find('{')?;
+    let close = meta[open..].find('}')? + open;
+    let mut set = std::collections::HashSet::new();
+    for part in meta[open + 1..close].split(',') {
+        let part = part.trim();
+        if let Some((a, b)) = part.split_once('-') {
+            if let (Ok(a), Ok(b)) = (a.trim().parse::<usize>(), b.trim().parse::<usize>()) {
+                (a..=b).for_each(|n| {
+                    set.insert(n);
+                });
+            }
+        } else if let Ok(n) = part.parse::<usize>() {
+            set.insert(n);
+        }
+    }
+    (!set.is_empty()).then_some(set)
+}
+
+/// Apply inline-code attributes: an inline `` `code` `` immediately followed by `{…}`.
+/// `{:lang}` syntax-highlights the code inline; `{.badge}` / `{.badge-KIND …}` turns it
+/// into a badge `<span>`; other `.class`es are copied onto the `<code>`. A `{…}` not
+/// directly touching the `</code>` (a stray brace in prose) is left alone.
+fn render_inline_attrs(html: &str) -> String {
+    const OPEN: &str = "<code>"; // bare inline code only — highlighted blocks carry a class
+    const CLOSE: &str = "</code>";
+    let mut out = String::with_capacity(html.len());
+    let mut i = 0;
+    while let Some(rel) = html[i..].find(OPEN) {
+        let cstart = i + rel;
+        let text_start = cstart + OPEN.len();
+        let Some(crel) = html[text_start..].find(CLOSE) else {
+            break;
+        };
+        let after = text_start + crel + CLOSE.len();
+        // Only treat it as attributed when `{` touches the closing tag.
+        if !html[after..].starts_with('{') {
+            out.push_str(&html[i..after]);
+            i = after;
+            continue;
+        }
+        let Some(brace) = html[after..].find('}') else {
+            out.push_str(&html[i..after]);
+            i = after;
+            continue;
+        };
+        let attrs = &html[after + 1..after + brace];
+        let text = &html[text_start..text_start + crel]; // comrak-escaped code text
+        out.push_str(&html[i..cstart]);
+        out.push_str(&render_code_attr(text, attrs));
+        i = after + brace + 1;
+    }
+    out.push_str(&html[i..]);
+    out
+}
+
+/// Render one attributed inline-code span (see [`render_inline_attrs`]). `text` is the
+/// code as comrak escaped it; `attrs` is the raw `{…}` body without the braces.
+fn render_code_attr(text: &str, attrs: &str) -> String {
+    let attrs = attrs.trim();
+    // `{:lang}` — inline syntax highlight (Shiki-style shorthand).
+    if let Some(lang) = attrs.strip_prefix(':') {
+        let lang = lang.trim();
+        let spans = markdown::highlight_inline(&unescape_html(text), lang);
+        return format!("<code class=\"language-{}\">{spans}</code>", esc(lang));
+    }
+    // `{.foo .bar}` — dotted class tokens. A `badge*` class makes it a badge span.
+    let classes: Vec<&str> = attrs
+        .split_whitespace()
+        .filter_map(|t| t.strip_prefix('.'))
+        .filter(|t| !t.is_empty())
+        .collect();
+    if classes.iter().any(|c| c.starts_with("badge")) {
+        let mut cls = vec!["badge"];
+        cls.extend(classes.iter().filter(|c| **c != "badge").copied());
+        return format!("<span class=\"{}\">{text}</span>", esc(&cls.join(" ")));
+    }
+    if !classes.is_empty() {
+        return format!("<code class=\"{}\">{text}</code>", esc(&classes.join(" ")));
+    }
+    format!("<code>{text}</code>") // unrecognised attr → plain inline code
+}
+
+/// Expand `:::tabs` containers (comrak `block_directive` → `<div class="tabs">` wrapping
+/// `<div class="tab LABEL">` children) into an interactive tabbed panel the frame bridge
+/// drives. The label is the directive name's trailing words; each panel keeps its already
+/// rendered body. A `.tabs` with no `.tab` children is left untouched.
+fn render_tabs(html: &str) -> String {
+    const OPEN: &str = "<div class=\"tabs\">";
+    let mut out = String::with_capacity(html.len());
+    let mut i = 0;
+    while let Some(rel) = html[i..].find(OPEN) {
+        let start = i + rel;
+        let Some((inner_start, inner_end, after)) = div_span(html, start) else {
+            break;
+        };
+        let tabs = parse_tab_children(&html[inner_start..inner_end]);
+        out.push_str(&html[i..start]);
+        if tabs.is_empty() {
+            out.push_str(&html[start..after]); // not a tab set — leave as a plain div
+        } else {
+            out.push_str(&build_tabs_widget(&tabs));
+        }
+        i = after;
+    }
+    out.push_str(&html[i..]);
+    out
+}
+
+/// The span of the `<div …>` whose opening tag starts at `open`: `(inner_start, inner_end,
+/// after_close)`, tracking nested `<div>`s. `None` if it's unbalanced (truncated input).
+fn div_span(html: &str, open: usize) -> Option<(usize, usize, usize)> {
+    let gt = open + html[open..].find('>')? + 1;
+    let mut depth = 1usize;
+    let mut j = gt;
+    while j < html.len() {
+        if html[j..].starts_with("<div") {
+            depth += 1;
+            j += 4;
+        } else if html[j..].starts_with("</div>") {
+            depth -= 1;
+            if depth == 0 {
+                return Some((gt, j, j + "</div>".len()));
+            }
+            j += "</div>".len();
+        } else {
+            j += 1;
+        }
+    }
+    None
+}
+
+/// Parse the top-level `<div class="tab …">` children of a `.tabs` container's inner HTML
+/// into `(label, body_html)`. `tab` with no label yields an empty label; a nested `tabs`
+/// div (`class="tabs"`) is skipped over, not mistaken for a tab.
+fn parse_tab_children(inner: &str) -> Vec<(String, String)> {
+    const TAB: &str = "<div class=\"tab";
+    let mut out = Vec::new();
+    let mut j = 0;
+    while let Some(rel) = inner[j..].find(TAB) {
+        let d = j + rel;
+        // Distinguish `tab`/`tab …` from `tabs`: the char after "tab" must close the
+        // word (`"`) or start a label (space).
+        let next = inner[d + TAB.len()..].chars().next();
+        let Some((is, ie, after)) = div_span(inner, d) else {
+            break;
+        };
+        if matches!(next, Some('"') | Some(' ')) {
+            let cls = attr_value(&inner[d..is], "class").unwrap_or_default();
+            let label = cls.split_whitespace().skip(1).collect::<Vec<_>>().join(" ");
+            out.push((label, inner[is..ie].trim().to_string()));
+        }
+        j = after; // skip the whole child (nested tabs included) — top-level only
+    }
+    out
+}
+
+/// Assemble the tab bar + panels from `(label, body)` pairs; the first tab starts active.
+/// The label is already comrak-escaped (it came from the div's `class`), so it is not
+/// re-escaped. The frame bridge's `tabSwitch` toggles `.active` by index.
+fn build_tabs_widget(tabs: &[(String, String)]) -> String {
+    let mut bar = String::new();
+    let mut panels = String::new();
+    for (idx, (label, body)) in tabs.iter().enumerate() {
+        let active = if idx == 0 { " active" } else { "" };
+        let label = if label.is_empty() {
+            format!("Tab {}", idx + 1)
+        } else {
+            label.clone()
+        };
+        bar.push_str(&format!(
+            "<button class=\"tab-btn{active}\" type=\"button\" data-tab=\"{idx}\">{label}</button>"
+        ));
+        // Recurse so a `:::tabs` nested inside this tab is expanded too.
+        let body = render_tabs(body);
+        panels.push_str(&format!(
+            "<div class=\"tab-panel{active}\" data-tab-panel=\"{idx}\">{body}</div>"
+        ));
+    }
+    format!(
+        "<div class=\"tabs\"><div class=\"tabs-bar\" role=\"tablist\">{bar}</div>{panels}</div>"
+    )
+}
+
 /// Split a code-group's raw body into `(info-string, code)` per inner ```` ``` ```` fence.
 fn split_group_fences(inner: &str) -> Vec<(String, String)> {
     let mut out = Vec::new();
@@ -508,6 +833,16 @@ mod tests {
         // than silently degrading to raw text.
         let bad = "<span data-math-style=\"inline\">\\begin{matrix}</span>";
         assert!(render_math(bad).is_err());
+
+        // `math_code`: inline `<code data-math-style>` and a `<pre><code>` block are
+        // both converted (and the surrounding `<pre>` dropped for the block).
+        let code = "<p>x <code data-math-style=\"inline\">a^2</code></p>\
+                    <pre><code class=\"language-math\" data-math-style=\"display\">a+b\n</code></pre>";
+        let out = render_math(code).unwrap();
+        assert!(out.contains("<math") && out.contains("display=\"inline\""));
+        assert!(out.contains("display=\"block\""));
+        assert!(!out.contains("data-math-style") && !out.contains("language-math"));
+        assert!(!out.contains("<pre>")); // the block's <pre> wrapper is gone
     }
 
     #[test]
@@ -561,6 +896,94 @@ mod tests {
 
         let empty = markdown::render_html("~~~code-tree\n~~~\n", Some(&h));
         assert!(render_code_tree(&empty, &h).is_err());
+    }
+
+    #[test]
+    fn renders_dot_diagram() {
+        let h = markdown::highlighter();
+        let md = "```dot\ndigraph { A -> B; B -> C; }\n```\n";
+        let out = render_diagrams(&markdown::render_html(md, Some(&h))).unwrap();
+        assert!(out.contains("<figure class=\"diagram\"><svg"));
+        assert!(!out.contains("language-dot")); // opaque block consumed
+        assert!(!out.contains("<script") && !out.contains("<?xml")); // sandbox-safe, no prolog
+
+        // A non-diagram code block is left untouched.
+        let code = markdown::render_html("```rust\nlet x = 1;\n```\n", Some(&h));
+        assert!(render_diagrams(&code).unwrap().contains("language-rust"));
+
+        // Garbage that isn't a graph fails the build rather than rendering nothing.
+        let bad = markdown::render_html("```dot\n@@@ not a graph @@@\n```\n", Some(&h));
+        assert!(render_diagrams(&bad).is_err());
+    }
+
+    #[test]
+    fn line_ranges_parse() {
+        let r = parse_line_ranges("[main.rs] {2,4-6}").unwrap();
+        assert!(r.contains(&2) && r.contains(&4) && r.contains(&5) && r.contains(&6));
+        assert!(!r.contains(&3));
+        assert!(parse_line_ranges("[main.rs]").is_none()); // no range → untouched
+    }
+
+    #[test]
+    fn highlights_flagged_lines() {
+        let h = markdown::highlighter();
+        let md = "```rust {2}\nfn main() {\n    let x = 1;\n}\n```\n";
+        let html = render_line_highlight(&markdown::render_html(md, Some(&h)));
+        // Every line is wrapped in `.cl`; the flagged line (2) also gets `hl`.
+        assert!(html.contains("class=\"cl hl\"")); // line 2 highlighted
+        assert!(html.contains("class=\"cl\"")); // other lines wrapped, not highlighted
+        assert!(html.contains("storage type rust")); // still syntax-highlighted (let)
+                                                     // A block with no `{…}` range is left as-is (no `.cl` wrappers).
+        let plain = markdown::render_html("```rust\nlet y = 2;\n```\n", Some(&h));
+        assert!(!render_line_highlight(&plain).contains("class=\"cl\""));
+    }
+
+    #[test]
+    fn inline_attrs_highlight_and_badge() {
+        // `{:lang}` highlights the inline code and consumes the flag.
+        let hl = render_inline_attrs("<p>Run <code>npm ci</code>{:bash} now.</p>");
+        assert!(hl.contains("<code class=\"language-bash\">") && hl.contains("</code> now."));
+        assert!(!hl.contains("{:bash}"));
+
+        // `{.badge-green}` → a badge span that also carries the base `badge` class.
+        let bd = render_inline_attrs("<p><code>Beta</code>{.badge-green} feature.</p>");
+        assert!(bd.contains("<span class=\"badge badge-green\">Beta</span>"));
+        assert!(!bd.contains("<code>Beta</code>"));
+
+        // A brace not touching the `</code>` (a stray brace in prose) is left alone.
+        let stray = render_inline_attrs("<p><code>x</code> {y}.</p>");
+        assert!(stray.contains("<code>x</code> {y}."));
+    }
+
+    #[test]
+    fn expands_tabs() {
+        // Mimic comrak's block_directive output for `:::tabs` / `:::tab`.
+        let html = "<div class=\"tabs\">\n<div class=\"tab macOS\">\n<p>brew</p>\n</div>\n\
+                    <div class=\"tab Linux\">\n<p>apt</p>\n</div>\n</div>";
+        let out = render_tabs(html);
+        assert!(out.contains("class=\"tabs-bar\""));
+        assert!(out.contains(">macOS</button>") && out.contains(">Linux</button>"));
+        assert!(out.contains("data-tab=\"1\"") && out.contains("data-tab-panel=\"0\""));
+        assert!(out.contains("tab-btn active") && out.contains("tab-panel active"));
+        assert!(out.contains("<p>brew</p>") && out.contains("<p>apt</p>")); // bodies kept
+
+        // A multi-word label joins the trailing class tokens; unlabeled → "Tab N".
+        assert!(render_tabs(
+            "<div class=\"tabs\"><div class=\"tab Windows 11\"><p>x</p></div></div>"
+        )
+        .contains(">Windows 11</button>"));
+        assert!(
+            render_tabs("<div class=\"tabs\"><div class=\"tab\"><p>x</p></div></div>")
+                .contains(">Tab 1</button>")
+        );
+
+        // Nested tabs: the inner set expands and isn't mistaken for a tab of the outer.
+        let nested = "<div class=\"tabs\"><div class=\"tab A\">\
+                      <div class=\"tabs\"><div class=\"tab Inner\"><p>i</p></div></div>\
+                      </div></div>";
+        let no = render_tabs(nested);
+        assert!(no.contains(">A</button>") && no.contains(">Inner</button>"));
+        assert!(!no.contains(">Tab 1</button>")); // the inner `tabs` div isn't an unlabeled tab
     }
 
     #[test]

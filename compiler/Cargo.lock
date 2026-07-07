@@ -684,6 +684,7 @@ dependencies = [
  "comrak",
  "emojis",
  "latex2mathml",
+ "layout-rs",
  "postcard",
  "rusqlite",
  "serde",
@@ -706,6 +707,12 @@ name = "latex2mathml"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "678cf5bdb3ba63a264e6e0c9eee36538ca1d2da0afa4dd801c1f96309e710765"
+
+[[package]]
+name = "layout-rs"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5b8b38bc67665e362eb770c6b6ae88b48d040d94a0a10c4904c37bc79d263b95"
 
 [[package]]
 name = "libc"

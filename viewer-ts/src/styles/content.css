@@ -134,6 +134,18 @@ body {
   font-size: 0.9em;
   line-height: 1.5;
 }
+/* Line-highlight (the `{2,4-6}` flag): the compiler re-renders the block with each line
+   wrapped in `.cl` (`.cl.hl` = highlighted). Tint the flagged lines full-width — the
+   `<pre>`'s horizontal padding is 13px, so bleed the background out by that much. */
+.content .cl {
+  display: block;
+}
+.content .cl.hl {
+  margin: 0 -13px;
+  padding: 0 13px;
+  background: #fff6d8;
+  box-shadow: inset 3px 0 0 var(--swoosh);
+}
 /* Code block wrapper: owns the block's margin + hosts the filename bar and Copy
    button. The <pre> keeps its box (see above), sans its own vertical margin.
    `flow-root` makes the wrapper narrow beside floats (the "On this page" box)
@@ -522,6 +534,234 @@ body {
   --callout-bg: #fdf3f3;
   --callout-border: #f3d0d0;
 }
+/* Container directives (`:::name … :::`, comrak block_directive). comrak makes the
+   name the div's class verbatim (HTML-escaped, so no injection); we style a curated
+   set. The callout kinds mirror the `> [!NOTE]` alerts above but self-label via
+   ::before, since a directive carries no title element. `:::card` is a plain framed
+   box; any name outside this set renders as an unstyled div. */
+.content .note,
+.content .tip,
+.content .info,
+.content .warning,
+.content .caution,
+.content .danger {
+  margin: 0.9em 0;
+  padding: 8px 14px;
+  border: 1px solid var(--callout-border);
+  border-left: 4px solid var(--callout);
+  border-radius: 3px;
+  background: var(--callout-bg);
+}
+.content .note > :first-child,
+.content .tip > :first-child,
+.content .info > :first-child,
+.content .warning > :first-child,
+.content .caution > :first-child,
+.content .danger > :first-child {
+  margin-top: 0;
+}
+.content .note > :last-child,
+.content .tip > :last-child,
+.content .info > :last-child,
+.content .warning > :last-child,
+.content .caution > :last-child,
+.content .danger > :last-child {
+  margin-bottom: 0;
+}
+.content .note::before,
+.content .tip::before,
+.content .info::before,
+.content .warning::before,
+.content .caution::before,
+.content .danger::before {
+  display: block;
+  margin-bottom: 0.35em;
+  font-weight: 700;
+  color: var(--callout);
+}
+.content .note {
+  --callout: #3b78c3;
+  --callout-bg: #f1f6fc;
+  --callout-border: #cfe0f2;
+}
+.content .note::before {
+  content: "Note";
+}
+.content .tip {
+  --callout: #2f8a45;
+  --callout-bg: #f1faf3;
+  --callout-border: #ccebd4;
+}
+.content .tip::before {
+  content: "Tip";
+}
+.content .info {
+  --callout: #2f7d92;
+  --callout-bg: #f0f8fa;
+  --callout-border: #cbe6ec;
+}
+.content .info::before {
+  content: "Info";
+}
+.content .warning {
+  --callout: #b7791f;
+  --callout-bg: #fffaf0;
+  --callout-border: #f0e0bd;
+}
+.content .warning::before {
+  content: "Warning";
+}
+.content .caution,
+.content .danger {
+  --callout: #cf3c3c;
+  --callout-bg: #fdf3f3;
+  --callout-border: #f3d0d0;
+}
+.content .caution::before {
+  content: "Caution";
+}
+.content .danger::before {
+  content: "Danger";
+}
+/* `:::card` — a plain framed container (no accent bar, no auto-title). */
+.content .card {
+  margin: 0.9em 0;
+  padding: 12px 16px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.content .card > :first-child {
+  margin-top: 0;
+}
+.content .card > :last-child {
+  margin-bottom: 0;
+}
+/* Prose tabs (`:::tabs` / `:::tab`, compiler-expanded from block_directive). The bar +
+   panels come from render_tabs; the frame bridge's tabSwitch toggles `.active`. Unlike
+   the code-group tabs, panels hold arbitrary rendered Markdown, so they get padding. */
+.content .tabs {
+  margin: 0.9em 0;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.content .tabs-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 0 6px;
+  background: #f3f6fb;
+  border-bottom: 1px solid var(--rule);
+}
+.content .tab-btn {
+  font-size: 13px;
+  line-height: 1;
+  padding: 9px 13px;
+  color: var(--muted);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+.content .tab-btn:hover {
+  color: var(--content-h);
+}
+.content .tab-btn.active {
+  color: var(--content-h);
+  border-bottom-color: var(--swoosh);
+}
+.content .tab-panel {
+  display: none;
+  padding: 12px 14px;
+}
+.content .tab-panel.active {
+  display: block;
+}
+.content .tab-panel > :first-child {
+  margin-top: 0;
+}
+.content .tab-panel > :last-child {
+  margin-bottom: 0;
+}
+/* Steps (`:::steps` wrapping an ordered list). Numbered circles down a connector line;
+   each `<li>` keeps its rich content. Circle size is fixed in px so the counter's own
+   font-size doesn't feed back into the em box. */
+.content .steps > ol {
+  list-style: none;
+  counter-reset: step;
+  margin: 0.9em 0;
+  padding-left: 0;
+}
+.content .steps > ol > li {
+  counter-increment: step;
+  position: relative;
+  margin: 0;
+  padding: 1px 0 0.9em 38px;
+}
+.content .steps > ol > li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 24px;
+  height: 24px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  background: var(--swoosh);
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 24px;
+  text-align: center;
+}
+.content .steps > ol > li:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 11px;
+  top: 26px;
+  bottom: -2px;
+  width: 2px;
+  background: var(--rule);
+}
+.content .steps > ol > li > :first-child {
+  margin-top: 0;
+}
+/* Inline badges (`` `text`{.badge} `` / `{.badge-KIND}`, from render_inline_attrs). A
+   small pill; the KIND variants tint it. The base `badge` class is always present. */
+.content .badge {
+  display: inline-block;
+  font-size: 0.75em;
+  font-weight: 700;
+  line-height: 1.5;
+  padding: 0.05em 0.55em;
+  border-radius: 10px;
+  vertical-align: middle;
+  background: #e7ecf3;
+  color: #33507a;
+  border: 1px solid #cfdae9;
+}
+.content .badge-blue {
+  background: #eaf1fb;
+  color: #2b5f9e;
+  border-color: #cfe0f2;
+}
+.content .badge-green {
+  background: #e9f6ee;
+  color: #256b39;
+  border-color: #c3e3ce;
+}
+.content .badge-amber {
+  background: #fbf1dc;
+  color: #8a6216;
+  border-color: #eddcb4;
+}
+.content .badge-red {
+  background: #fbebeb;
+  color: #a5342f;
+  border-color: #eecccc;
+}
 /* Compile-time MathML (`$…$` / `$$…$$`). Native MathML renders at the body font
    size, which is too small for equations — bump both, more for display math. Don't
    override `display` or the browser stops laying it out as math. */
@@ -600,6 +840,71 @@ body {
   background: #ffe06b;
   box-shadow: inset 0 0 0 1px #e0ac2a;
   border-radius: 2px;
+}
+/* Inline text marks from the new comrak extensions. `<mark>` (==x==) is above;
+   `<ins>` (++x++) reads as an addition, `<sub>`/`<sup>` keep the browser defaults. */
+.content ins {
+  text-decoration: underline;
+  text-decoration-color: #2f8a45;
+  background: #eaf7ee;
+  border-radius: 2px;
+}
+/* Spoiler (||x||): blacked out until clicked (the frame bridge adds `.revealed`). */
+.content .spoiler {
+  background: #16233b;
+  color: transparent;
+  border-radius: 2px;
+  padding: 0 2px;
+  cursor: pointer;
+}
+.content .spoiler.revealed {
+  background: #eef3fa;
+  color: inherit;
+  cursor: text;
+}
+/* Image with a title → <figure><figcaption>. */
+.content figure {
+  margin: 1em 0;
+  text-align: center;
+}
+.content figcaption {
+  margin-top: 0.4em;
+  color: var(--muted);
+  font-size: 0.9em;
+  font-style: italic;
+}
+/* Diagrams (`` ```dot `` → build-time SVG via the layout engine). Centre it, let it
+   scroll if wider than the pane, and scale it down to fit narrow viewports. */
+.content figure.diagram {
+  margin: 1em 0;
+  text-align: center;
+  overflow-x: auto;
+}
+.content figure.diagram svg {
+  max-width: 100%;
+  height: auto;
+}
+/* Description / definition lists (Term / : details). */
+.content dl {
+  margin: 0.8em 0;
+}
+.content dt {
+  font-weight: 600;
+  color: var(--content-h);
+}
+.content dd {
+  margin: 0.15em 0 0.6em 1.5em;
+}
+/* Footnotes (also inline `^[…]`): a muted, ruled-off section at the page foot. */
+.content .footnotes {
+  margin-top: 2.4em;
+  padding-top: 0.6em;
+  border-top: 1px dashed var(--rule);
+  font-size: 0.9em;
+  color: var(--muted);
+}
+.content .footnotes ol {
+  margin: 0.3em 0;
 }
 .content .see-also {
   margin-top: 2em;

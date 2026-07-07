@@ -82,6 +82,22 @@ Set `language = "en"` in `docset.toml`.
 
 Renders as: Set `language = "en"` in `docset.toml`.
 
+## Inline code attributes
+
+An inline `` `code` `` span can carry a `{…}` attribute **immediately after** the closing
+backtick:
+
+| Write | Effect |
+|-------|--------|
+| `` `let x = 1;`{:rust} `` | syntax-highlight the snippet, in that language |
+| `` `Beta`{.badge} `` | a neutral badge pill |
+| `` `New`{.badge-green} `` | a coloured badge (`blue` / `green` / `amber` / `red`) |
+
+`{:lang}` highlights the code with the same engine as fenced blocks (build-time syntect,
+so no runtime highlighter). `{.badge…}` turns the code into a small pill — handy for
+version tags and status labels. The brace must touch the closing backtick; a `{…}` after
+a space is just text.
+
 ## Highlight
 
 Double equals signs mark text like a highlighter pen — for drawing the eye to the
@@ -131,6 +147,17 @@ Renders as: H~2~O, x~1~ … x~n~.
 > [!IMPORTANT]
 > In GitHub Markdown a single tilde can mean strikethrough — here it means
 > subscript; strikethrough is `~~x~~` only.
+
+## Spoiler
+
+Double pipes black out text until the reader clicks it — for hiding answers, solutions,
+or plot points.
+
+```md
+The answer is ||42||.
+```
+
+Renders as: The answer is ||42|| (click to reveal).
 
 ## Literal characters
 

@@ -8,7 +8,7 @@ import {
   rangeSupported,
   type DocsetSource,
 } from "./data/collection";
-import { Docset, type SearchHit, type TocNode } from "./data/docset";
+import { type SearchHit, type TocNode } from "./data/docset";
 import {
   addExtraPack,
   addRemote,
@@ -105,6 +105,13 @@ function groupTab(e){var b=e.target&&e.target.closest&&e.target.closest('button[
 function treeFile(e){var f=e.target&&e.target.closest&&e.target.closest('[data-tree-file]');if(!f)return false;e.preventDefault();
  var t=f.closest('.code-tree');if(t){var i=f.getAttribute('data-tree-file');
  var el=t.querySelectorAll('[data-tree-file],[data-tree-panel]');for(var k=0;k<el.length;k++){var n=el[k];var v=n.getAttribute('data-tree-file');if(v===null)v=n.getAttribute('data-tree-panel');n.classList.toggle('active',v===i)}}return true}
+// Switch a prose :::tabs tab: activate the clicked tab + its panel by index. Scoped to
+// the tab set's own direct children (:scope > …) so nested tab sets don't cross-toggle.
+function tabSwitch(e){var b=e.target&&e.target.closest&&e.target.closest('button[data-tab]');if(!b)return false;e.preventDefault();
+ var g=b.closest('.tabs');if(g){var i=b.getAttribute('data-tab');
+ var el=g.querySelectorAll(':scope>.tabs-bar>[data-tab],:scope>[data-tab-panel]');for(var k=0;k<el.length;k++){var n=el[k];var v=n.getAttribute('data-tab');if(v===null)v=n.getAttribute('data-tab-panel');n.classList.toggle('active',v===i)}}return true}
+// Reveal a spoiler (||x||) on click; once revealed it stays (a second click doesn't hide).
+function spoiler(e){var s=e.target&&e.target.closest&&e.target.closest('.spoiler:not(.revealed)');if(!s)return false;e.preventDefault();s.classList.add('revealed');return true}
 // A tap/click on a standalone content image (not a linked one) asks the app to
 // open its zoomable lightbox. Only our resolved inline assets (data:image/…) —
 // never an arbitrary URL — so the app can trust the source it gets.
@@ -131,7 +138,7 @@ function mathZoom(e){var t=e.target;
  var de=document.documentElement;mathPrevOverflow=de.style.overflow;
  mathOv=document.createElement('div');mathOv.className='math-overlay';mathOv.appendChild(m.cloneNode(true));
  addEventListener('keydown',mathKey);de.style.overflow='hidden';document.body.appendChild(mathOv);return true}
-addEventListener('click',function(e){if(copyBtn(e))return;if(collapseToggle(e))return;if(groupTab(e))return;if(treeFile(e))return;if(mathZoom(e))return;if(img(e))return;link(e,false)},true);
+addEventListener('click',function(e){if(copyBtn(e))return;if(collapseToggle(e))return;if(groupTab(e))return;if(tabSwitch(e))return;if(treeFile(e))return;if(spoiler(e))return;if(mathZoom(e))return;if(img(e))return;link(e,false)},true);
 addEventListener('auxclick',function(e){if(e.button===1)link(e,true)},true);
 // Pull-to-refresh: a downward drag started at the top of the page posts a 'pull'
 // to the app (the reading content lives in this sandboxed frame, so the app can't
@@ -240,19 +247,19 @@ async function bootstrap(): Promise<void> {
         }
         if (!streamed) {
           const bytes = await fetchDocsetBytes(entry.url);
-          const ds = await Docset.open(bytes);
+          const { StreamingDocset } = await import("./data/streaming-docset");
+          const meta = await StreamingDocset.peekBytes(bytes);
           remotes.push({
             url: entry.url,
             bytes,
-            id: ds.id,
-            language: ds.language,
-            title: ds.title,
-            collection: ds.collection,
-            version: ds.version,
+            id: meta.id,
+            language: meta.language,
+            title: meta.title,
+            collection: meta.collection,
+            version: meta.version,
             streaming: false,
             attachments: entry.attachments, // fetched whole alongside the .khb
           });
-          ds.close();
         }
       } catch {
         /* unreachable/invalid remote — skip; the user can remove it */
@@ -1583,7 +1590,10 @@ function start(
         // filename; bare words are flags (`collapse`, plus `open` to start expanded).
         const meta = code?.getAttribute("data-meta") ?? "";
         const file = (meta.match(/\[([^\]]*)\]/)?.[1] ?? "").trim();
-        const flags = meta.replace(/\[[^\]]*\]/, "").trim().split(/\s+/);
+        const flags = meta
+          .replace(/\[[^\]]*\]/, "")
+          .trim()
+          .split(/\s+/);
         const collapsible = flags.includes("collapse");
 
         const btn = document.createElement("button");
@@ -2108,8 +2118,10 @@ function start(
             /* not Range-streamable after all — validate by fetching it whole */
           }
         }
-        if (!validated)
-          (await Docset.open(await fetchDocsetBytes(url))).close();
+        if (!validated) {
+          const { StreamingDocset } = await import("./data/streaming-docset");
+          await StreamingDocset.peekBytes(await fetchDocsetBytes(url)); // validates
+        }
         addRemote(url, streaming, packs);
         location.reload();
       } catch {
@@ -2141,19 +2153,20 @@ function start(
       const attachments = await Promise.all(
         attachmentFiles.map(async (f) => new Uint8Array(await f.arrayBuffer())),
       );
-      const ds = await Docset.open(bytes, attachments); // validates + reads meta
+      const { StreamingDocset } = await import("./data/streaming-docset");
+      const meta = await StreamingDocset.peekBytes(bytes); // validates + reads meta
       await putDocset({
-        id: ds.id,
-        language: ds.language,
-        title: ds.title,
-        collection: ds.collection,
-        version: ds.version,
+        id: meta.id,
+        language: meta.language,
+        title: meta.title,
+        collection: meta.collection,
+        version: meta.version,
         bytes,
         attachments,
       });
-      if (ds.language !== lang) {
+      if (meta.language !== lang) {
         try {
-          localStorage.setItem(LANG_KEY, ds.language);
+          localStorage.setItem(LANG_KEY, meta.language);
         } catch {
           /* ignore */
         }

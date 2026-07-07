@@ -33,6 +33,15 @@ readers announce and what search sees.
 > Remote/absolute image URLs (`https://…`) are **not** fetched — content is
 > origin-isolated and offline-first. Bundle images under `assets/` instead.
 
+## Captions
+
+Give an image a **title** — the quoted text after the URL — and it renders as a
+`<figure>` with the title shown as a `<figcaption>` beneath it.
+
+```md
+![Architecture](assets/khb-pipeline.svg "How a docset is built")
+```
+
 ## Sizing
 
 By default an image displays at its natural size, capped at the column width — a

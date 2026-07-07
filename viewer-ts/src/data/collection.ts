@@ -1,5 +1,4 @@
 import {
-  Docset,
   type AssetBlob,
   type Category,
   type IDocset,
@@ -14,11 +13,11 @@ const SEP = ":";
 export type AttachmentSource = { bytes: Uint8Array } | { file: string };
 
 /**
- * A docset to load:
- * - `{ bytes }` — already-in-memory (upload / IndexedDB), whole-file sql.js;
+ * A docset to load (all served by the one wa-sqlite engine, real FTS5):
+ * - `{ bytes }` — already-in-memory (upload / IndexedDB), read whole from memory;
  * - `{ file }` — a URL fetched **whole** (a `.gz` suffix is decompressed);
  * - `{ url, mode: "streaming" }` — a remote `.khb` opened **page-by-page** over
- *   HTTP `Range` via the wa-sqlite engine (real FTS5), never fetched whole.
+ *   HTTP `Range`, never fetched whole.
  * The first two may carry `.khba` attachment packs.
  */
 export type DocsetSource =
@@ -89,8 +88,8 @@ export class Collection {
     return new Collection(language, docsets);
   }
 
-  /** Close every docset (frees sql.js / streaming handles) — used before a live
-   *  swap when the loaded set changes (version/language switch). */
+  /** Close every docset (frees its wa-sqlite handle) — used before a live swap
+   *  when the loaded set changes (version/language switch). */
   close(): void {
     for (const d of this.docsets) d.close();
   }
@@ -100,11 +99,11 @@ export class Collection {
     language: string,
   ): Promise<Collection> {
     const docsets: IDocset[] = [];
+    // One wa-sqlite engine backs every book — streamed over Range or whole-file from
+    // memory. Code-split so it loads once, on first docset open, not in the app shell.
+    const { StreamingDocset } = await import("./streaming-docset");
     for (const src of sources) {
       if (isStreaming(src)) {
-        // Lazy-load the wa-sqlite streaming engine only when a streamed docset is
-        // actually opened, so non-streaming sessions never fetch that chunk.
-        const { StreamingDocset } = await import("./streaming-docset");
         docsets.push(
           await StreamingDocset.open(src.url, src.attachments ?? []),
         );
@@ -118,7 +117,7 @@ export class Collection {
           "bytes" in a ? a.bytes : await fetchDocsetBytes(a.file),
         );
       }
-      docsets.push(await Docset.open(bytes, attachmentBytes));
+      docsets.push(await StreamingDocset.openBytes(bytes, attachmentBytes));
     }
     return new Collection(language, docsets);
   }
@@ -285,10 +284,10 @@ export class Collection {
     const perBook = await Promise.all(
       this.docsets.map((d) => d.search(query, limit)),
     );
-    // Different backends score differently (sql.js's occurrence heuristic vs the
-    // streamed books' FTS5 bm25), and the raw magnitudes aren't comparable. Scale
-    // each book's hits to (0,1] by its own top score so results interleave fairly
-    // in the merged ranking instead of one engine crowding out the other.
+    // Every book ranks with FTS5 bm25 now, but raw bm25 magnitudes still aren't
+    // comparable across books (they depend on each corpus's size/term stats). Scale
+    // each book's hits to (0,1] by its own top score so results interleave fairly in
+    // the merged ranking instead of one book crowding out the others.
     const hits = perBook.flatMap((list, bi) => {
       const top = Math.max(...list.map((h) => h.score), Number.EPSILON);
       const d = this.docsets[bi]!;

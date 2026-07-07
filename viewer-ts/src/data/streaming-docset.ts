@@ -11,11 +11,39 @@ import type {
 import { buildTocTree } from "./docset";
 import { StreamingDb } from "./streaming";
 
+/** The meta a `peek` returns — enough to group a book and label it in the library. */
+export interface DocsetMeta {
+  id: string;
+  language: string;
+  title: string;
+  collection: string;
+  version: string;
+}
+
+/** Open each sidecar source, skipping any that fail (their assets just won't resolve). */
+async function openSidecars<T>(
+  srcs: T[],
+  open: (s: T) => Promise<StreamingDb>,
+): Promise<StreamingDb[]> {
+  const out: StreamingDb[] = [];
+  for (const s of srcs) {
+    try {
+      out.push(await open(s));
+    } catch {
+      /* invalid/unreachable sidecar — skip it */
+    }
+  }
+  return out;
+}
+
 /**
- * A book streamed from a remote `.khb` over HTTP `Range`, page by page — the
- * `IDocset` the live `Collection` merges alongside whole-file (sql.js) books.
+ * The one browser `IDocset` engine, backed by the custom FTS5 wa-sqlite build. It
+ * serves **both** a remote `.khb` streamed page-by-page over HTTP `Range` (`open`)
+ * and a whole `.khb` already in memory (`openBytes` — upload / bundled); the only
+ * difference is the {@link BlockReader} byte source. Every book gets real FTS5.
  *
- * The split that makes streaming pay off: the **small structural tables** (toc,
+ * The split that makes it pay off (and keeps navigation instant): the **small
+ * structural tables** (toc,
  * categories, keywords, page↔category, related) are read **once at open** and
  * kept in memory, so every navigational query is synchronous and local; only the
  * **heavy, per-navigation data** streams on demand — a page body, an embedded
@@ -51,18 +79,17 @@ export class StreamingDocset implements IDocset {
   }
 
   /**
-   * Cheaply read just `meta` over Range (a few KB) — enough to validate the URL
-   * is a Range-served `.khb` and to learn its language for collection grouping,
-   * without eager-loading the whole structure.
+   * Cheaply read just `meta` (a few KB) — enough to validate a `.khb` and learn
+   * its language for collection grouping, without eager-loading the whole
+   * structure. `peek` streams it over Range; `peekBytes` reads it from memory.
    */
-  static async peek(url: string): Promise<{
-    id: string;
-    language: string;
-    title: string;
-    collection: string;
-    version: string;
-  }> {
-    const db = await StreamingDb.open(url);
+  static async peek(url: string): Promise<DocsetMeta> {
+    return StreamingDocset.peekDb(await StreamingDb.open(url));
+  }
+  static async peekBytes(bytes: Uint8Array): Promise<DocsetMeta> {
+    return StreamingDocset.peekDb(await StreamingDb.openBytes(bytes));
+  }
+  private static async peekDb(db: StreamingDb): Promise<DocsetMeta> {
     try {
       const val = async (k: string): Promise<string | null> => {
         const v = await db.one("SELECT value FROM meta WHERE key = ?", [k]);
@@ -81,11 +108,37 @@ export class StreamingDocset implements IDocset {
     }
   }
 
+  /** Open a remote `.khb` streamed page-by-page over HTTP `Range` (+ sidecar URLs). */
   static async open(
     url: string,
     sidecarUrls: string[] = [],
   ): Promise<StreamingDocset> {
-    const db = await StreamingDb.open(url);
+    return StreamingDocset.build(
+      await StreamingDb.open(url),
+      await openSidecars(sidecarUrls, (u) => StreamingDb.open(u)),
+    );
+  }
+
+  /**
+   * Open a whole `.khb` already in memory (upload / bundled / whole-fetch), plus any
+   * sidecar `.khba` byte packs. Same eager-structure + real-FTS5 engine as streaming —
+   * just an in-memory byte source instead of HTTP Range, so no network.
+   */
+  static async openBytes(
+    bytes: Uint8Array,
+    sidecarBytes: Uint8Array[] = [],
+  ): Promise<StreamingDocset> {
+    return StreamingDocset.build(
+      await StreamingDb.openBytes(bytes),
+      await openSidecars(sidecarBytes, (b) => StreamingDb.openBytes(b)),
+    );
+  }
+
+  /** Read the meta + all small structural tables eagerly, and key the sidecars. */
+  private static async build(
+    db: StreamingDb,
+    sidecars: StreamingDb[],
+  ): Promise<StreamingDocset> {
     const meta = async (k: string): Promise<string | null> => {
       const v = await db.one("SELECT value FROM meta WHERE key = ?", [k]);
       return v == null ? null : String(v);
@@ -160,26 +213,27 @@ export class StreamingDocset implements IDocset {
       hasFts5 = false;
     }
 
-    // Open each sidecar `.khba` over Range and key it by its `meta.pack`, so the
-    // `asset_index` routing can address one directly (order-independent).
+    // Key each already-open sidecar `.khba` by its `meta.pack`, so the `asset_index`
+    // routing can address one directly (order-independent).
     const byPack = new Map<string, StreamingDb>();
-    for (const sidecarUrl of sidecarUrls) {
+    for (const pack of sidecars) {
       try {
-        const pack = await StreamingDb.open(sidecarUrl);
         const packId = await pack.one(
           "SELECT value FROM meta WHERE key='pack'",
         );
         if (packId != null) byPack.set(String(packId), pack);
         else pack.close();
       } catch {
-        /* unreachable/invalid sidecar — its assets just won't resolve */
+        pack.close(); // invalid sidecar — its assets just won't resolve
       }
     }
 
     // Assets routed to a sidecar pack that isn't loaded → missing (computed once).
     let missing: { path: string; pack: string }[] = [];
     try {
-      missing = (await db.all("SELECT path, pack FROM asset_index WHERE pack != ''"))
+      missing = (
+        await db.all("SELECT path, pack FROM asset_index WHERE pack != ''")
+      )
         .map((r) => ({ path: String(r.path), pack: String(r.pack) }))
         .filter((a) => !byPack.has(a.pack));
     } catch {
@@ -289,7 +343,6 @@ export class StreamingDocset implements IDocset {
     for (const pack of this.byPack.values()) pack.close();
   }
 }
-
 
 function escHtml(s: string): string {
   return s.replace(
