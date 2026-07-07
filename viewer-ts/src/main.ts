@@ -8,17 +8,21 @@ import {
   rangeSupported,
   type DocsetSource,
 } from "./data/collection";
-import { Docset, type SearchHit, type TocNode } from "./data/docset";
+import { type SearchHit, type TocNode } from "./data/docset";
+import { TauriDocset, isTauri } from "./data/tauri-docset";
 import {
   addExtraPack,
   addRemote,
+  addTauriFile,
   allDocsets,
   deleteDocset,
   getRemotes,
+  getTauriFiles,
   importKhbm,
   loadExtraPacks,
   putDocset,
   removeRemote,
+  removeTauriFile,
 } from "./data/library";
 import {
   loadDocsetLangs,
@@ -194,6 +198,10 @@ async function loadConfig(): Promise<Config> {
 }
 
 async function bootstrap(): Promise<void> {
+  // The desktop (Tauri) shell reads docsets through the native Rust `khb-core`
+  // (real FTS5) instead of the browser engine — a wholly separate, simpler path.
+  if (isTauri()) return bootstrapTauri();
+
   const manifestRes = await fetch(fresh("docsets.json"));
   const manifest = (await manifestRes.json()) as Manifest;
   const config = await loadConfig();
@@ -240,19 +248,19 @@ async function bootstrap(): Promise<void> {
         }
         if (!streamed) {
           const bytes = await fetchDocsetBytes(entry.url);
-          const ds = await Docset.open(bytes);
+          const { StreamingDocset } = await import("./data/streaming-docset");
+          const meta = await StreamingDocset.peekBytes(bytes);
           remotes.push({
             url: entry.url,
             bytes,
-            id: ds.id,
-            language: ds.language,
-            title: ds.title,
-            collection: ds.collection,
-            version: ds.version,
+            id: meta.id,
+            language: meta.language,
+            title: meta.title,
+            collection: meta.collection,
+            version: meta.version,
             streaming: false,
             attachments: entry.attachments, // fetched whole alongside the .khb
           });
-          ds.close();
         }
       } catch {
         /* unreachable/invalid remote — skip; the user can remove it */
@@ -399,6 +407,141 @@ async function bootstrap(): Promise<void> {
     updates,
     variants,
   );
+}
+
+/**
+ * Desktop (Tauri) startup. Builds the same `variants` model the web `bootstrap` does —
+ * from the bundled docsets + opened files + remotes, each peeked natively — then reuses
+ * the *whole* machinery: `resolveVariants` → `Collection.load` (native sources) → `start`
+ * with real `langInfo`/`versionInfo`, so the Manage page, live version/language switch,
+ * and remove all work. No service worker.
+ */
+async function bootstrapTauri(): Promise<void> {
+  // The window starts hidden (tauri.conf.json) so the user never sees the unstyled shell
+  // while Vite/main.ts load; reveal it once the UI is built (or on error / after a 4s
+  // fallback, so a failure is visible instead of a permanently blank window).
+  const reveal = setTimeout(() => void showTauriWindow(), 4000);
+  try {
+    const config: Config = { externalSources: true, pwa: false };
+    const variants = await buildTauriVariants();
+    if (!variants.length) throw new Error("no docsets to show");
+    const available = [...new Set(variants.map((v) => v.language))];
+    const lang = chooseLang(available);
+    document.documentElement.lang = lang;
+    applyStatic(lang);
+    unregisterServiceWorker();
+    const { sources, langInfo, versionInfo } = resolveVariants(variants, lang);
+    start(
+      await Collection.load(sources, lang),
+      lang,
+      available,
+      config,
+      langInfo,
+      versionInfo,
+      [], // no remote-update checks on desktop yet
+      variants,
+    );
+  } finally {
+    clearTimeout(reveal);
+    void showTauriWindow();
+  }
+}
+
+/** Build the desktop variant list: bundled docsets + opened files + remotes, each peeked
+ *  natively for its meta. Every variant's source opens through `khb-core` (`{ native }`). */
+async function buildTauriVariants(): Promise<DocVariant[]> {
+  type Spec = { path: string; sidecars: string[]; origin: BookOrigin };
+  const specs: Spec[] = [];
+  for (const b of await TauriDocset.bundledSpecs()) {
+    // Bundled `.khba` are auto-offered to every book (routing keys by pack id), so listing
+    // them per book would be misleading — leave `packs` empty for bundled.
+    specs.push({
+      path: b.path,
+      sidecars: b.sidecars,
+      origin: { kind: "bundled", packs: [] },
+    });
+  }
+  for (const f of getTauriFiles()) {
+    specs.push({
+      path: f.path,
+      sidecars: f.sidecars,
+      origin: {
+        kind: "uploaded",
+        removeKey: f.path,
+        packs: packLabels(f.sidecars),
+      },
+    });
+  }
+  for (const r of getRemotes()) {
+    const sidecars = r.attachments ?? [];
+    specs.push({
+      path: r.url,
+      sidecars,
+      origin: {
+        kind: "remote",
+        removeKey: r.url,
+        ...(r.streaming != null ? { streaming: r.streaming } : {}),
+        packs: packLabels(sidecars),
+      },
+    });
+  }
+  const metas = await TauriDocset.peek(
+    specs.map((s) => ({ path: s.path, sidecars: s.sidecars })),
+  );
+  const variants: DocVariant[] = [];
+  metas.forEach((m, i) => {
+    if (!m) return; // unreachable/invalid spec — skip (its persisted entry is kept)
+    const s = specs[i]!;
+    variants.push({
+      id: m.id,
+      collection: m.collection || m.id,
+      language: m.language,
+      version: m.version,
+      title: m.title,
+      source: { native: { path: s.path, sidecars: s.sidecars } },
+      origin: s.origin,
+    });
+  });
+  return variants;
+}
+
+/** Sidecar path/URL → a short label (basename) for the Manage page. */
+function packLabels(sidecars: string[]): string[] {
+  return sidecars.map((s) => s.split(/[\\/]/).pop() || s);
+}
+
+/** Reveal the Tauri window (it starts hidden to avoid a flash of the unstyled shell). */
+async function showTauriWindow(): Promise<void> {
+  try {
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    await getCurrentWindow().show();
+  } catch {
+    /* not Tauri, or already shown */
+  }
+}
+
+/** File → Open on desktop: a native file picker → persist the chosen `.khb` paths (+ any
+ *  `.khba` picked alongside as sidecars) → reload so bootstrap reopens them natively. */
+async function pickDocsetNative(): Promise<void> {
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const picked = await open({
+    multiple: true,
+    filters: [{ name: "KD Help Book", extensions: ["khb", "khba"] }],
+  });
+  if (!picked) return;
+  const paths = Array.isArray(picked) ? picked : [picked];
+  const khb = paths.filter((p) => p.toLowerCase().endsWith(".khb"));
+  const khba = paths.filter((p) => p.toLowerCase().endsWith(".khba"));
+  let added = false;
+  for (const p of khb) if (addTauriFile(p, khba)) added = true;
+  if (added) location.reload();
+}
+
+/** Validate a remote `.khb` URL natively (a Range peek over `khb-core`) — the desktop
+ *  equivalent of the web's `StreamingDocset.peek`. Throws if it isn't a reachable `.khb`. */
+async function validateRemoteNative(url: string): Promise<void> {
+  const [meta] = await TauriDocset.peek([{ path: url }]);
+  if (!meta) throw new Error("not a reachable .khb");
 }
 
 /** Where a book came from + its packs — for the Manage docsets page. */
@@ -1583,7 +1726,10 @@ function start(
         // filename; bare words are flags (`collapse`, plus `open` to start expanded).
         const meta = code?.getAttribute("data-meta") ?? "";
         const file = (meta.match(/\[([^\]]*)\]/)?.[1] ?? "").trim();
-        const flags = meta.replace(/\[[^\]]*\]/, "").trim().split(/\s+/);
+        const flags = meta
+          .replace(/\[[^\]]*\]/, "")
+          .trim()
+          .split(/\s+/);
         const collapsible = flags.includes("collapse");
 
         const btn = document.createElement("button");
@@ -2008,6 +2154,21 @@ function start(
     if (el) runAction(el.dataset.action!);
   });
 
+  // On desktop (Tauri) the OS-native menu replaces the in-window menubar: hide the web
+  // one and route native menu clicks (which carry the same ids) through `runAction`.
+  if (isTauri()) {
+    const mb = document.getElementById("menubar");
+    if (mb) mb.style.display = "none";
+    void (async () => {
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+        await listen<string>("menu", (e) => runAction(e.payload));
+      } catch {
+        /* not Tauri, or the event bridge is unavailable */
+      }
+    })();
+  }
+
   // ---- About modal ----
   function showAbout(): void {
     const bg = document.createElement("div");
@@ -2040,6 +2201,12 @@ function start(
 
   // ---- Library: open / manage user docsets ----
   function pickDocset(): void {
+    // Desktop: a native file dialog returns paths (not bytes) — the native core opens
+    // the file directly, and the path is remembered so it reopens next launch.
+    if (isTauri()) {
+      void pickDocsetNative();
+      return;
+    }
     const input = document.createElement("input");
     input.type = "file";
     input.accept = ".khb,.khba";
@@ -2095,21 +2262,30 @@ function start(
       err.textContent = s.openUrlChecking;
       add.disabled = true;
       try {
-        // Validate the URL is a reachable `.khb`: a cheap streaming peek when
-        // streaming is preferred and the host honours Range, else a whole fetch
-        // (which also covers a preferred-but-unavailable stream — it'll load whole).
-        let validated = false;
-        if (streaming && (await rangeSupported(url))) {
-          try {
+        if (isTauri()) {
+          // Desktop: validate the URL with a native Range peek over `khb-core`; the
+          // remote then opens page-by-page like a bundled/local docset.
+          await validateRemoteNative(url);
+        } else {
+          // Validate the URL is a reachable `.khb`: a cheap streaming peek when
+          // streaming is preferred and the host honours Range, else a whole fetch
+          // (which also covers a preferred-but-unavailable stream — it'll load whole).
+          let validated = false;
+          if (streaming && (await rangeSupported(url))) {
+            try {
+              const { StreamingDocset } =
+                await import("./data/streaming-docset");
+              await StreamingDocset.peek(url);
+              validated = true;
+            } catch {
+              /* not Range-streamable after all — validate by fetching it whole */
+            }
+          }
+          if (!validated) {
             const { StreamingDocset } = await import("./data/streaming-docset");
-            await StreamingDocset.peek(url);
-            validated = true;
-          } catch {
-            /* not Range-streamable after all — validate by fetching it whole */
+            await StreamingDocset.peekBytes(await fetchDocsetBytes(url)); // validates
           }
         }
-        if (!validated)
-          (await Docset.open(await fetchDocsetBytes(url))).close();
         addRemote(url, streaming, packs);
         location.reload();
       } catch {
@@ -2141,19 +2317,20 @@ function start(
       const attachments = await Promise.all(
         attachmentFiles.map(async (f) => new Uint8Array(await f.arrayBuffer())),
       );
-      const ds = await Docset.open(bytes, attachments); // validates + reads meta
+      const { StreamingDocset } = await import("./data/streaming-docset");
+      const meta = await StreamingDocset.peekBytes(bytes); // validates + reads meta
       await putDocset({
-        id: ds.id,
-        language: ds.language,
-        title: ds.title,
-        collection: ds.collection,
-        version: ds.version,
+        id: meta.id,
+        language: meta.language,
+        title: meta.title,
+        collection: meta.collection,
+        version: meta.version,
         bytes,
         attachments,
       });
-      if (ds.language !== lang) {
+      if (meta.language !== lang) {
         try {
-          localStorage.setItem(LANG_KEY, ds.language);
+          localStorage.setItem(LANG_KEY, meta.language);
         } catch {
           /* ignore */
         }
@@ -2299,8 +2476,16 @@ function start(
       btn.addEventListener("click", () => {
         const id = btn.getAttribute("data-remove-id");
         const url = btn.getAttribute("data-remove-url");
-        if (id) void deleteDocset(id).then(() => location.reload());
-        else if (url) {
+        if (id) {
+          // On desktop a removable local docset is an opened file (removeKey = its path);
+          // on the web it's an uploaded docset in IndexedDB.
+          if (isTauri()) {
+            removeTauriFile(id);
+            location.reload();
+          } else {
+            void deleteDocset(id).then(() => location.reload());
+          }
+        } else if (url) {
           removeRemote(url);
           location.reload();
         }

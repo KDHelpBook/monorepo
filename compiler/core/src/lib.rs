@@ -167,6 +167,19 @@ mod tests {
         );
         assert!(ds.related("adv").unwrap().is_empty());
 
+        // Bulk variants the Tauri provider eager-loads (every edge at once).
+        assert_eq!(
+            ds.related_all().unwrap(),
+            vec![
+                ("intro".to_string(), "adv".to_string()),
+                ("intro".to_string(), "other-book:page".to_string()),
+            ]
+        );
+        assert_eq!(
+            ds.page_categories_all().unwrap(),
+            vec![("basics".to_string(), "intro".to_string())]
+        );
+
         // Embedded asset + its rewritten link + routing index.
         assert_eq!(
             ds.asset_paths().unwrap(),

@@ -18,38 +18,37 @@ format, and the `khb://` address scheme; the git repo is `KDHelpBook/monorepo`.
   - `wasm/` — reserved (currently a stub). See the browser-SQLite note below.
   - `examples/{en,pl}/` — seed content compiled into the demo docsets.
 - `viewer-ts/` — Vite + TypeScript viewer. In the **browser** it queries `.khb`
-  with **sql.js** (SQLite compiled to wasm, in JS); on **Tauri** it will call the
-  native Rust `core`.
+  with a **custom FTS5-enabled `wa-sqlite`** (one engine for both whole-file and
+  streamed books); on **Tauri** (`viewer-ts/src-tauri/`) it calls the native Rust
+  `core` over IPC (`TauriDocset` ⇄ commands in `src-tauri/src/lib.rs`) — real FTS5,
+  one native source of truth for the future embedded MCP server. See
+  [docs/tauri.md](docs/tauri.md).
 
 ## Browser SQLite (important)
 `rusqlite`'s bundled C SQLite **cannot compile to browser wasm** (`wasm32-unknown-unknown`
-has no libc). So the browser does **not** run the Rust engine: it uses **sql.js**
-and mirrors `core`'s SQL. The Rust `core` remains the single engine for the **CLI
-and Tauri** (native). Consequence: two query implementations (Rust native +
-sql.js in the browser) — keep the SQL in sync with `compiler/core/src/docset.rs`.
+has no libc), so the browser can't run the Rust engine. Instead it runs **one** SQLite
+engine — a **custom FTS5-enabled `wa-sqlite`** (SQLite 3.53 `-DSQLITE_ENABLE_FTS5`,
+Asyncify), vendored under `viewer-ts/vendor/wa-sqlite/` with a reproducible Docker build
+recipe (stock sql.js and the *prebuilt* wa-sqlite both ship **without** FTS5). It mirrors
+`core`'s SQL — keep the two query paths in sync with `compiler/core/src/docset.rs`. The
+Rust `core` stays the engine for **CLI and Tauri** (native). **sql.js has been removed.**
 
-Also: sql.js's default wasm build has **no FTS5**, so the prebuilt `pages_fts`
-index is unusable in the browser build's default engine. The sql.js path searches
-the stored `plain` column in JS instead (`viewer-ts/src/data/docset.ts`
-`search()`); native/Tauri keep real FTS5 (bm25 + stemming).
+Both browser load shapes use this one engine, via a pluggable byte source (`BlockReader`
+in `viewer-ts/src/data/streaming.ts` — the JS mirror of core's `vfs.rs` `RangeReader`):
+- **whole-file** (bundled / uploaded / whole-fetch): `StreamingDocset.openBytes(bytes)`
+  reads an in-memory `Uint8Array` (no network);
+- **streaming** (remote): `StreamingDocset.open(url)` reads over HTTP `Range`, fetching
+  only touched pages (~21 % of a 618 KB file to open + read a page).
 
-Streaming engine (browser): `viewer-ts/src/data/streaming.ts` is an async Range VFS
-on a **custom FTS5-enabled `wa-sqlite`** (SQLite 3.53 `-DSQLITE_ENABLE_FTS5`),
-vendored under `viewer-ts/vendor/wa-sqlite/` with a reproducible Docker build recipe
-(the *prebuilt* `wa-sqlite` ships without FTS5). It opens a remote `.khb` over HTTP
-`Range` and reads only touched pages (~21 % of a 618 KB file to open + read a page),
-with genuine bm25 FTS5 search over the streamed index. **It is wired into the live
-viewer:** `StreamingDocset` (`streaming-docset.ts`) implements the shared **`IDocset`**
-interface — structure (toc/categories/keywords/related) is eager-loaded at open and
-served **synchronously**; only `page`/`asset`/`search` are **async** and stream on
-demand. So `Docset`/`Collection`'s `page`/`asset`/`search` are async (structure stays
-sync), and a streamed book merges into the same TOC/index/search as the sql.js books.
-Opt-in via *File → Open from URL… → Stream*; the engine is **code-split** (loaded only
-when a streamed docset opens), and `Collection.search` normalizes per-book scores so
-FTS5 and the sql.js heuristic merge fairly. `wa-sqlite` 1.1 authors a VFS by extending
-`FacadeVFS` (`jOpen`/`jRead`/…; `async` methods run via Asyncify — and
-`SQLite.Factory(module)` must be called exactly once). See
-[docs/streaming.md](docs/streaming.md). Native/Tauri already stream via
+Either way search is **genuine bm25 FTS5** (with stemming) — uploaded/bundled books get
+the same real search as native, not a JS heuristic. `StreamingDocset` (`streaming-docset.ts`)
+is the sole `IDocset` impl: structure (toc/categories/keywords/related/products) is
+eager-loaded at open and served **synchronously**; only `page`/`asset`/`search` are
+**async**. `Collection.load` code-splits the engine (one chunk, loaded on first docset)
+and normalizes per-book bm25 scores so books merge fairly. Sidecar `.khba` packs open the
+same way (bytes or URL). `wa-sqlite` 1.1 authors a VFS by extending `FacadeVFS`
+(`jOpen`/`jRead`/…; `async` methods run via Asyncify — and `SQLite.Factory(module)` must be
+called exactly once). See [docs/streaming.md](docs/streaming.md). Native/Tauri stream via
 `compiler/core/src/vfs.rs`.
 - `docs/` — `.khb` format spec + compiler manual.
 
@@ -84,7 +83,8 @@ that the TypeScript viewer reached parity; it lives in git history (commit
 
 ## Key decisions & conventions
 - **Rust `core` is the engine for CLI + Tauri.** The browser mirrors its SQL via
-  sql.js (see the browser-SQLite note above). Keep the two query paths in sync.
+  the custom FTS5 `wa-sqlite` (see the browser-SQLite note above). Keep the two
+  query paths in sync.
 - Content is **source-format-agnostic**: the canonical render in `.khb` is HTML +
   plain text (the viewer needs no Markdown). The bundled compiler takes Markdown +
   frontmatter. A producer *may* also fill the **optional, nullable `pages.md`
@@ -141,7 +141,7 @@ that the TypeScript viewer reached parity; it lives in git history (commit
 - Rust: `cd compiler && cargo test` (also `cargo clippy`, `cargo fmt`).
   CLI: `cargo run -p khb-cli -- compile examples/en -o examples.en.khb`.
 - Viewer: `cd viewer-ts && npm install && npm run dev|build|test|typecheck`
-  (browser SQLite via sql.js — no wasm-pack needed).
+  (browser SQLite via the vendored `wa-sqlite` — no wasm-pack needed).
 
 ## References
 - The approved implementation plan lives in `~/.claude/plans/`.

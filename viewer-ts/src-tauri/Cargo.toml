@@ -1,0 +1,29 @@
+[package]
+name = "kdhelpbook-desktop"
+version = "0.1.0"
+description = "KD Help Book — desktop reader"
+edition = "2021"
+rust-version = "1.77"
+
+# Standalone crate: it path-depends on the compiler's `khb-core` but is NOT a member
+# of the `compiler/` Cargo workspace, so this empty table stops cargo from trying to
+# join a parent workspace.
+[workspace]
+
+[lib]
+name = "kdhelpbook_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+anyhow = "1"
+ureq = "2"
+tempfile = "3"
+khb-core = { path = "../../compiler/core" }
