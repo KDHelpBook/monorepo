@@ -281,47 +281,103 @@ fn render_code_groups(html: &str, highlighter: &SyntectAdapter) -> Result<String
     Ok(out)
 }
 
-/// Expand `~~~code-preview … ~~~`: the first inner fence is a command (re-rendered with
-/// syntax highlighting), the second is its output, shown in a terminal-styled panel.
-/// Same opaque-block mechanism as [`render_code_groups`]. Missing either block is a
-/// build error.
+/// Expand `~~~code-preview … ~~~` into a two-block "input → result" widget. Two inner
+/// fences are given separately, and the **skin** (an info-string token) picks how the
+/// second renders:
+/// - default / `terminal` — a command (first fence, syntax-highlighted) and its output
+///   (second fence, verbatim) in a terminal-styled panel.
+/// - `example` — a construct's **source** (first fence, shown as highlighted code) beside
+///   or below its **result** (second fence, rendered as Markdown/markup). `split` lays
+///   the two side by side; `stacked` (the default) keeps the result under the source.
+///
+/// Same opaque-block mechanism as [`render_code_groups`]; a missing second block is a
+/// build error either way.
 fn render_code_preview(html: &str, highlighter: &SyntectAdapter) -> Result<String> {
-    const OPEN: &str = "<pre class=\"syntax-highlighting\"><code class=\"language-code-preview\">";
+    const PRE: &str = "<pre class=\"syntax-highlighting\"><code ";
     const CLOSE: &str = "</code></pre>";
     let mut out = String::with_capacity(html.len());
     let mut i = 0;
-    while let Some(rel) = html[i..].find(OPEN) {
-        let start = i + rel;
-        let inner_start = start + OPEN.len();
-        let Some(end_rel) = html[inner_start..].find(CLOSE) else {
+    while let Some(rel) = html[i..].find(PRE) {
+        let block_start = i + rel;
+        let attrs_start = block_start + PRE.len();
+        let Some(gtrel) = html[attrs_start..].find('>') else {
             break;
         };
-        let raw = unescape_html(&strip_tags(&html[inner_start..inner_start + end_rel]));
-        let blocks = split_group_fences(&raw);
-        if blocks.len() < 2 {
-            anyhow::bail!("`~~~code-preview` needs a command block and an output block");
-        }
-        let (cmd_info, cmd_code) = &blocks[0];
-        let (_out_info, out_code) = &blocks[1];
-        let (lang, _) = parse_code_info(cmd_info);
-        let cmd_md = if lang.is_empty() {
-            format!("```\n{cmd_code}\n```")
-        } else {
-            format!("```{lang}\n{cmd_code}\n```")
+        let inner_start = attrs_start + gtrel + 1;
+        let Some(crel) = html[inner_start..].find(CLOSE) else {
+            break;
         };
-        let cmd_html = markdown::render_html(&cmd_md, Some(highlighter));
-        out.push_str(&html[i..start]);
-        out.push_str(&format!(
-            "<div class=\"code-preview\"><div class=\"code-preview-cmd\">{}</div>\
-             <div class=\"code-terminal\"><div class=\"code-terminal-bar\" aria-hidden=\"true\">\
-             <span></span><span></span><span></span></div><pre class=\"code-terminal-out\">{}</pre></div></div>",
-            cmd_html.trim(),
-            esc(out_code)
-        ));
-        i = inner_start + end_rel + CLOSE.len();
+        let code_attrs = &html[attrs_start..inner_start];
+        let lang = attr_value(code_attrs, "class")
+            .and_then(|c| c.strip_prefix("language-").map(str::to_string));
+        out.push_str(&html[i..block_start]);
+        if lang.as_deref() == Some("code-preview") {
+            // The info-string tokens (skin/layout) ride in `data-meta`.
+            let meta = attr_value(code_attrs, "data-meta").unwrap_or_default();
+            let raw = unescape_html(&strip_tags(&html[inner_start..inner_start + crel]));
+            out.push_str(&build_code_preview(&raw, &meta, highlighter)?);
+        } else {
+            // Any other highlighted block (incl. code-tree/gallery, handled later) is
+            // copied through untouched.
+            out.push_str(&html[block_start..inner_start + crel + CLOSE.len()]);
+        }
+        i = inner_start + crel + CLOSE.len();
     }
     out.push_str(&html[i..]);
     Ok(out)
+}
+
+/// Assemble a code-preview from its two inner fences and info-string flags (see
+/// [`render_code_preview`]). The first fence is always shown as highlighted source; the
+/// `example` skin renders the second as Markdown, the default treats it as terminal text.
+fn build_code_preview(raw: &str, meta: &str, highlighter: &SyntectAdapter) -> Result<String> {
+    let mut example = false;
+    let mut split = false;
+    for tok in meta.split_whitespace() {
+        match tok {
+            "example" => example = true,
+            "terminal" => example = false,
+            "split" => split = true,
+            "stacked" => split = false,
+            _ => {}
+        }
+    }
+    let blocks = split_group_fences(raw);
+    if blocks.len() < 2 {
+        anyhow::bail!("`~~~code-preview` needs a source block and a result block");
+    }
+    let (src_info, src_code) = &blocks[0];
+    let (_res_info, res_code) = &blocks[1];
+    // The first fence is shown as highlighted code, in its declared language.
+    let (lang, _) = parse_code_info(src_info);
+    let src_md = if lang.is_empty() {
+        format!("```\n{src_code}\n```")
+    } else {
+        format!("```{lang}\n{src_code}\n```")
+    };
+    let src_html = markdown::render_html(&src_md, Some(highlighter));
+
+    if example {
+        // The result fence is rendered as Markdown/markup — the point of this skin.
+        let res_html = markdown::render_html(res_code, Some(highlighter));
+        let layout = if split { " code-preview-split" } else { "" };
+        Ok(format!(
+            "<div class=\"code-preview code-preview-example{layout}\">\
+             <div class=\"code-preview-src\">{}</div>\
+             <div class=\"code-preview-result\">{}</div></div>",
+            src_html.trim(),
+            res_html.trim()
+        ))
+    } else {
+        // Default: a command and its terminal output.
+        Ok(format!(
+            "<div class=\"code-preview\"><div class=\"code-preview-cmd\">{}</div>\
+             <div class=\"code-terminal\"><div class=\"code-terminal-bar\" aria-hidden=\"true\">\
+             <span></span><span></span><span></span></div><pre class=\"code-terminal-out\">{}</pre></div></div>",
+            src_html.trim(),
+            esc(res_code)
+        ))
+    }
 }
 
 /// A folder in a [`render_code_tree`] file tree: ordered subfolders + files (each a
@@ -1032,6 +1088,26 @@ mod tests {
 
         // A preview missing the output block fails the build.
         let one = markdown::render_html("~~~code-preview\n```bash\nls\n```\n~~~\n", Some(&h));
+        assert!(render_code_preview(&one, &h).is_err());
+    }
+
+    #[test]
+    fn code_preview_example_skin_renders_the_result_as_markdown() {
+        let h = markdown::highlighter();
+        let md = "~~~code-preview example split\n```md\n> [!NOTE]\n> Hi.\n```\n```md\n> [!NOTE]\n> Hi.\n```\n~~~\n";
+        let html = render_code_preview(&markdown::render_html(md, Some(&h)), &h).unwrap();
+        assert!(!html.contains("language-code-preview")); // opaque block consumed
+        assert!(html.contains("code-preview-example"));
+        assert!(html.contains("code-preview-split")); // layout flag honoured
+                                                      // The source is shown as highlighted markdown…
+        assert!(html.contains("code-preview-src") && html.contains("language-md"));
+        // …and the result is *rendered* (the callout became an alert box), not verbatim.
+        assert!(html.contains("code-preview-result") && html.contains("markdown-alert"));
+        assert!(!html.contains("code-terminal")); // not the terminal skin
+
+        // Still two blocks required — a lone block fails the build.
+        let one =
+            markdown::render_html("~~~code-preview example\n```md\n# Hi\n```\n~~~\n", Some(&h));
         assert!(render_code_preview(&one, &h).is_err());
     }
 
