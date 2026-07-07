@@ -208,8 +208,9 @@ small fully-fetched index for a remote book).
 1. A Range-VFS SQLite loader. **✅ Native + HTTP done** (`core/src/vfs.rs` +
    `Docset::open_reader`; the CLI's `HttpRangeReader` + `kdhelp inspect <url>`).
 2. Remote docsets in the viewer. **✅ Done** — *File → Open from URL…* + persisted
-   remotes, merged into the collection (online / hybrid). The browser still fetches a
-   remote `.khb` **whole** (page-level streaming waits on step 3).
+   remotes, merged into the collection (online / hybrid). Whole-file fetch is the
+   default transport here; the **Stream** checkbox opts into page-level streaming
+   (step 3).
 3. **Browser page-level streaming.** **✅ Built, wired in & verified, with FTS5.**
    `viewer-ts/src/data/streaming.ts` is an async Range VFS on a **custom FTS5-enabled
    `wa-sqlite`** (vendored under `viewer-ts/vendor/wa-sqlite/`); `StreamingDocset`
