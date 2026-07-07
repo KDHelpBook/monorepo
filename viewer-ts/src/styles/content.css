@@ -135,9 +135,14 @@ body {
   line-height: 1.5;
 }
 /* Code block wrapper: owns the block's margin + hosts the filename bar and Copy
-   button. The <pre> keeps its box (see above), sans its own vertical margin. */
+   button. The <pre> keeps its box (see above), sans its own vertical margin.
+   `flow-root` makes the wrapper narrow beside floats (the "On this page" box)
+   just like the overflowing <pre> does — otherwise the wrapper spans the full
+   width underneath the float and the absolutely-anchored Copy button escapes
+   the visible block. */
 .content .code-block {
   position: relative;
+  display: flow-root;
   margin: 0.8em 0;
 }
 .content .code-block pre {
