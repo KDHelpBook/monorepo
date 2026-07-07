@@ -101,6 +101,10 @@ function collapseToggle(e){var b=e.target&&e.target.closest&&e.target.closest('b
 function groupTab(e){var b=e.target&&e.target.closest&&e.target.closest('button[data-group-tab]');if(!b)return false;e.preventDefault();
  var g=b.closest('.code-group');if(g){var i=b.getAttribute('data-group-tab');
  var el=g.querySelectorAll('[data-group-tab],[data-group-panel]');for(var k=0;k<el.length;k++){var n=el[k];var v=n.getAttribute('data-group-tab');if(v===null)v=n.getAttribute('data-group-panel');n.classList.toggle('active',v===i)}}return true}
+// Switch a CodeTree file: activate the clicked file + its matching code panel by index.
+function treeFile(e){var f=e.target&&e.target.closest&&e.target.closest('[data-tree-file]');if(!f)return false;e.preventDefault();
+ var t=f.closest('.code-tree');if(t){var i=f.getAttribute('data-tree-file');
+ var el=t.querySelectorAll('[data-tree-file],[data-tree-panel]');for(var k=0;k<el.length;k++){var n=el[k];var v=n.getAttribute('data-tree-file');if(v===null)v=n.getAttribute('data-tree-panel');n.classList.toggle('active',v===i)}}return true}
 // A tap/click on a standalone content image (not a linked one) asks the app to
 // open its zoomable lightbox. Only our resolved inline assets (data:image/…) —
 // never an arbitrary URL — so the app can trust the source it gets.
@@ -127,7 +131,7 @@ function mathZoom(e){var t=e.target;
  var de=document.documentElement;mathPrevOverflow=de.style.overflow;
  mathOv=document.createElement('div');mathOv.className='math-overlay';mathOv.appendChild(m.cloneNode(true));
  addEventListener('keydown',mathKey);de.style.overflow='hidden';document.body.appendChild(mathOv);return true}
-addEventListener('click',function(e){if(copyBtn(e))return;if(collapseToggle(e))return;if(groupTab(e))return;if(mathZoom(e))return;if(img(e))return;link(e,false)},true);
+addEventListener('click',function(e){if(copyBtn(e))return;if(collapseToggle(e))return;if(groupTab(e))return;if(treeFile(e))return;if(mathZoom(e))return;if(img(e))return;link(e,false)},true);
 addEventListener('auxclick',function(e){if(e.button===1)link(e,true)},true);
 // Pull-to-refresh: a downward drag started at the top of the page posts a 'pull'
 // to the app (the reading content lives in this sandboxed frame, so the app can't
