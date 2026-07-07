@@ -82,26 +82,26 @@ npm/pnpm/yarn or the same idea in several languages.
 `````md
 ~~~code-group
 ```bash [npm]
-npm install kdhelp
+npm install khb
 ```
 ```bash [pnpm]
-pnpm add kdhelp
+pnpm add khb
 ```
 ```bash [yarn]
-yarn add kdhelp
+yarn add khb
 ```
 ~~~
 `````
 
 ~~~code-group
 ```bash [npm]
-npm install kdhelp
+npm install khb
 ```
 ```bash [pnpm]
-pnpm add kdhelp
+pnpm add khb
 ```
 ```bash [yarn]
-yarn add kdhelp
+yarn add khb
 ```
 ~~~
 

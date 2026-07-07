@@ -52,7 +52,7 @@ Streaming needs a **SQLite VFS over byte ranges**:
   ```
 
   A `FileRangeReader` ships for local/streaming use and tests. The **HTTP reader**
-  lives in the CLI (`kdhelp-cli`'s `HttpRangeReader`, a ~30-line `ureq` impl:
+  lives in the CLI (`khb-cli`'s `HttpRangeReader`, a ~30-line `ureq` impl:
   `read_at` → `GET` with a `Range:` header; `size` from `Content-Range`) — kept out
   of `core`'s dependencies so each consumer picks its own client.
   **`khb inspect <url>`** opens a remote `.khb` this way; e.g. it reads a docset's

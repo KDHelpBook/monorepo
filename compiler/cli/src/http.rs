@@ -6,7 +6,7 @@ use std::io::Read;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use anyhow::{bail, Context, Result};
-use kdhelp_core::RangeReader;
+use khb_core::RangeReader;
 
 /// Reads bytes from an HTTP(S) URL via `Range` requests. Requires a server that
 /// honours ranges (returns `206 Partial Content`) — any static host does.
@@ -82,7 +82,7 @@ mod tests {
     use std::net::TcpListener;
     use std::sync::Arc;
 
-    use kdhelp_core::{build, Docset, RenderedDocset, RenderedPage, TocNode};
+    use khb_core::{build, Docset, RenderedDocset, RenderedPage, TocNode};
 
     // A minimal HTTP/1.1 server that answers a `Range: bytes=a-b` GET with 206 +
     // the requested slice. One request per connection (Connection: close).

@@ -60,7 +60,7 @@ jobs:
         if: inputs.ref != ''
         uses: actions/download-artifact@v8
         with:
-          name: kdhelp-x86_64-unknown-linux-gnu
+          name: khb-x86_64-unknown-linux-gnu
           path: cli-dl
       - name: Fetch the viewer from this run
         if: inputs.ref != ''
@@ -82,14 +82,14 @@ jobs:
           fi
           if ! ls cli-dl/*.tar.gz >/dev/null 2>&1 && [[ -n "$RUN" ]]; then
             gh run download "$RUN" -R "${{ github.repository }}" \
-              -n kdhelp-x86_64-unknown-linux-gnu -D cli-dl || true
+              -n khb-x86_64-unknown-linux-gnu -D cli-dl || true
           fi
           if [[ ! -e viewer-dist/index.html && -n "$RUN" ]]; then
             gh run download "$RUN" -R "${{ github.repository }}" \
               -n viewer-dist -D viewer-dist || true
           fi
           ls cli-dl/*.tar.gz >/dev/null 2>&1 \
-            || { echo "::error::no kdhelp CLI artifact found — run build.yml first"; exit 1; }
+            || { echo "::error::no khb CLI artifact found — run build.yml first"; exit 1; }
           [[ -e viewer-dist/index.html ]] \
             || { echo "::error::no viewer-dist artifact found — run build.yml first"; exit 1; }
           mkdir -p cli

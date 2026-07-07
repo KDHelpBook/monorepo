@@ -31,7 +31,7 @@ pub trait RangeReader: Send + Sync {
 }
 
 /// The registered VFS name.
-pub const VFS_NAME: &str = "kdhelp-range";
+pub const VFS_NAME: &str = "khb-range";
 /// Fetch/cache granularity — reads are coalesced to this many bytes.
 const BLOCK: u64 = 65536;
 
@@ -45,7 +45,7 @@ static COUNTER: AtomicU64 = AtomicU64::new(0);
 /// is installed on first use. [`Docset::open_reader`] wraps this.
 pub fn register(reader: Arc<dyn RangeReader>) -> String {
     ensure_vfs();
-    let name = format!("kdhelp-range-{}", COUNTER.fetch_add(1, Ordering::Relaxed));
+    let name = format!("khb-range-{}", COUNTER.fetch_add(1, Ordering::Relaxed));
     registry().lock().unwrap().insert(name.clone(), reader);
     name
 }

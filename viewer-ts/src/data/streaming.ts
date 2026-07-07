@@ -223,7 +223,7 @@ export class StreamingDb {
     blockSize = DEFAULT_BLOCK,
   ): Promise<StreamingDb> {
     const { module, sqlite3 } = await sqliteApi();
-    const vfsName = `kdhelp-range-${vfsSeq++}`;
+    const vfsName = `khb-range-${vfsSeq++}`;
     const vfs = await RangeVFS.create(vfsName, module, url, blockSize);
     // Register + open touch the shared wasm runtime, so run them on the queue too.
     const db = await serialize(async () => {

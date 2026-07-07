@@ -661,13 +661,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "47f142fe24a9c9944451e8349de0a56af5f3e7226dc46f3ed4d4ecc0b85af75e"
 
 [[package]]
-name = "kdhelp-cli"
+name = "khb-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
  "flate2",
- "kdhelp-core",
+ "khb-core",
  "serde",
  "serde_json",
  "tempfile",
@@ -676,7 +676,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "kdhelp-core"
+name = "khb-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -693,10 +693,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "kdhelp-wasm"
+name = "khb-wasm"
 version = "0.1.0"
 dependencies = [
- "kdhelp-core",
+ "khb-core",
 ]
 
 [[package]]

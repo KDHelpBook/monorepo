@@ -4,7 +4,7 @@ Build it from the workspace:
 
 ```bash
 cd compiler
-cargo build --release -p kdhelp-cli   # target/release/khb
+cargo build --release -p khb-cli   # target/release/khb
 ```
 
 ## Authoring a source directory
@@ -70,7 +70,7 @@ the viewer injects into the content frame — which lets code blocks follow the 
 theme (a light theme by default, with a dormant `[data-theme="dark"]` block ready for
 dark mode) instead of one theme being baked into every `.khb`. The theme CSS is
 generated from syntect so it always matches the emitted classes; regenerate it with
-`cargo run -p kdhelp-core --example syntax-css > viewer-ts/src/styles/syntax.css`. The
+`cargo run -p khb-core --example syntax-css > viewer-ts/src/styles/syntax.css`. The
 search text (`plain`) is taken from an unhighlighted render, so the per-token spans
 never leak into full-text search.
 

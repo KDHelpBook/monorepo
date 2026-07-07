@@ -1,8 +1,8 @@
-# kdhelp — Rust workspace (the data engine)
+# khb — Rust workspace (KD Help Book) (the data engine)
 #
 # One shared `core` crate compiles to native (CLI / Tauri) AND wasm (browser),
 # so the docset format, queries, full-text search and streaming logic live in a
-# single place. `cli` is the `kdhelp` command; `wasm` exposes `core` to the browser.
+# single place. `cli` is the `khb` command; `wasm` exposes `core` to the browser.
 [workspace]
 resolver = "2"
 members = ["core", "cli", "wasm"]
@@ -12,7 +12,7 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT"
 authors = ["Krystian Duma"]
-repository = "https://github.com/kduma/kdhelp"
+repository = "https://github.com/KDHelpBook/monorepo"
 
 [workspace.dependencies]
 anyhow = "1"

@@ -2,7 +2,7 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   // Relative asset URLs so the build works whether it's served from a domain root
-  // or a GitHub Pages project subpath (e.g. /kdhelp/).
+  // or a GitHub Pages project subpath (e.g. /khb/).
   base: "./",
   // A per-build stamp versioning the config.json/docsets.json fetches: stable
   // within a deploy (HTTP caching keeps working), different across deploys (a

@@ -9,7 +9,7 @@ SVG + PNG graphics) to make page-level streaming savings visible.
 Usage:
     python3 gen-lorem.py <out-dir>
 Then:
-    cargo run -p kdhelp-cli -- compile <out-dir> -o lorem-en.khb
+    cargo run -p khb-cli -- compile <out-dir> -o lorem-en.khb
 """
 import os
 import random

@@ -29,7 +29,7 @@ pub fn highlighter() -> SyntectAdapter {
 /// The stylesheet that colours the class-tagged code spans: the light theme by
 /// default, and the dark theme under `[data-theme="dark"]` (dormant until the viewer
 /// sets that hook). Generated from syntect so it always matches the classes the
-/// [`highlighter`] emits. Regenerate with `cargo run -p kdhelp-core --example syntax-css`.
+/// [`highlighter`] emits. Regenerate with `cargo run -p khb-core --example syntax-css`.
 pub fn syntax_theme_css() -> String {
     use syntect::highlighting::ThemeSet;
     use syntect::html::{css_for_theme_with_class_style, ClassStyle};

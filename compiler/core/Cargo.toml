@@ -1,6 +1,6 @@
 [package]
-name = "kdhelp-core"
-description = "kdhelp data engine: .khb docset format, queries, full-text search"
+name = "khb-core"
+description = "khb data engine: .khb docset format, queries, full-text search"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

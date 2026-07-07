@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
-use kdhelp_core::{binary, build, render, source, Docset, RangeReader};
+use khb_core::{binary, build, render, source, Docset, RangeReader};
 
 use crate::http::HttpRangeReader;
 use crate::publish::{pack, patch, PackOptions};

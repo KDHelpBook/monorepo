@@ -85,7 +85,7 @@ describe("font size persistence", () => {
   it("rejects out-of-range or non-numeric stored values", () => {
     saveFontSize(999);
     expect(loadFontSize(13)).toBe(13);
-    localStorage.setItem("kdhelp.fontSize", "huge");
+    localStorage.setItem("khb.fontSize", "huge");
     expect(loadFontSize(12)).toBe(12);
   });
 });

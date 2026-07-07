@@ -1,4 +1,4 @@
-//! kdhelp-core — the shared data engine.
+//! khb-core — the shared data engine.
 //!
 //! This crate owns everything about the `.khb` docset format: the SQLite schema,
 //! the source model, Markdown rendering, the writer, and the `Docset`/`Collection`
@@ -30,7 +30,7 @@ pub const FORMAT_VERSION: u32 = 5;
 
 /// The crate version, surfaced in a docset's `meta.generator`.
 pub fn generator() -> String {
-    format!("kdhelp-core {}", env!("CARGO_PKG_VERSION"))
+    format!("khb-core {}", env!("CARGO_PKG_VERSION"))
 }
 
 #[cfg(test)]
@@ -350,7 +350,7 @@ mod tests {
 
     #[test]
     fn generator_reports_crate_version() {
-        assert!(generator().starts_with("kdhelp-core "));
+        assert!(generator().starts_with("khb-core "));
     }
 
     #[test]

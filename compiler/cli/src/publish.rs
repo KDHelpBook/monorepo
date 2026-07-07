@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use flate2::{write::GzEncoder, Compression};
-use kdhelp_core::{build, Attachments, Docset};
+use khb_core::{build, Attachments, Docset};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
@@ -127,7 +127,7 @@ fn write_llms(out: &Path, docsets: &[PathBuf]) -> Result<()> {
         .map(|p| Docset::open(p).with_context(|| format!("opening {}", p.display())))
         .collect::<Result<Vec<_>>>()?;
     let refs: Vec<&Docset> = opened.iter().collect();
-    let export = kdhelp_core::llms::export(&refs, None)?;
+    let export = khb_core::llms::export(&refs, None)?;
 
     fs::write(out.join("llms.txt"), &export.index)?;
     fs::write(out.join("llms-full.txt"), &export.full)?;

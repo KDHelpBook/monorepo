@@ -3,13 +3,13 @@
 // storage is unavailable they degrade to no-ops / empty defaults.
 
 const K = {
-  favorites: "kdhelp.favorites",
-  expanded: "kdhelp.expanded",
-  tabs: "kdhelp.tabs",
-  fontSize: "kdhelp.fontSize",
-  docsetLangs: "kdhelp.docsetLangs",
-  docsetVersions: "kdhelp.docsetVersions",
-  seenVersions: "kdhelp.seenVersions",
+  favorites: "khb.favorites",
+  expanded: "khb.expanded",
+  tabs: "khb.tabs",
+  fontSize: "khb.fontSize",
+  docsetLangs: "khb.docsetLangs",
+  docsetVersions: "khb.docsetVersions",
+  seenVersions: "khb.seenVersions",
 } as const;
 
 /** Read a `{ key: string }` map from storage, dropping non-string values. */

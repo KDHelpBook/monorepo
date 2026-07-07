@@ -2,8 +2,8 @@
 
 **KD Help Book** — a documentation reader with the look & feel of a **classic desktop
 help viewer** (an early-2010s IDE aesthetic). Period-authentic chrome, modern engine.
-(`kdhelp` is the repo/codebase name; the CLI binary is **`khb`**, and a compiled docset
-is a **`.khb`** — a "KD Help Book".)
+(The CLI binary is **`khb`**, the crates are `khb-core`/`khb-cli`/`khb-wasm`, and a
+compiled docset is a **`.khb`** — a "KD Help Book". Repo: `KDHelpBook/monorepo`.)
 
 Write your docs, compile them into a self-contained **`.khb`** docset (a SQLite
 database with a prebuilt full-text index), and read them in a fast web viewer
@@ -16,7 +16,7 @@ This is a monorepo with three parts:
 
 | Path | What it is |
 |------|------------|
-| [`compiler/`](compiler/) | Rust **Cargo workspace** — the data engine. Crates: `core` (format, queries, SQLite + FTS5, streaming VFS, `.khbb` converter — compiled to **native** *and* **wasm**), `cli` (the `kdhelp` command), `wasm` (browser bindings). |
+| [`compiler/`](compiler/) | Rust **Cargo workspace** — the data engine. Crates: `core` (format, queries, SQLite + FTS5, streaming VFS, `.khbb` converter — compiled to **native** *and* **wasm**), `cli` (the `khb` command), `wasm` (browser bindings). |
 | [`viewer-ts/`](viewer-ts/) | Vite + TypeScript viewer — **UI only**, backed by the wasm `core`. |
 | [`docs/`](docs/) | The `.khb` format specification and the compiler manual. |
 
@@ -46,7 +46,7 @@ see [`docs/desktop.md`](docs/desktop.md).
 ```bash
 # 1. Build the compiler and produce the demo docsets
 cd compiler
-cargo run -p kdhelp-cli -- compile examples/en -o examples.en.khb
+cargo run -p khb-cli -- compile examples/en -o examples.en.khb
 
 # 2. Run the viewer (dev)
 cd ../viewer-ts

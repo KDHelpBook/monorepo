@@ -1,6 +1,6 @@
-// kdhelp service worker — best-effort offline support (runtime caching).
+// khb service worker — best-effort offline support (runtime caching).
 // Registered only in the built app when config.pwa is true.
-const CACHE = "kdhelp-v2";
+const CACHE = "khb-v2";
 
 // Don't auto-activate: a fresh install with no controller activates immediately,
 // but an *update* (a controller already runs) parks in "waiting" so the app can
@@ -12,7 +12,7 @@ self.addEventListener("activate", (event) =>
   event.waitUntil(
     Promise.all([
       self.clients.claim(),
-      // Old cache generations (e.g. kdhelp-v1, which held config.json
+      // Old cache generations (e.g. khb-v1, which held config.json
       // cache-first and could pin a stale locked/unlocked state) are dropped.
       caches
         .keys()

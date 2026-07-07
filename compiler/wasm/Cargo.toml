@@ -1,6 +1,6 @@
 [package]
-name = "kdhelp-wasm"
-description = "wasm-bindgen bindings exposing kdhelp-core to the browser viewer"
+name = "khb-wasm"
+description = "wasm-bindgen bindings exposing khb-core to the browser viewer"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -12,4 +12,4 @@ repository.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-kdhelp-core = { path = "../core" }
+khb-core = { path = "../core" }

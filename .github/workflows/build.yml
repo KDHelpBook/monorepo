@@ -1,6 +1,6 @@
 name: Build
 
-# Builds everything publishable: prebuilt `kdhelp` CLI binaries for the
+# Builds everything publishable: prebuilt `khb` CLI binaries for the
 # popular platforms, the viewer dist, and the project documentation
 # (docs/markdown) compiled to .khb. Runs standalone on push / PR / manual
 # dispatch; when called by release.yml (release_tag set) it builds from the
@@ -55,7 +55,7 @@ jobs:
           key: ${{ matrix.target }}
 
       - name: Build
-        run: cargo build --release -p kdhelp-cli --target ${{ matrix.target }}
+        run: cargo build --release -p khb-cli --target ${{ matrix.target }}
         working-directory: compiler
 
       - name: Package (tar.gz)
@@ -63,7 +63,7 @@ jobs:
         shell: bash
         run: |
           VERSION=$(sed -n 's/^version = "\(.*\)"$/\1/p' compiler/Cargo.toml | head -n1)
-          NAME="kdhelp-v${VERSION}-${{ matrix.target }}"
+          NAME="khb-v${VERSION}-${{ matrix.target }}"
           mkdir "$NAME"
           cp "compiler/target/${{ matrix.target }}/release/khb" README.md LICENSE "$NAME/"
           tar czf "$NAME.tar.gz" "$NAME"
@@ -73,17 +73,17 @@ jobs:
         shell: pwsh
         run: |
           $version = (Select-String -Path compiler/Cargo.toml -Pattern '^version = "(.*)"$').Matches[0].Groups[1].Value
-          $name = "kdhelp-v$version-${{ matrix.target }}"
+          $name = "khb-v$version-${{ matrix.target }}"
           New-Item -ItemType Directory -Path $name | Out-Null
           Copy-Item "compiler/target/${{ matrix.target }}/release/khb.exe", README.md, LICENSE $name
           Compress-Archive -Path $name -DestinationPath "$name.zip"
 
       - uses: actions/upload-artifact@v7
         with:
-          name: kdhelp-${{ matrix.target }}
+          name: khb-${{ matrix.target }}
           path: |
-            kdhelp-v*-${{ matrix.target }}.tar.gz
-            kdhelp-v*-${{ matrix.target }}.zip
+            khb-v*-${{ matrix.target }}.tar.gz
+            khb-v*-${{ matrix.target }}.zip
           if-no-files-found: error
 
   viewer:
@@ -126,7 +126,7 @@ jobs:
           workspaces: compiler
 
       - name: Build the CLI
-        run: cargo build --release -p kdhelp-cli
+        run: cargo build --release -p khb-cli
         working-directory: compiler
 
       - name: Compile docs/markdown
@@ -163,7 +163,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          pattern: kdhelp-*
+          pattern: khb-*
           path: assets
           merge-multiple: true
       - uses: actions/download-artifact@v8
@@ -179,7 +179,7 @@ jobs:
           path: viewer-dist
       - name: Package the viewer
         run: |
-          NAME="kdhelp-viewer-${{ inputs.release_tag }}"
+          NAME="khb-viewer-${{ inputs.release_tag }}"
           mv viewer-dist "$NAME"
           tar czf "assets/${NAME}.tar.gz" "$NAME"
       - name: Upload to the release

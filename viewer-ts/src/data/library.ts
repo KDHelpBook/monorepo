@@ -2,7 +2,7 @@
 // All calls are best-effort: if IndexedDB is unavailable they resolve to no-ops
 // so the bundled docsets still work.
 
-const DB_NAME = "kdhelp";
+const DB_NAME = "khb";
 const STORE = "docsets";
 const VERSION = 1;
 
@@ -76,7 +76,7 @@ export async function docsetsByLanguage(
 // unlike uploaded docsets (bytes cached in IndexedDB). Kept in localStorage.
 // `streaming` remotes are opened page-by-page over HTTP Range (never fetched
 // whole). Legacy entries were bare URL strings (= whole-fetch); still accepted.
-const REMOTES_KEY = "kdhelp.remotes";
+const REMOTES_KEY = "khb.remotes";
 
 export interface RemoteEntry {
   url: string;
@@ -179,7 +179,7 @@ export function removeRemote(url: string): void {
 // Extra `.khba` pack URLs the reader attached to a docset to supply its missing
 // assets (the pack `asset_index` routes to but that wasn't shipped). Keyed by
 // docset id, applied on load alongside the docset's own packs. localStorage.
-const EXTRA_PACKS_KEY = "kdhelp.extraPacks";
+const EXTRA_PACKS_KEY = "khb.extraPacks";
 
 export function loadExtraPacks(): Record<string, string[]> {
   try {

@@ -1,10 +1,11 @@
-# kdhelp — guide for Claude Code
+# KD Help Book — guide for Claude Code
 
 **KD Help Book** (the app is the *KD Help Book Viewer*) is a documentation reader with
 the look & feel of a **classic desktop help viewer** (early-2010s IDE aesthetic), backed
 by a modern toolchain. Content is compiled into a self-contained **`.khb`** docset
-("KD Help Book"; a SQLite database) and rendered by a TypeScript viewer. `kdhelp` remains
-the repo/crate name and codebase shorthand; the CLI binary is **`khb`**.
+("KD Help Book"; a SQLite database) and rendered by a TypeScript viewer. Everything uses
+**khb** now — the crates (`khb-core`/`khb-cli`/`khb-wasm`), the CLI binary, the `.khb`
+format, and the `khb://` address scheme; the git repo is `KDHelpBook/monorepo`.
 
 ## Monorepo layout
 - `compiler/` — Rust **Cargo workspace** (the native data engine):
@@ -138,7 +139,7 @@ that the TypeScript viewer reached parity; it lives in git history (commit
 
 ## Build & test
 - Rust: `cd compiler && cargo test` (also `cargo clippy`, `cargo fmt`).
-  CLI: `cargo run -p kdhelp-cli -- compile examples/en -o examples.en.khb`.
+  CLI: `cargo run -p khb-cli -- compile examples/en -o examples.en.khb`.
 - Viewer: `cd viewer-ts && npm install && npm run dev|build|test|typecheck`
   (browser SQLite via sql.js — no wasm-pack needed).
 

@@ -73,7 +73,7 @@ const esc = (s: string): string =>
 /**
  * Trusted bridge injected into the sandboxed content frame. It is the *only*
  * channel across the isolation boundary: it posts link intents to the app
- * (`{t:'kdhelp', …}`) and applies display-only messages from it (`kdhelp-app`).
+ * (`{t:'khb', …}`) and applies display-only messages from it (`khb-app`).
  * It runs alongside any (contained, origin-isolated) untrusted content JS, so the
  * app side validates every inbound message by source and shape.
  */
@@ -82,8 +82,8 @@ var P=parent;
 function post(m){try{P.postMessage(m,'*')}catch(e){}}
 function link(e,mid){var a=e.target&&e.target.closest&&e.target.closest('a');if(!a)return;
  if(a.hasAttribute('data-anchor')){e.preventDefault();var t=document.getElementById(a.getAttribute('data-anchor'));if(t)t.scrollIntoView({behavior:'smooth',block:'start'})}
- else if(a.hasAttribute('data-target')){e.preventDefault();post({t:'kdhelp',a:'open',id:a.getAttribute('data-target'),newTab:!!(mid||e.ctrlKey||e.metaKey)})}
- else if(a.hasAttribute('data-ext')){e.preventDefault();post({t:'kdhelp',a:'ext',url:a.getAttribute('data-ext')})}}
+ else if(a.hasAttribute('data-target')){e.preventDefault();post({t:'khb',a:'open',id:a.getAttribute('data-target'),newTab:!!(mid||e.ctrlKey||e.metaKey)})}
+ else if(a.hasAttribute('data-ext')){e.preventDefault();post({t:'khb',a:'ext',url:a.getAttribute('data-ext')})}}
 // Copy a code block. execCommand runs inside this frame's click gesture, so it works
 // even though the sandbox (no allow-same-origin) blocks the async clipboard API.
 function copyBtn(e){var b=e.target&&e.target.closest&&e.target.closest('button[data-copy]');if(!b)return false;e.preventDefault();
@@ -112,7 +112,7 @@ function img(e){var el=e.target;if(!el||el.tagName!=='IMG')return false;
  if(el.closest&&el.closest('a'))return false;
  var src=el.currentSrc||el.getAttribute('src')||'';
  if(src.indexOf('data:image/')!==0)return false;
- e.preventDefault();post({t:'kdhelp',a:'img',src:src,alt:el.getAttribute('alt')||''});return true}
+ e.preventDefault();post({t:'khb',a:'img',src:src,alt:el.getAttribute('alt')||''});return true}
 // A tap/click on a display equation enlarges it in an in-frame overlay (the math
 // "lightbox"); a click anywhere on the overlay — the enlarged formula OR its backdrop
 // — or Esc dismisses it. Handled here, not by the app: we never pass content markup to
@@ -139,9 +139,9 @@ addEventListener('auxclick',function(e){if(e.button===1)link(e,true)},true);
 var py=0,pull=false;
 function stop(){return (document.scrollingElement||document.documentElement).scrollTop}
 addEventListener('touchstart',function(e){pull=stop()<=0;py=e.touches[0].clientY},{passive:true});
-addEventListener('touchmove',function(e){if(pull&&e.touches[0].clientY-py>72){pull=false;post({t:'kdhelp',a:'pull'})}},{passive:true});
+addEventListener('touchmove',function(e){if(pull&&e.touches[0].clientY-py>72){pull=false;post({t:'khb',a:'pull'})}},{passive:true});
 addEventListener('touchend',function(){pull=false},{passive:true});
-addEventListener('message',function(e){var d=e.data;if(!d||d.t!=='kdhelp-app')return;
+addEventListener('message',function(e){var d=e.data;if(!d||d.t!=='khb-app')return;
  if(d.a==='font'&&typeof d.size==='number'){document.documentElement.style.setProperty('--content-size',d.size+'px')}});
 function ready(){var m=document.querySelector('mark.hl');if(m)m.scrollIntoView({block:'center'})}
 if(document.readyState!=='loading')ready();else addEventListener('DOMContentLoaded',ready);
@@ -156,7 +156,7 @@ const FILE_ICON =
   '<path d="M9 1.8V5.5h3.7" fill="none" stroke="currentColor" stroke-width="1.2" ' +
   'stroke-linejoin="round"/></svg>';
 
-const LANG_KEY = "kdhelp.lang";
+const LANG_KEY = "khb.lang";
 
 function readSavedLang(): string | null {
   try {
@@ -2472,7 +2472,7 @@ function start(
   // Live font size — a display-only message to the frame (no srcdoc rebuild).
   const setFrameFont = (): void => {
     frame.contentWindow?.postMessage(
-      { t: "kdhelp-app", a: "font", size: fontSize },
+      { t: "khb-app", a: "font", size: fontSize },
       "*",
     );
   };
@@ -2639,7 +2639,7 @@ function start(
       alt?: unknown;
       newTab?: unknown;
     };
-    if (!d || d.t !== "kdhelp") return;
+    if (!d || d.t !== "khb") return;
     if (d.a === "open" && typeof d.id === "string") {
       openPage(d.id, d.newTab === true);
     } else if (

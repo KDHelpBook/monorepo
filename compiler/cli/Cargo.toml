@@ -1,5 +1,5 @@
 [package]
-name = "kdhelp-cli"
+name = "khb-cli"
 description = "KD Help Book command-line tool (khb): compile / pack / patch / convert"
 version.workspace = true
 edition.workspace = true
@@ -12,7 +12,7 @@ name = "khb"
 path = "src/main.rs"
 
 [dependencies]
-kdhelp-core = { path = "../core" }
+khb-core = { path = "../core" }
 anyhow.workspace = true
 serde.workspace = true
 clap = { version = "4", features = ["derive"] }
