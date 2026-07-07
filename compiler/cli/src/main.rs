@@ -233,7 +233,8 @@ fn compile(src: &Path, out: &Path, format: Format, assets: AssetsMode) -> Result
         docset.language.clone(),
         docset.pages.len(),
     );
-    let mut rendered = render::render(&docset);
+    let mut rendered =
+        render::render(&docset).with_context(|| format!("rendering {}", src.display()))?;
     match format {
         Format::Khb => {
             if assets == AssetsMode::Sidecar && !rendered.assets.is_empty() {

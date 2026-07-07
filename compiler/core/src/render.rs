@@ -2,24 +2,29 @@
 //!
 //! This is where Markdown is turned into HTML, **once**, at build time.
 
+use anyhow::{Context, Result};
+
 use crate::model::{RenderedDocset, RenderedPage, SourceDocset};
 use crate::{assets, markdown};
 
-/// Render every page's Markdown to HTML and derive its plain-text form.
-pub fn render(src: &SourceDocset) -> RenderedDocset {
+/// Render every page's Markdown to HTML and derive its plain-text form. Fails if a
+/// page contains math the LaTeX→MathML converter can't parse (a build error beats a
+/// silently broken formula).
+pub fn render(src: &SourceDocset) -> Result<RenderedDocset> {
     // One highlighter for the whole docset — building it loads syntect's syntax +
     // theme sets, which we don't want to repeat per page.
     let highlighter = markdown::highlighter();
     let pages = src
         .pages
         .iter()
-        .map(|p| {
+        .map(|p| -> Result<RenderedPage> {
             // Rewrite `assets/…` image/link targets to the `asset:` scheme, then
             // render `$…$` LaTeX spans to MathML.
             let rendered = render_math(&assets::rewrite_asset_urls(&markdown::render_html(
                 &p.markdown,
                 Some(&highlighter),
-            )));
+            )))
+            .with_context(|| format!("page `{}`", p.id))?;
             // Prepend an "On this page" nav built from the heading anchors, honouring
             // the page's `toc` frontmatter (auto when unset). It floats top-right, so
             // sitting before the H1 keeps the viewer's subtitle handling intact.
@@ -30,7 +35,7 @@ pub fn render(src: &SourceDocset) -> RenderedDocset {
             // Plain text comes from an *unhighlighted* render — syntect's per-token
             // spans would otherwise splatter the search text with stray spaces.
             let plain = markdown::html_to_plain(&markdown::render_html(&p.markdown, None));
-            RenderedPage {
+            Ok(RenderedPage {
                 id: p.id.clone(),
                 title: p.title.clone(),
                 body_html,
@@ -40,11 +45,11 @@ pub fn render(src: &SourceDocset) -> RenderedDocset {
                 related: p.related.clone(),
                 // Carry the clean source Markdown (post-frontmatter) for llms.txt / MCP.
                 md: Some(p.markdown.clone()),
-            }
+            })
         })
-        .collect();
+        .collect::<Result<Vec<_>>>()?;
 
-    RenderedDocset {
+    Ok(RenderedDocset {
         id: src.id.clone(),
         title: src.title.clone(),
         version: src.version.clone(),
@@ -56,7 +61,7 @@ pub fn render(src: &SourceDocset) -> RenderedDocset {
         toc: src.toc.clone(),
         categories: src.categories.clone(),
         assets: src.assets.clone(),
-    }
+    })
 }
 
 /// Build the "On this page" nav from a rendered page's heading anchors, or `None`.
@@ -138,9 +143,9 @@ fn attr_value(html: &str, attr: &str) -> Option<String> {
 }
 
 /// Replace comrak's math spans (`<span data-math-style="…">LaTeX</span>`) with native
-/// MathML, rendered at build time so the viewer needs no KaTeX/MathJax. A formula
-/// comrak's converter can't parse is left as its raw-LaTeX span.
-fn render_math(html: &str) -> String {
+/// MathML, rendered at build time so the viewer needs no KaTeX/MathJax. Fails on a
+/// formula the converter can't parse — a build error beats a silently broken formula.
+fn render_math(html: &str) -> Result<String> {
     use latex2mathml::{latex_to_mathml, DisplayStyle};
     const MARK: &str = "<span data-math-style=\"";
     const CLOSE: &str = "</span>";
@@ -163,15 +168,14 @@ fn render_math(html: &str) -> String {
         } else {
             DisplayStyle::Inline
         };
+        let mathml = latex_to_mathml(&latex, display)
+            .map_err(|e| anyhow::anyhow!("invalid math `{latex}`: {e}"))?;
         out.push_str(&html[i..start]);
-        match latex_to_mathml(&latex, display) {
-            Ok(mathml) => out.push_str(&mathml),
-            Err(_) => out.push_str(&html[start..latex_start + end_rel + CLOSE.len()]),
-        }
+        out.push_str(&mathml);
         i = latex_start + end_rel + CLOSE.len();
     }
     out.push_str(&html[i..]);
-    out
+    Ok(out)
 }
 
 /// Decode the HTML entities comrak escapes into a math span's LaTeX literal.
@@ -215,12 +219,17 @@ mod tests {
     fn renders_math_to_mathml() {
         let html = "<p>x <span data-math-style=\"inline\">a^2</span> y</p>\
                     <p><span data-math-style=\"display\">a+b</span></p>";
-        let out = render_math(html);
+        let out = render_math(html).unwrap();
         assert!(out.contains("<math") && out.contains("display=\"inline\""));
         assert!(out.contains("display=\"block\""));
         assert!(!out.contains("data-math-style")); // spans replaced
         assert!(out.contains("<p>x ") && out.contains(" y</p>")); // surrounding text kept
         assert!(out.contains("<msup>")); // a^2 → superscript
+
+        // Unparseable LaTeX (here an unclosed environment) fails the build rather
+        // than silently degrading to raw text.
+        let bad = "<span data-math-style=\"inline\">\\begin{matrix}</span>";
+        assert!(render_math(bad).is_err());
     }
 
     #[test]

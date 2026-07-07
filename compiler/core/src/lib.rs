@@ -93,7 +93,7 @@ mod tests {
     fn build_and_query_roundtrip() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("demo.khb");
-        let doc = render::render(&demo_source());
+        let doc = render::render(&demo_source()).unwrap();
         build::build_khb(&doc, &path).unwrap();
 
         let ds = Docset::open(&path).unwrap();
@@ -184,7 +184,7 @@ mod tests {
     fn llms_export_indexes_pages_and_carries_markdown() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("demo.khb");
-        build::build_khb(&render::render(&demo_source()), &path).unwrap();
+        build::build_khb(&render::render(&demo_source()).unwrap(), &path).unwrap();
         let ds = Docset::open(&path).unwrap();
 
         let export = llms::export(&[&ds], None).unwrap();
@@ -221,7 +221,7 @@ mod tests {
     #[test]
     fn khba_sidecar_holds_assets_kept_out_of_the_khb() {
         let dir = tempfile::tempdir().unwrap();
-        let doc = render::render(&demo_source());
+        let doc = render::render(&demo_source()).unwrap();
 
         // Sidecar mode: a lean .khb (assets removed) + a .khba carrying them, with
         // the .khb's routing index pointing at that pack (as the CLI does).
@@ -261,7 +261,7 @@ mod tests {
 
     #[test]
     fn khbb_roundtrip_matches_khb() {
-        let doc = render::render(&demo_source());
+        let doc = render::render(&demo_source()).unwrap();
 
         // RenderedDocset -> .khbb bytes -> RenderedDocset
         let bytes = binary::to_khbb(&doc).unwrap();
@@ -286,7 +286,7 @@ mod tests {
     #[test]
     fn several_khba_back_one_khb_routed_by_index() {
         let dir = tempfile::tempdir().unwrap();
-        let doc = render::render(&demo_source());
+        let doc = render::render(&demo_source()).unwrap();
 
         // A lean .khb with no embedded assets, plus two attachment packs.
         let khb = dir.path().join("demo.khb");
