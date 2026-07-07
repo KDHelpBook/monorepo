@@ -1,0 +1,8 @@
+# Compiles this folder into a docset:  kdhelp compile docs/markdown -o markdown.khb
+# Pages are the flat *.md files; the TOC falls back to page order (no toc.yaml needed).
+id = "kdhelp-markdown"
+title = "Markdown in kdhelp"
+version = "0.1.0"
+language = "en"
+collection = "kdhelp-docs"
+collection_title = "kdhelp — Documentation"
