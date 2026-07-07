@@ -120,6 +120,22 @@ transport: unchecked fetches the `.khb` whole (works on any CORS host); checked 
 it **page-by-page over `Range`** through the browser async-VFS engine — the same
 page-level streaming that `kdhelp inspect <url>` / Tauri do natively.
 
+**Bundled books can stream too.** A `docsets.json` entry may carry
+`"streaming": true` (written by `kdhelp pack`/`patch` `--stream`): the viewer then
+opens that bundled book page-by-page over `Range` from the site's own `docsets/`
+folder instead of downloading it whole — including in a locked `bundled --lock`
+build, which never reaches the remote-sources path. The negotiation mirrors a
+streamed remote: probe the host with a 1-byte `Range` request, validate with a cheap
+streamed peek, and on any failure fall back silently to the whole fetch, so a
+non-Range host (or a proxy that strips the header) costs nothing. Since `Range`
+addresses raw SQLite pages, `--stream` keeps the marked docset and its packs
+uncompressed even under `--mode compact` (the viewer ignores the flag on `.gz`
+entries), and the service worker passes `Range` requests straight to the network —
+the Cache API can't hold partial responses, so a streamed book is online-only rather
+than part of the offline PWA cache. Streaming pays off for **big single books**
+(the viewer already loads only the picked language/version variant, so many small
+books gain nothing from it).
+
 ## Content packs — splitting page bodies out of the `.khb`
 
 Attachments already move the bulky *binary* payload into sidecars. The same idea
@@ -206,8 +222,10 @@ small fully-fetched index for a remote book).
    appears as its own family folder, its pages + graphics stream on click (~21 % of a
    618 KB file to open + read a page), and its bm25 FTS5 hits interleave with the
    sql.js books (per-book score normalization keeps the merge fair). Opt-in via *File →
-   Open from URL… → Stream*; the engine is code-split so non-streaming sessions never
-   load it. Whole-file (step 2) stays the default and the fallback for non-Range hosts.
+   Open from URL… → Stream* for remotes, or `"streaming": true` in `docsets.json`
+   (`kdhelp pack --stream`) for bundled books; the engine is code-split so
+   non-streaming sessions never load it. Whole-file (step 2) stays the default and
+   the fallback for non-Range hosts.
 4. Tauri `khb-asset://` protocol with `Range` support for streamed media.
 5. **Content packs** — a `page_index` table + a compiler `--split` that peels
    `body_html` (and assets) into `.khbp` packs, and a `Docset.page(id)` that routes
