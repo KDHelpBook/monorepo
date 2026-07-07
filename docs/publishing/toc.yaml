@@ -14,5 +14,6 @@
     - page: patch
     - page: distribution
     - page: hosting
+    - page: ci
     - page: versioning
     - page: khbm-manifests

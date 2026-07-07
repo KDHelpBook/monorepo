@@ -25,6 +25,7 @@ file host serves it as-is. No backend, no database, no build step on the server.
 | [patch](patch) | updating a built distribution in place |
 | [Anatomy of a distribution](distribution) | `docsets.json`, `config.json`, and how the viewer reads them |
 | [Hosting](hosting) | static hosts, GitHub Pages, HTTP `Range`, CORS |
+| [CI with GitHub Actions](ci) | a copy-paste workflow that builds and deploys the site |
 | [Versioning](versioning) | shipping several versions of one book side by side |
 | [.khbm manifests](khbm-manifests) | a fetchable list of docsets readers import in one step |
 
