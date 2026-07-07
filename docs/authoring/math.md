@@ -32,5 +32,3 @@ $$\int_0^1 x^2 \, dx = \frac{1}{3}$$
 - A formula the converter can't parse **fails the build** (with the page id and the
   offending LaTeX), rather than silently degrading to raw text — a broken equation is a
   content bug worth catching at compile time.
-- MathML is stored in the page, so math works offline and needs no scripts in the
-  sandboxed content frame.
