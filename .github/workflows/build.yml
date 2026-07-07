@@ -42,7 +42,7 @@ jobs:
           - target: x86_64-pc-windows-msvc
             os: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.release_tag || github.ref }}
 
@@ -78,7 +78,7 @@ jobs:
           Copy-Item "compiler/target/${{ matrix.target }}/release/kdhelp.exe", README.md, LICENSE $name
           Compress-Archive -Path $name -DestinationPath "$name.zip"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: kdhelp-${{ matrix.target }}
           path: |
@@ -90,11 +90,11 @@ jobs:
     name: Viewer (dist)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.release_tag || github.ref }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: npm
@@ -106,7 +106,7 @@ jobs:
           npm run build
         working-directory: viewer-ts
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: viewer-dist
           path: viewer-ts/dist
@@ -116,7 +116,7 @@ jobs:
     name: Docs (.khb)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.release_tag || github.ref }}
 
@@ -147,7 +147,7 @@ jobs:
             "$BIN" compile docs/markdown -o out/markdown.khb
           fi
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: docs-khb
           path: out/*.khb
@@ -161,19 +161,19 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: kdhelp-*
           path: assets
           merge-multiple: true
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: docs-khb
           path: assets
       # The viewer dist ships as its own versioned archive: `kdhelp pack`
       # needs a built viewer, so a downloaded CLI alone couldn't assemble a
       # distribution without it.
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: viewer-dist
           path: viewer-dist
