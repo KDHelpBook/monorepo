@@ -1,10 +1,11 @@
 name: Build
 
-# Builds the redistributables: prebuilt `kdhelp` CLI binaries for the popular
-# platforms plus the project documentation (docs/markdown) compiled to .khb.
-# Runs standalone on push / PR / manual dispatch; when called by release.yml
-# (release_tag set) it builds from the tag and uploads everything as release
-# assets.
+# Builds everything publishable: prebuilt `kdhelp` CLI binaries for the
+# popular platforms, the viewer dist, and the project documentation
+# (docs/markdown) compiled to .khb. Runs standalone on push / PR / manual
+# dispatch; when called by release.yml (release_tag set) it builds from the
+# tag and uploads the binaries + docs .khb as release assets. publish.yml
+# never builds — it consumes this workflow's artifacts.
 
 on:
   push:
@@ -85,6 +86,32 @@ jobs:
             kdhelp-v*-${{ matrix.target }}.zip
           if-no-files-found: error
 
+  viewer:
+    name: Viewer (dist)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: viewer-ts/package-lock.json
+
+      - name: Build the viewer
+        run: |
+          npm ci
+          npm run build
+        working-directory: viewer-ts
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: viewer-dist
+          path: viewer-ts/dist
+          if-no-files-found: error
+
   docs:
     name: Docs (.khb)
     runs-on: ubuntu-latest
@@ -134,10 +161,17 @@ jobs:
     permissions:
       contents: write
     steps:
+      # Only the binaries and the docs .khb — the viewer-dist artifact is for
+      # publish.yml, not a release asset.
       - uses: actions/download-artifact@v4
         with:
+          pattern: kdhelp-*
           path: assets
           merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: docs-khb
+          path: assets
       - name: Upload to the release
         env:
           GH_TOKEN: ${{ github.token }}

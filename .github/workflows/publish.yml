@@ -1,14 +1,22 @@
 name: Publish
 
-# Builds the GitHub Pages site: compiles the docsets from the checked-out ref
-# with the kdhelp CLI produced by build.yml, builds the viewer, packs the
-# distribution (with the llms.txt export), merges archived documentation
-# versions downloaded from past releases, and deploys.
+# Assembles and deploys the GitHub Pages site from build.yml's artifacts —
+# nothing is built here: the kdhelp CLI and the viewer dist both come from
+# build.yml (this very run when called by release.yml, the triggering run on
+# workflow_run, or the latest successful main build on manual dispatch). The
+# CLI then compiles the docsets from the checked-out ref, packs the
+# distribution (with the llms.txt export) and merges archived documentation
+# versions downloaded from past releases.
 #
 # Requires: repo Settings → Pages → Source = "GitHub Actions".
 
 on:
-  push:
+  # After every successful build of main — guarantees the deployed viewer and
+  # docsets come from the same commit (a plain push trigger would race
+  # build.yml and could only use artifacts from a previous build).
+  workflow_run:
+    workflows: [Build]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
   workflow_call:
@@ -30,60 +38,56 @@ concurrency:
 
 jobs:
   build:
+    # On workflow_run, deploy only after a successful build.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref || github.ref }}
+          ref: ${{ inputs.ref || github.event.workflow_run.head_sha || github.ref }}
 
-      # Toolchain + cache are set up unconditionally so the build-from-source
-      # fallback below just works; when a prebuilt CLI is found they cost
-      # seconds.
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: compiler
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: viewer-ts/package-lock.json
-
-      # In a release run (called by release.yml) the CLI artifact exists in
-      # this very run; standalone runs fall back to the latest successful
-      # build.yml run on main, then to building from source.
+      # Same-run artifacts exist when release.yml calls this workflow after
+      # build.yml; the other trigger paths fall through to `gh run download`
+      # in the next step.
       - name: Fetch the CLI from this run
         continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           name: kdhelp-x86_64-unknown-linux-gnu
           path: cli-dl
+      - name: Fetch the viewer from this run
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: viewer-dist
+          path: viewer-dist
 
-      - name: Ensure the CLI
+      - name: Ensure the build.yml artifacts
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p cli-dl
-          if ! ls cli-dl/*.tar.gz >/dev/null 2>&1; then
+          RUN="${{ github.event.workflow_run.id }}"
+          if [[ -z "$RUN" ]]; then
             RUN=$(gh run list -R "${{ github.repository }}" --workflow build.yml \
               --branch main --status success --limit 1 \
               --json databaseId --jq '.[0].databaseId' || true)
-            if [[ -n "$RUN" ]]; then
-              gh run download "$RUN" -R "${{ github.repository }}" \
-                -n kdhelp-x86_64-unknown-linux-gnu -D cli-dl || true
-            fi
           fi
-          if ls cli-dl/*.tar.gz >/dev/null 2>&1; then
-            mkdir -p cli
-            tar xzf cli-dl/*.tar.gz -C cli --strip-components=1
-            BIN="$PWD/cli/kdhelp"
-          else
-            echo "No prebuilt CLI available — building from source."
-            (cd compiler && cargo build --release -p kdhelp-cli)
-            BIN="$PWD/compiler/target/release/kdhelp"
+          if ! ls cli-dl/*.tar.gz >/dev/null 2>&1 && [[ -n "$RUN" ]]; then
+            gh run download "$RUN" -R "${{ github.repository }}" \
+              -n kdhelp-x86_64-unknown-linux-gnu -D cli-dl || true
           fi
+          if [[ ! -e viewer-dist/index.html && -n "$RUN" ]]; then
+            gh run download "$RUN" -R "${{ github.repository }}" \
+              -n viewer-dist -D viewer-dist || true
+          fi
+          ls cli-dl/*.tar.gz >/dev/null 2>&1 \
+            || { echo "::error::no kdhelp CLI artifact found — run build.yml first"; exit 1; }
+          [[ -e viewer-dist/index.html ]] \
+            || { echo "::error::no viewer-dist artifact found — run build.yml first"; exit 1; }
+          mkdir -p cli
+          tar xzf cli-dl/*.tar.gz -C cli --strip-components=1
+          BIN="$PWD/cli/kdhelp"
           "$BIN" --version
           echo "BIN=$BIN" >> "$GITHUB_ENV"
 
@@ -101,15 +105,9 @@ jobs:
           # The Markdown reference (docs/markdown) — the versioned project docs.
           "$BIN" compile docs/markdown -o out/markdown.khb
 
-      - name: Build the viewer
-        run: |
-          npm ci
-          npm run build
-        working-directory: viewer-ts
-
       - name: Pack the distribution
         run: |
-          "$BIN" pack --profile reader --viewer viewer-ts/dist \
+          "$BIN" pack --profile reader --viewer viewer-dist \
             --docset out/en.khb --docset out/extras-en.khb \
             --docset out/pl.khb --docset out/extras-pl.khb \
             --docset out/sample-sdk-v1.khb --docset out/sample-sdk-v2.khb \
