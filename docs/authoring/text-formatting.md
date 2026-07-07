@@ -1,6 +1,6 @@
 ---
 title: Text formatting
-keywords: [bold, italic, strikethrough, underline, highlight, superscript, subscript, inline code, line break, horizontal rule]
+keywords: [bold, italic, strikethrough, insert, underline, highlight, superscript, subscript, inline code, line break, horizontal rule]
 categories: [markdown]
 related: [headings, code-blocks, differences]
 ---
@@ -59,6 +59,17 @@ The limit is ~~10~~ 25 attachments.
 ```
 
 Renders as: The limit is ~~10~~ 25 attachments.
+
+## Insert
+
+Double pluses mark text as an addition — the counterpart of strikethrough, for
+diff-style edits where the old and the new stand side by side.
+
+```md
+The limit is ~~10~~ ++25++ attachments.
+```
+
+Renders as: The limit is ~~10~~ ++25++ attachments.
 
 ## Inline code
 

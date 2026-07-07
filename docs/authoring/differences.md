@@ -22,7 +22,7 @@ adds book-aware constructs — and deliberately refuses a few things GFM tolerat
 | Code: `[filename]` bar, copy button, `collapse` / `open` flags | `` ```rust [main.rs] collapse `` | [Code extensions](code-extensions) |
 | Code groups (tabs), command+output panels, file trees | `~~~code-group`, `~~~code-preview`, `~~~code-tree` | [Code extensions](code-extensions) |
 | Emoji shortcodes | `:tada:` | [Emoji](emoji) |
-| Highlight, underline, super-/subscript | `==x==`, `__x__`, `^x^`, `~x~` | [Text formatting](text-formatting) |
+| Highlight, underline, insert, super-/subscript | `==x==`, `__x__`, `++x++`, `^x^`, `~x~` | [Text formatting](text-formatting) |
 | Page metadata: keyword index, category facet, See-also footer | YAML frontmatter | [Frontmatter](frontmatter) |
 | Heading anchors + the "On this page" box | automatic | [Headings](headings) |
 
