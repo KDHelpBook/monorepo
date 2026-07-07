@@ -96,15 +96,23 @@ function img(e){var el=e.target;if(!el||el.tagName!=='IMG')return false;
  if(src.indexOf('data:image/')!==0)return false;
  e.preventDefault();post({t:'kdhelp',a:'img',src:src,alt:el.getAttribute('alt')||''});return true}
 // A tap/click on a display equation enlarges it in an in-frame overlay (the math
-// "lightbox"). Handled here, not by the app: we never pass content markup to the
-// trusted parent, so this stays a scaled clone over this sandboxed frame.
-function mathZoom(e){var m=e.target&&e.target.closest&&e.target.closest('math[display="block"]');if(!m)return false;
- e.preventDefault();var de=document.documentElement,prev=de.style.overflow;
- var ov=document.createElement('div');ov.className='math-overlay';ov.appendChild(m.cloneNode(true));
- function close(){ov.remove();de.style.overflow=prev;removeEventListener('keydown',key)}
- function key(ev){if(ev.key==='Escape')close()}
- ov.addEventListener('click',close);addEventListener('keydown',key);
- de.style.overflow='hidden';document.body.appendChild(ov);return true}
+// "lightbox"); a click anywhere on the overlay — the enlarged formula OR its backdrop
+// — or Esc dismisses it. Handled here, not by the app: we never pass content markup to
+// the trusted parent, so this stays a scaled clone over this sandboxed frame. Single
+// tracked overlay + saved overflow, so the click that closes can't re-open a nested one
+// (that would leave the scroll lock stuck on).
+var mathOv=null,mathPrevOverflow='';
+function mathClose(){if(!mathOv)return;mathOv.remove();mathOv=null;
+ document.documentElement.style.overflow=mathPrevOverflow;removeEventListener('keydown',mathKey)}
+function mathKey(ev){if(ev.key==='Escape')mathClose()}
+function mathZoom(e){var t=e.target;
+ // A click on the open overlay (formula clone included) closes — never re-opens.
+ if(t&&t.closest&&t.closest('.math-overlay')){e.preventDefault();mathClose();return true}
+ var m=t&&t.closest&&t.closest('math[display="block"]');if(!m)return false;
+ e.preventDefault();if(mathOv)mathClose();
+ var de=document.documentElement;mathPrevOverflow=de.style.overflow;
+ mathOv=document.createElement('div');mathOv.className='math-overlay';mathOv.appendChild(m.cloneNode(true));
+ addEventListener('keydown',mathKey);de.style.overflow='hidden';document.body.appendChild(mathOv);return true}
 addEventListener('click',function(e){if(copyBtn(e))return;if(mathZoom(e))return;if(img(e))return;link(e,false)},true);
 addEventListener('auxclick',function(e){if(e.button===1)link(e,true)},true);
 // Pull-to-refresh: a downward drag started at the top of the page posts a 'pull'
