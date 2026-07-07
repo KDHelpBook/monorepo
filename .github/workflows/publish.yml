@@ -114,12 +114,15 @@ jobs:
       # site serves exactly the books packed here); --pwa re-enables the
       # service worker that profile turns off, so the docs keep working
       # offline. --home lands cold starts on the docs overview instead of
-      # Search.
+      # Search. --stream marks the books for page-level streaming: Pages
+      # honours HTTP Range, so the viewer reads only the pages it touches
+      # (and falls back to a whole fetch where Range isn't available).
       - name: Pack the distribution
         run: |
           "$BIN" pack --profile bundled --pwa --viewer viewer-dist \
             --docset out/markdown.khb \
             --home kdhelp-markdown:overview \
+            --stream \
             --llms \
             -o publish
 
@@ -146,7 +149,7 @@ jobs:
           shopt -s nullglob
           for F in old/*/*.khb; do
             echo "patching in $F"
-            "$BIN" patch publish --docset "$F"
+            "$BIN" patch publish --docset "$F" --stream
           done
 
       - uses: actions/configure-pages@v6
