@@ -1,14 +1,15 @@
 ---
 title: Code blocks
-keywords: [code, fenced, syntax highlighting, language, monospace, syntect]
+keywords: [code, fenced, syntax highlighting, language, monospace]
 categories: [markdown]
 related: [code-extensions, text-formatting, differences]
 ---
 
 # Code blocks
 
-Fence a block with triple backticks. Declare a **language** after the opening fence to
-get **syntax highlighting**, applied *at compile time* by comrak + syntect.
+Fence a block with triple backticks. Declare a **language** after the opening fence
+and the block is **syntax-highlighted** — at compile time, with nothing to configure;
+the colours follow the viewer's theme automatically.
 
 ````md
 ```rust
@@ -28,16 +29,6 @@ fn main() {
 
 A fence **without** a language renders as plain monospace text. Inline code uses
 single backticks: `` `let x = 1` ``.
-
-## How highlighting works
-
-- The compiler emits **CSS classes** (not inline colours); the viewer injects the
-  theme stylesheet into the content frame, so code follows the app theme (a light
-  theme today, with a dormant dark theme ready for a future dark mode).
-- The search text (`plain`) is taken from an *unhighlighted* render, so token spans
-  never pollute full-text search.
-- Highlighting happens once, at build time — the viewer ships no highlighter and
-  pages render instantly.
 
 ## Beyond plain fences
 

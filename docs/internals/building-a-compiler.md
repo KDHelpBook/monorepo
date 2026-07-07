@@ -26,7 +26,13 @@ anything. This page is the checklist. The bundled Markdown compiler
 3. **Render HTML and plain text yourself.** The viewer runs **no** Markdown
    engine — `pages.body_html` is the canonical, final render, and `pages.plain`
    is the extracted plain text used for search and snippets. Whatever your source
-   format, both must be produced at compile time.
+   format, both must be produced at compile time. Two rendering rules worth
+   copying from the bundled compiler: emit syntax highlighting as **CSS
+   classes**, not inline colours — the viewer injects a theme stylesheet into
+   the content frame, so class-tagged code follows the app theme (including a
+   future dark mode) while hard-coded colours would not; and derive `plain`
+   from an **unhighlighted** render, so per-token markup never leaks into
+   full-text search.
 4. **Optionally fill `pages.md`** with a clean Markdown rendition (nullable,
    format v5). The viewer ignores it; it feeds AI-facing surfaces such as the
    `llms.txt` export. Skip it if your source has no sensible Markdown form.
