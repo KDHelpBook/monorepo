@@ -36,4 +36,4 @@ action.
 - Remote/absolute image URLs (`https://…`) are **not** fetched — content is
   origin-isolated and offline-first. Bundle images as assets instead.
 - Video/embed directives (`:video{…}`) are **not** supported yet — see the roadmap in
-  the [overview](overview).
+  the [overview](index).
