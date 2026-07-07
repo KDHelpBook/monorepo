@@ -206,6 +206,37 @@ body {
   border-color: #b9d6bd;
   opacity: 1;
 }
+/* CodeCollapse: the ```lang [file] collapse flag renders a native <details>. The
+   summary reuses the filename bar (.code-head) as its clickable header; a chevron
+   marks the open/closed state. Copy lives in the summary — the frame bridge stops
+   that click from toggling. */
+.content details.code-collapse {
+  position: relative;
+  margin: 0.8em 0;
+}
+.content .code-collapse > summary.code-head {
+  cursor: pointer;
+  list-style: none; /* drop the default disclosure triangle; we draw our own */
+  border-radius: 3px 3px 0 0;
+}
+.content .code-collapse > summary.code-head::-webkit-details-marker {
+  display: none;
+}
+.content .code-collapse:not([open]) > summary.code-head {
+  border-radius: 3px; /* closed: the summary is the whole box */
+}
+.content .code-chevron {
+  width: 0;
+  height: 0;
+  flex: none;
+  border-left: 5px solid var(--muted);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform 0.12s;
+}
+.content .code-collapse[open] .code-chevron {
+  transform: rotate(90deg);
+}
 /* "On this page" — an inline nav built from the page's heading anchors. */
 .content .page-toc {
   float: right;

@@ -87,7 +87,7 @@ function link(e,mid){var a=e.target&&e.target.closest&&e.target.closest('a');if(
 // Copy a code block. execCommand runs inside this frame's click gesture, so it works
 // even though the sandbox (no allow-same-origin) blocks the async clipboard API.
 function copyBtn(e){var b=e.target&&e.target.closest&&e.target.closest('button[data-copy]');if(!b)return false;e.preventDefault();
- var pre=b.parentNode.querySelector('pre');var txt=pre?(pre.textContent||''):'';
+ var pre=(b.closest('.code-block')||b.parentNode).querySelector('pre');var txt=pre?(pre.textContent||''):'';
  var ta=document.createElement('textarea');ta.value=txt;ta.style.position='fixed';ta.style.top='-2000px';document.body.appendChild(ta);ta.select();
  try{document.execCommand('copy')}catch(_){}document.body.removeChild(ta);
  var done=b.getAttribute('data-copied')||'',orig=b.textContent;if(done){b.textContent=done}b.classList.add('done');
@@ -1543,12 +1543,13 @@ function start(
       .querySelectorAll<HTMLPreElement>("pre.syntax-highlighting")
       .forEach((pre) => {
         const code = pre.querySelector("code");
+        // `data-meta` is the fence info string past the language, e.g. the
+        // `[main.rs] collapse` from ```rust [main.rs] collapse. A `[…]` is the
+        // filename; bare words are flags (`collapse`, plus `open` to start expanded).
         const meta = code?.getAttribute("data-meta") ?? "";
-        const file = meta.replace(/^\[/, "").replace(/\]$/, "").trim();
-
-        const wrap = document.createElement("div");
-        wrap.className = "code-block";
-        pre.before(wrap);
+        const file = (meta.match(/\[([^\]]*)\]/)?.[1] ?? "").trim();
+        const flags = meta.replace(/\[[^\]]*\]/, "").trim().split(/\s+/);
+        const collapsible = flags.includes("collapse");
 
         const btn = document.createElement("button");
         btn.type = "button";
@@ -1556,6 +1557,34 @@ function start(
         btn.setAttribute("data-copy", "");
         btn.setAttribute("data-copied", s.copied);
         btn.textContent = s.copy;
+
+        if (collapsible) {
+          // A native <details>: the summary is the header (click to toggle); Copy
+          // sits in it, and the frame bridge's preventDefault stops that click from
+          // also toggling. No filename → fall back to the language, then a label.
+          const lang = code?.className.match(/language-([\w+#-]+)/)?.[1] ?? "";
+          const details = document.createElement("details");
+          details.className = "code-block code-collapse";
+          details.open = flags.includes("open");
+          pre.before(details);
+
+          const summary = document.createElement("summary");
+          summary.className = "code-head";
+          summary.innerHTML = '<span class="code-chevron" aria-hidden="true"></span>';
+          if (file) summary.insertAdjacentHTML("beforeend", FILE_ICON); // trusted SVG
+          const name = document.createElement("span");
+          name.className = "code-file";
+          name.textContent = file || (lang && lang !== "collapse" ? lang : s.code);
+          summary.appendChild(name);
+          summary.appendChild(btn);
+          details.appendChild(summary);
+          details.appendChild(pre);
+          return;
+        }
+
+        const wrap = document.createElement("div");
+        wrap.className = "code-block";
+        pre.before(wrap);
 
         if (file) {
           // With a filename bar the Copy button lives in the header, vertically

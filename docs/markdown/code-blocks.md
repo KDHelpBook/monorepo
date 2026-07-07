@@ -39,6 +39,27 @@ export default defineConfig({})
 ```
 ````
 
+## Collapsible blocks
+
+Add the **`collapse`** flag after the language (and optional `[filename]`) to render the
+block as a native `<details>` disclosure — collapsed by default, click the header to
+expand. Add **`open`** as well to start expanded. With no filename the header falls back
+to the language name.
+
+````md
+```rust [main.rs] collapse
+fn main() {
+    println!("A long example, tucked away until you want it.");
+}
+```
+````
+
+```rust [main.rs] collapse
+fn main() {
+    println!("A long example, tucked away until you want it.");
+}
+```
+
 ## How highlighting works
 
 - The compiler emits **CSS classes** (not inline colours); the viewer injects the
@@ -50,6 +71,7 @@ export default defineConfig({})
 ## Notes for kdhelp
 
 - Inline code uses single backticks: `` `let x = 1` ``.
-- Grouping code blocks into **tabs** (`::code-group`), a collapsible block, and a
-  file-tree view are **not** supported yet — they'll use a directive renderer (see the
+- **Collapsible** blocks work today (the `collapse` flag above). Grouping code blocks
+  into **tabs** and a **file-tree** view aren't supported yet — those need a container,
+  so they'll use an opaque `~~~code-group … ~~~` fence we post-process (see the
   [overview](overview)).

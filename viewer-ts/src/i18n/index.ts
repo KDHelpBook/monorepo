@@ -64,6 +64,8 @@ export interface Strings {
   /** Code-block copy button and its post-copy confirmation. */
   copy: string;
   copied: string;
+  /** Fallback label for a collapsible code block with no filename. */
+  code: string;
   notFoundTitle: string;
   notFoundBody: (id: string) => string;
   // about
@@ -164,6 +166,7 @@ const en: Strings = {
   seeAlso: "See also:",
   copy: "Copy",
   copied: "Copied",
+  code: "Code",
   notFoundTitle: "Topic not found",
   notFoundBody: (id) => `No page with address <code>${id}</code>.`,
   aboutTagline:
@@ -263,6 +266,7 @@ const pl: Strings = {
   seeAlso: "Zobacz też:",
   copy: "Kopiuj",
   copied: "Skopiowano",
+  code: "Kod",
   notFoundTitle: "Nie znaleziono tematu",
   notFoundBody: (id) => `Brak strony o adresie <code>${id}</code>.`,
   aboutTagline:

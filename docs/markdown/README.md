@@ -49,22 +49,37 @@ That is the crux of why MDC is *not* the right target for kdhelp:
   frame we isolate for security.
 - MDC is a single-ecosystem convention (Nuxt). A docset should stay portable.
 
-**Recommendation:** when we want richer blocks, adopt **CommonMark generic directives**
-(`:::note … :::`, the remark-directive / MyST / pandoc-fenced-div lineage) rather than
-MDC. Directives are framework-agnostic, compile to plain `<div class="…">`, are a
-de-facto standard outside Vue, and degrade gracefully. Authoring feels close to MDC
-(`::` blocks) but we own the static output.
+**On `:::` and MDC.** The colon-fence surface *overlaps*: MDC's base block is `::name`
+(with `:::` for nesting), and **CommonMark generic directives** use `:::name`. But the
+difference that matters isn't the colon count — it's the **semantics**: MDC resolves a
+name to a **Vue component mounted at runtime** (what we can't do in a no-framework
+sandbox), while generic directives compile to plain `<div class="…">`. comrak also has
+**no directive extension**, so *any* colon syntax is custom work for us regardless.
+
+**Recommendation:** don't reach for a `:::` directive parser for the code features.
+Split by shape:
+
+- **Per-block properties** (filename, `collapse`, later line-highlight) → **flags on the
+  fence info string** (`` ```rust [main.rs] collapse ``), which we already carry through
+  to `data-meta`. No new grammar.
+- **Containers over several blocks** (code group / preview / tree) → an **opaque
+  `~~~name … ~~~` fence** that comrak renders as one `language-name` block; we
+  post-process its verbatim body exactly like the math pass — no `render.unsafe`, no AST
+  surgery, no directive parser.
+
+Reserve true `:::` **generic directives** (never MDC) for a later day, if we add
+genuinely generic non-code blocks (tabs / cards / steps outside code).
 
 ### Roadmap
 
 Done so far: heading **anchors** + an **"On this page"** box, **emoji**, code-block
-**filenames** and a **copy** button, **callouts** (comrak upgraded to 0.53 for native
-`alerts`), and **math** (`$…$` → build-time MathML). What's left:
+**filenames**, a **copy** button, **collapsible** code (`collapse` flag), **callouts**
+(comrak 0.53 native `alerts`), and **math** (`$…$` → build-time MathML). What's left:
 
 | Want | How | Effort |
 |------|-----|--------|
-| **Code group / collapse / preview / tree** | a **directive** renderer + interactive frame JS | medium–large |
-| **Tabs / cards / steps / badges** | the same **directive** renderer (not MDC) | medium |
+| **Code group / preview / tree** | an opaque `~~~name … ~~~` fence, post-processed like math (+ CSS-only tabs) | medium |
+| **Tabs / cards / steps / badges** (non-code) | true `:::` generic directives → `<div class>` (not MDC) | medium |
 | **Video / embeds** | a `:video`/`:embed` directive → sandboxed `<iframe>`/`<video>` | medium |
 
 Deliberately **out of scope**: anything needing a live framework runtime — MDC's Vue
