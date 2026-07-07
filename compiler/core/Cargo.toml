@@ -24,3 +24,7 @@ postcard = { version = "1", features = ["alloc"] }
 
 [dev-dependencies]
 tempfile = "3"
+# The same emoji data comrak's `shortcodes` feature resolves — used by the
+# `emoji-table` example to generate the docs' shortcode reference, so the
+# table can never drift from what the compiler actually converts.
+emojis = "0.8"
