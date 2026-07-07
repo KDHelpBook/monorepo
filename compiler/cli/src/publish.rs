@@ -32,6 +32,11 @@ struct ManifestEntry {
     /// optionally-`.gz` path. The viewer opens them alongside the docset.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     attachments: Vec<String>,
+    /// Opt-in page-level streaming (`--stream`): the viewer opens this docset over
+    /// HTTP `Range` instead of downloading it whole, falling back to a whole fetch
+    /// when the host doesn't honour Range. Streamed files ship uncompressed.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    streaming: bool,
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -66,6 +71,9 @@ pub struct PackOptions {
     pub home: Option<String>,
     /// Also emit `llms.txt` + `llms-full.txt` + per-page Markdown (AI-facing export).
     pub llms: bool,
+    /// `--stream`: `None` = no streaming, `Some([])` = mark every docset, else mark
+    /// only the listed `--docset` paths.
+    pub stream: Option<Vec<PathBuf>>,
 }
 
 /// Assemble a fresh distribution at `out`.
@@ -83,10 +91,11 @@ pub fn pack(opts: &PackOptions) -> Result<()> {
     let _ = fs::remove_dir_all(&docsets_dir);
     fs::create_dir_all(&docsets_dir)?;
     let mut manifest = Manifest::default();
-    for docset in &opts.docsets {
+    let stream = stream_flags(&opts.stream, &opts.docsets)?;
+    for (docset, stream) in opts.docsets.iter().zip(stream) {
         manifest
             .docsets
-            .push(add_docset(docset, &docsets_dir, opts.compact)?);
+            .push(add_docset(docset, &docsets_dir, opts.compact, stream)?);
     }
 
     write_json(&opts.out.join("docsets.json"), &manifest)?;
@@ -137,7 +146,12 @@ fn write_llms(out: &Path, docsets: &[PathBuf]) -> Result<()> {
 }
 
 /// Add or replace docsets in an already-built distribution, updating its manifest.
-pub fn patch(dist: &Path, docsets: &[PathBuf], compact: bool) -> Result<()> {
+pub fn patch(
+    dist: &Path,
+    docsets: &[PathBuf],
+    compact: bool,
+    stream: &Option<Vec<PathBuf>>,
+) -> Result<()> {
     let manifest_path = dist.join("docsets.json");
     let mut manifest: Manifest = if manifest_path.exists() {
         serde_json::from_str(&fs::read_to_string(&manifest_path)?)
@@ -148,8 +162,9 @@ pub fn patch(dist: &Path, docsets: &[PathBuf], compact: bool) -> Result<()> {
 
     let docsets_dir = dist.join("docsets");
     fs::create_dir_all(&docsets_dir)?;
-    for docset in docsets {
-        let entry = add_docset(docset, &docsets_dir, compact)?;
+    let stream = stream_flags(stream, docsets)?;
+    for (docset, stream) in docsets.iter().zip(stream) {
+        let entry = add_docset(docset, &docsets_dir, compact, stream)?;
         manifest.docsets.retain(|e| e.id != entry.id); // replace same id
         manifest.docsets.push(entry);
     }
@@ -162,9 +177,39 @@ pub fn patch(dist: &Path, docsets: &[PathBuf], compact: bool) -> Result<()> {
     Ok(())
 }
 
-/// Copy a docset into `docsets/` (optionally gzip'd as `.khbc`) and return its
+/// Resolve `--stream` against the docset list: absent → none, bare → every
+/// docset, with values → only those (each must name a `--docset`, by full path
+/// or by file name).
+fn stream_flags(stream: &Option<Vec<PathBuf>>, docsets: &[PathBuf]) -> Result<Vec<bool>> {
+    let Some(list) = stream else {
+        return Ok(vec![false; docsets.len()]);
+    };
+    if list.is_empty() {
+        return Ok(vec![true; docsets.len()]);
+    }
+    let matches = |sel: &PathBuf, khb: &PathBuf| sel == khb || sel.file_name() == khb.file_name();
+    for sel in list {
+        if !docsets.iter().any(|d| matches(sel, d)) {
+            bail!("--stream {}: not among the --docset paths", sel.display());
+        }
+    }
+    Ok(docsets
+        .iter()
+        .map(|d| list.iter().any(|sel| matches(sel, d)))
+        .collect())
+}
+
+/// Copy a docset into `docsets/` (optionally gzip'd to `<name>.gz`) and return its
 /// manifest entry, with metadata read from the docset itself.
-fn add_docset(khb: &Path, docsets_dir: &Path, compact: bool) -> Result<ManifestEntry> {
+fn add_docset(
+    khb: &Path,
+    docsets_dir: &Path,
+    compact: bool,
+    stream: bool,
+) -> Result<ManifestEntry> {
+    // Streaming reads raw SQLite pages by byte range, so a streamed docset (and
+    // its packs) ships uncompressed even under `--mode compact`.
+    let compact = compact && !stream;
     let ds = Docset::open(khb).with_context(|| format!("opening {}", khb.display()))?;
     let id = ds.id()?;
     let title = ds.meta("title")?.unwrap_or_else(|| id.clone());
@@ -207,6 +252,7 @@ fn add_docset(khb: &Path, docsets_dir: &Path, compact: bool) -> Result<ManifestE
         collection,
         version,
         attachments,
+        streaming: stream,
     })
 }
 

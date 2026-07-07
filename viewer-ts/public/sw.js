@@ -16,6 +16,11 @@ self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
   if (new URL(req.url).origin !== self.location.origin) return;
+  // Page-level streaming (`Range:` reads of a .khb/.khba) goes straight to the
+  // network: the Cache API can't store partial (206) responses, and `cache.match`
+  // ignores the Range header — a whole-file copy cached earlier would answer a
+  // 4 KB page read with the full 200 body. Streamed books are online-only.
+  if (req.headers.has("range")) return;
 
   // Navigations (the app shell) are network-first: a new deploy's index.html
   // references freshly-hashed bundles, so it must win the moment it's reachable —

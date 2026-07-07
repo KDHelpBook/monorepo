@@ -112,6 +112,13 @@ enum Command {
         /// (all pages inline), and per-page Markdown under `md/`.
         #[arg(long)]
         llms: bool,
+        /// Mark docset(s) for page-level streaming: the viewer opens them over
+        /// HTTP `Range` instead of downloading the whole file (worth it for big
+        /// books; needs a Range-capable host, else the viewer falls back). Bare
+        /// `--stream` marks every docset; `--stream <path>` marks only that one
+        /// (repeatable). Streamed files stay uncompressed even in compact mode.
+        #[arg(long, num_args = 0.., value_name = "DOCSET")]
+        stream: Option<Vec<PathBuf>>,
     },
     /// Add or replace docsets in an already-built distribution.
     Patch {
@@ -121,6 +128,9 @@ enum Command {
         docsets: Vec<PathBuf>,
         #[arg(long, value_enum, default_value = "khb")]
         mode: PackMode,
+        /// Mark docset(s) for page-level streaming (see `pack --stream`).
+        #[arg(long, num_args = 0.., value_name = "DOCSET")]
+        stream: Option<Vec<PathBuf>>,
     },
     /// Print a docset's metadata. `src` is a local `.khb` path or an `http(s)://`
     /// URL — a remote docset is **streamed** over `Range` (only the pages read).
@@ -147,6 +157,7 @@ fn main() -> Result<()> {
             no_pwa,
             home,
             llms,
+            stream,
         } => {
             let mut external_sources = profile == Profile::Reader;
             if lock {
@@ -168,13 +179,15 @@ fn main() -> Result<()> {
                 pwa: wants_pwa,
                 home,
                 llms,
+                stream,
             })
         }
         Command::Patch {
             dist,
             docsets,
             mode,
-        } => patch(&dist, &docsets, mode == PackMode::Compact),
+            stream,
+        } => patch(&dist, &docsets, mode == PackMode::Compact, &stream),
         Command::Inspect { src } => inspect(&src),
     }
 }

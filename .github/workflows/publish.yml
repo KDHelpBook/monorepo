@@ -110,10 +110,19 @@ jobs:
           grep -q '^version = "latest"$' docs/markdown/docset.toml
           "$BIN" compile docs/markdown -o out/markdown.khb
 
+      # The bundled profile locks the dist (no open/manage-docsets UI — the
+      # site serves exactly the books packed here); --pwa re-enables the
+      # service worker that profile turns off, so the docs keep working
+      # offline. --home lands cold starts on the docs overview instead of
+      # Search. --stream marks the books for page-level streaming: Pages
+      # honours HTTP Range, so the viewer reads only the pages it touches
+      # (and falls back to a whole fetch where Range isn't available).
       - name: Pack the distribution
         run: |
-          "$BIN" pack --profile reader --viewer viewer-dist \
+          "$BIN" pack --profile bundled --pwa --viewer viewer-dist \
             --docset out/markdown.khb \
+            --home kdhelp-markdown:overview \
+            --stream \
             --llms \
             -o publish
 
@@ -123,17 +132,24 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           # Every release carries a kdhelp-markdown-vX.Y.Z.khb (versioned id
-          # and version). All of them — including the newest — are merged in:
-          # the current book is "latest", so no release can collide with it.
+          # and version). The site keeps one archived book per minor series —
+          # the newest patch of each X.Y (1.1.0/1.1.1/1.1.2 → only 1.1.2) —
+          # while the current main build is "latest", so nothing collides.
+          # Superseded patches stay downloadable from Releases; they just
+          # aren't merged into the site. --limit is explicit because gh
+          # defaults to a silent 30.
+          TAGS=$(gh release list -R "${{ github.repository }}" --limit 1000 --json tagName --jq '.[].tagName' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+            | sort -rV | awk -F. '!seen[$1"."$2]++' || true)
           mkdir -p old
-          for TAG in $(gh release list -R "${{ github.repository }}" --json tagName --jq '.[].tagName'); do
+          for TAG in $TAGS; do
             gh release download "$TAG" -R "${{ github.repository }}" \
               --pattern 'kdhelp-markdown-*.khb' -D "old/$TAG" || true
           done
           shopt -s nullglob
           for F in old/*/*.khb; do
             echo "patching in $F"
-            "$BIN" patch publish --docset "$F"
+            "$BIN" patch publish --docset "$F" --stream
           done
 
       - uses: actions/configure-pages@v6

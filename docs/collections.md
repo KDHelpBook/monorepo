@@ -108,7 +108,9 @@ straight from disk.
   "docsets": [
     { "file": "docsets/docs.khb.gz", "id": "my-docs", "title": "My Docs",
       "language": "en", "collection": "my-product", "version": "1.2.0",
-      "attachments": ["docsets/docs.khba.gz"] }
+      "attachments": ["docsets/docs.khba.gz"] },
+    { "file": "docsets/big-book.khb", "id": "big-book", "title": "Big Book",
+      "language": "en", "streaming": true }
   ]
 }
 ```
@@ -121,6 +123,14 @@ decompressed after fetch — so any file can be compressed independently. An opt
 `attachments` array lists a docset's sidecar `.khba` packs (see
 [the format spec](format.md#attachments-assets--khba)); the viewer opens them beside
 the docset and routes assets through the `.khb`'s index.
+
+An optional `"streaming": true` (written by `kdhelp pack/patch --stream`) marks a
+bundled docset for **page-level streaming**: the viewer opens it (and its packs)
+over HTTP `Range` instead of downloading the whole file — worth it for big books,
+and available even in a locked `bundled` build. It is a preference, not a promise:
+if the host doesn't honour `Range` (or the streamed open fails), the viewer falls
+back to the whole fetch. A streamed file must be served raw, so `streaming` is
+ignored for `.gz` entries (see [streaming.md](streaming.md)).
 
 ## Languages
 

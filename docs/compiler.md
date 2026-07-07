@@ -156,6 +156,7 @@ kdhelp pack --viewer viewer-ts/dist \
 | `--pwa` / `--no-pwa` | force the service worker on/off |
 | `--home <id\|search>` | cold-start landing: a page id (`docsetId:localId`) or `search`; omitted → the viewer opens the Search page (search-first) |
 | `--llms` | also emit an AI-facing export (see below) |
+| `--stream [<path>…]` | mark docset(s) for **page-level streaming**: writes `"streaming": true` into their `docsets.json` entries, so the viewer opens them over HTTP `Range` instead of downloading the whole file (worth it for big books; the host must honour `Range`, else the viewer auto-falls back to a whole fetch). Bare `--stream` marks every docset; `--stream <path>` (repeatable) marks only the named `--docset`s. Streamed files (and their packs) are shipped **uncompressed** even under `--mode compact` — `Range` addresses raw SQLite pages |
 | `-o <dir>` | output directory |
 
 #### `--llms` — an AI-facing export
@@ -179,6 +180,9 @@ backend. Nothing here is loaded by the viewer.
 ```bash
 kdhelp patch publish/ --docset new.khb    # add or replace, updating docsets.json
 ```
+
+`patch` accepts `--mode` and `--stream` like `pack`, applied to the docsets being
+added/replaced (existing entries are untouched).
 
 ### `inspect` — print a docset's metadata
 
