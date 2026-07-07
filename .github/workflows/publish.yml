@@ -1,7 +1,7 @@
 name: Publish
 
 # Assembles and deploys the GitHub Pages site from build.yml's artifacts —
-# nothing is built here: the kdhelp CLI and the viewer dist both come from
+# nothing is built here: the khb CLI and the viewer dist both come from
 # build.yml (this very run when called by release.yml, the triggering run on
 # workflow_run, or the latest successful main build on manual dispatch). The
 # CLI then compiles the project documentation (docs/markdown) from the
@@ -127,7 +127,7 @@ jobs:
         run: |
           "$BIN" pack --profile bundled --viewer viewer-dist \
             --docset out/markdown.khb \
-            --home kdhelp-markdown:overview \
+            --home khb-markdown:overview \
             --stream \
             --llms \
             -o publish
@@ -137,7 +137,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Every release carries a kdhelp-markdown-vX.Y.Z.khb (versioned id
+          # Every release carries a khb-markdown-vX.Y.Z.khb (versioned id
           # and version). The site keeps one archived book per minor series —
           # the newest patch of each X.Y (1.1.0/1.1.1/1.1.2 → only 1.1.2) —
           # while the current main build is "latest", so nothing collides.
@@ -150,7 +150,7 @@ jobs:
           mkdir -p old
           for TAG in $TAGS; do
             gh release download "$TAG" -R "${{ github.repository }}" \
-              --pattern 'kdhelp-markdown-*.khb' -D "old/$TAG" || true
+              --pattern 'khb-markdown-*.khb' -D "old/$TAG" || true
           done
           shopt -s nullglob
           for F in old/*/*.khb; do

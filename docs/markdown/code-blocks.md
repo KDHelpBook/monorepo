@@ -115,7 +115,7 @@ A group with no inner code blocks is a **build error** (a likely authoring mista
 - The search text (`plain`) is taken from an *unhighlighted* render, so token spans
   never pollute full-text search.
 
-## Notes for kdhelp
+## Notes for KD Help Book
 
 - Inline code uses single backticks: `` `let x = 1` ``.
 - **Collapsible** blocks (the `collapse` flag) and **groups** (`~~~code-group`) work

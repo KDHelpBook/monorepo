@@ -1,4 +1,4 @@
-// `.khbm` — a kdhelp book manifest: a small JSON file that names several remote
+// `.khbm` — a KD Help Book manifest: a small JSON file that names several remote
 // docsets (and their `.khba` attachment packs) so a whole product can be added in
 // one step instead of URL-by-URL. Distinct from `docsets.json` (which describes a
 // *packed dist* with paths relative to the dist root): a `.khbm` is authored for
@@ -14,7 +14,7 @@
 // Shape:
 //   {
 //     "khbm": 1,
-//     "title": "kdhelp Documentation",          // optional display name
+//     "title": "KD Help Book Documentation",          // optional display name
 //     "docsets": [
 //       { "url": "en.khb", "attachments": ["en.khba"] },
 //       { "url": "https://cdn/…/pl.khb.gz" },

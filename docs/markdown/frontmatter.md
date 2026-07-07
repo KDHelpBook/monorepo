@@ -35,10 +35,10 @@ Body content…
 | `related` | Page ids for the **See also** footer — an in-book id, or a cross-book `docsetId:pageId`. |
 | `toc` | Force the on-page ["On this page"](headings) box `true`/`false`. Omitted → auto (shown only when the page has 2+ top-level sections). |
 
-## Notes for kdhelp
+## Notes for KD Help Book
 
 - This whole `docs/markdown/` folder is authored with these fields, so it can be
-  compiled straight into a `.khb` (`kdhelp compile`).
+  compiled straight into a `.khb` (`khb compile`).
 - `keywords` and `categories` power the Index and the "Filter by category" scope; see
   [links](links) for how `related` renders.
 - The frontmatter is stripped before rendering — it never appears in the page body,

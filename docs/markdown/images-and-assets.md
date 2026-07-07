@@ -29,7 +29,7 @@ several packs, and a lean `.khb` can pair with remote packs. If an asset's pack 
 loaded, **Manage docsets** shows a "⚠ N missing assets" badge with an *Add pack…*
 action.
 
-## Notes for kdhelp
+## Notes for KD Help Book
 
 - Use forward slashes and keep assets under `assets/`; other paths are left as plain
   relative links (which won't resolve inside the sandboxed frame).

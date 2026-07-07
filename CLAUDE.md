@@ -13,7 +13,7 @@ the repo/crate name and codebase shorthand; the CLI binary is **`khb`**.
     (`vfs.rs`: `RangeReader` + `Docset::open_reader`) that streams only the pages a
     query touches — the native basis for HTTP streaming (`docs/streaming.md`).
     **Native only** (CLI + Tauri). No DOM.
-  - `cli/` — the `kdhelp` CLI: `compile` / `convert` (`pack` / `patch` later).
+  - `cli/` — the `khb` CLI: `compile` / `convert` (`pack` / `patch` later).
   - `wasm/` — reserved (currently a stub). See the browser-SQLite note below.
   - `examples/{en,pl}/` — seed content compiled into the demo docsets.
 - `viewer-ts/` — Vite + TypeScript viewer. In the **browser** it queries `.khb`

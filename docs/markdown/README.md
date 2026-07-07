@@ -1,14 +1,14 @@
 ---
 id: overview
-title: Markdown in kdhelp
+title: Markdown in KD Help Book
 keywords: [Markdown, syntax, MDC, directives, reference]
 categories: [authoring]
 related: [frontmatter, headings, code-blocks]
 ---
 
-# Markdown in kdhelp
+# Markdown in KD Help Book
 
-kdhelp's bundled compiler renders each page's Markdown to HTML **once, at build
+KD Help Book's bundled compiler renders each page's Markdown to HTML **once, at build
 time** ([comrak](https://github.com/kivikakk/comrak), GitHub-flavoured), and stores
 the HTML in the `.khb`. The viewer never runs a Markdown engine. This folder documents
 every construct the compiler understands — one page per feature — and each page here
@@ -32,7 +32,7 @@ carries frontmatter, so this reference is itself a compilable docset.
 | Footnotes | [footnotes.md](footnotes.md) |
 | Page frontmatter (`title`, `keywords`, `categories`, `related`) | [frontmatter.md](frontmatter.md) |
 
-**kdhelp-only** (no Docus equivalent): cross-book links `docsetId:page`, the **See
+**KD Help Book-only** (no Docus equivalent): cross-book links `docsetId:page`, the **See
 also** footer (`related`), the **F1 keyword index** (`keywords`), the **category
 facet** (`categories`), and the **`asset:` scheme** with embedded/sidecar packs.
 
@@ -40,7 +40,7 @@ facet** (`categories`), and the **`asset:` scheme** with embedded/sidecar packs.
 
 [Docus](https://docus.dev) is built on Nuxt and authors content in **MDC** (Markdown
 Components) — `::block` / `:inline` syntax that renders **Vue components at runtime**.
-That is the crux of why MDC is *not* the right target for kdhelp:
+That is the crux of why MDC is *not* the right target for KD Help Book:
 
 - KD Help Book compiles to **static HTML** and renders it in a **sandboxed iframe with no
   framework** and deliberately restricted JS. MDC's value *is* the live Vue runtime —

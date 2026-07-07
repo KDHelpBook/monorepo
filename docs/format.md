@@ -138,7 +138,7 @@ keeps resolution cheap when packs are **streamed** over HTTP: one lookup, one ra
 read of the right file, instead of N probes (see [streaming.md](streaming.md)).
 
 In a packed distribution, `docsets.json` lists a docset's attachment packs in an
-`attachments` array; `kdhelp pack`/`patch` auto-detect the sibling files `foo.khba`
+`attachments` array; `khb pack`/`patch` auto-detect the sibling files `foo.khba`
 and `foo.<tag>.khba` next to `foo.khb` and rebuild `asset_index` to cover them all.
 A manifest entry may also carry `"streaming": true` (`pack --stream`): the viewer
 then opens that docset — and its packs — page-by-page over HTTP `Range` instead of

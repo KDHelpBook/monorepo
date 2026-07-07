@@ -7,7 +7,7 @@ related: [lists, blockquotes]
 
 # Tables
 
-Pipe tables are a GitHub-flavoured extension, which kdhelp enables. The header row is
+Pipe tables are a GitHub-flavoured extension, which KD Help Book enables. The header row is
 separated from the body by a row of dashes; colons in that separator set column
 alignment.
 
@@ -28,7 +28,7 @@ Renders as:
 - `:---` left-aligns, `:--:` centres, `---:` right-aligns.
 - Cells are inline Markdown, so `**bold**`, `` `code` `` and links work inside them.
 
-## Notes for kdhelp
+## Notes for KD Help Book
 
 - Wide tables scroll horizontally inside the content frame rather than breaking the
   layout.

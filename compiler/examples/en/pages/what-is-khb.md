@@ -2,7 +2,7 @@
 title: What is a .khb docset?
 keywords: [.khb, docset, SQLite, FTS5, format, .gz, .khbb, .khba, assets, attachments]
 categories: [basics, reference]
-related: [writing-pages, kdhelp-extras-en:faq]
+related: [writing-pages, khb-extras-en:faq]
 ---
 # What is a .khb docset?
 

@@ -8,7 +8,7 @@ related: [headings, code-blocks]
 # Text formatting
 
 Inline styling uses the usual Markdown markers. Strikethrough is a GitHub-flavoured
-extension, which kdhelp enables.
+extension, which KD Help Book enables.
 
 ```md
 **bold**, *italic*, ***bold italic***
@@ -30,7 +30,7 @@ forced onto a new line.
 ---
 ```
 
-## Notes for kdhelp
+## Notes for KD Help Book
 
 - **Raw inline HTML is escaped, not rendered** — docsets may come from untrusted
   sources, so `<b>x</b>` in Markdown shows as literal text. Use Markdown, not HTML.

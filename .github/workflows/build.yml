@@ -140,9 +140,9 @@ jobs:
             # Suffix the docset id with the version (build-time only, never
             # committed): archived books need unique ids to coexist with the
             # current one in the viewer's version switcher (sample-sdk pattern).
-            sed -i "s/^id = \"kdhelp-markdown\"$/id = \"kdhelp-markdown-v${VER}\"/" docs/markdown/docset.toml
-            grep -q "^id = \"kdhelp-markdown-v${VER}\"$" docs/markdown/docset.toml
-            "$BIN" compile docs/markdown -o "out/kdhelp-markdown-v${VER}.khb"
+            sed -i "s/^id = \"khb-markdown\"$/id = \"khb-markdown-v${VER}\"/" docs/markdown/docset.toml
+            grep -q "^id = \"khb-markdown-v${VER}\"$" docs/markdown/docset.toml
+            "$BIN" compile docs/markdown -o "out/khb-markdown-v${VER}.khb"
           else
             "$BIN" compile docs/markdown -o out/markdown.khb
           fi

@@ -35,7 +35,7 @@ The five types, each with its own colour:
 > [!CAUTION]
 > Advises about risks or negative outcomes.
 
-## Notes for kdhelp
+## Notes for KD Help Book
 
 - The `[!TYPE]` marker must be **uppercase and alone on the first line**; anything else
   renders as a plain [blockquote](blockquotes).

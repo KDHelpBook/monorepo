@@ -40,7 +40,7 @@ Two things are worth knowing:
        "frontendDist": "../desktop-dist"
      },
      "app": {
-       "windows": [{ "title": "kdhelp", "width": 1100, "height": 780 }]
+       "windows": [{ "title": "KD Help Book", "width": 1100, "height": 780 }]
      }
    }
    ```

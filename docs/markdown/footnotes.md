@@ -7,11 +7,11 @@ related: [links, blockquotes]
 
 # Footnotes
 
-Footnotes are a GitHub-flavoured extension, which kdhelp enables. Place a reference
+Footnotes are a GitHub-flavoured extension, which KD Help Book enables. Place a reference
 `[^id]` in the text and define it anywhere in the page.
 
 ```md
-kdhelp stores rendered HTML, never the source Markdown[^format].
+KD Help Book stores rendered HTML, never the source Markdown[^format].
 
 [^format]: The optional `md` column is an enrichment for AI export, not the render.
 ```
@@ -21,7 +21,7 @@ page.
 
 [^demo]: This is the footnote's text; the viewer links the marker to it and back.
 
-## Notes for kdhelp
+## Notes for KD Help Book
 
 - Footnote ids are page-local; the same `[^1]` on two pages doesn't collide.
 - The compiler gathers all definitions into a footnotes section at the end of the
