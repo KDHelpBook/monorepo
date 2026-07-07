@@ -150,8 +150,12 @@ fn ordered_pages(ds: &Docset) -> Result<Vec<(String, String)>> {
         .unwrap_or_default();
     while let Some(i) = stack.pop() {
         let e = &toc[i];
-        if seen.insert(e.page_id.clone()) {
-            out.push((e.page_id.clone(), e.title.clone()));
+        // A folder node (no page) contributes nothing itself; its children still
+        // land in reading order.
+        if let Some(page_id) = &e.page_id {
+            if seen.insert(page_id.clone()) {
+                out.push((page_id.clone(), e.title.clone()));
+            }
         }
         if let Some(kids) = children.get(&Some(e.id)) {
             for &k in kids.iter().rev() {

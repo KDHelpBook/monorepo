@@ -2,10 +2,13 @@ import type { Database } from "sql.js";
 import { getSqlJs } from "./sql";
 
 export interface TocNode {
+  /** A real page id — or a synthetic `@folder:…` / `@collection:…` key for a
+   *  folder node (`group: true`), which is never navigable. */
   pageId: string;
   title: string;
   children: TocNode[];
-  /** True for a synthetic family/product folder node (not a real page). */
+  /** True for a folder node: a book's page-less TOC folder (format v6) or a
+   *  synthetic family/product folder. Clicking it only expands/collapses. */
   group?: boolean;
 }
 export interface Category {
@@ -155,32 +158,9 @@ export class Docset implements IDocset {
   }
 
   tocTree(): TocNode[] {
-    type Row = { id: number; pageId: string; title: string; position: number };
-    const byParent = new Map<number | null, Row[]>();
-    for (const r of all(
-      this.db,
-      "SELECT id, page_id, parent_id, position, title FROM toc",
-    )) {
-      const parent = r.parent_id == null ? null : Number(r.parent_id);
-      const row: Row = {
-        id: Number(r.id),
-        pageId: String(r.page_id),
-        title: String(r.title),
-        position: Number(r.position),
-      };
-      const bucket = byParent.get(parent);
-      if (bucket) bucket.push(row);
-      else byParent.set(parent, [row]);
-    }
-    const build = (parent: number | null): TocNode[] =>
-      (byParent.get(parent) ?? [])
-        .sort((a, b) => a.position - b.position)
-        .map((e) => ({
-          pageId: e.pageId,
-          title: e.title,
-          children: build(e.id),
-        }));
-    return build(null);
+    return buildTocTree(
+      all(this.db, "SELECT id, page_id, parent_id, position, title FROM toc"),
+    );
   }
 
   categories(): Category[] {
@@ -314,6 +294,61 @@ function queryAsset(db: Database, path: string): AssetBlob | null {
 }
 
 type Row = Record<string, unknown>;
+
+/**
+ * Build the TOC tree from flat `toc` rows (shared by the sql.js and streaming
+ * engines). A row with a NULL `page_id` is a pure folder node (format v6): it gets
+ * `group: true` and a synthetic `@folder:<slug-path>` key — stable across reloads
+ * (it derives from the title path, not from rowids), so the tree's persisted
+ * expanded-state keeps working, and never navigable (folder keys are excluded from
+ * the page map exactly like the family folders' `@collection:` keys).
+ */
+export function buildTocTree(rows: Row[]): TocNode[] {
+  type Flat = {
+    id: number;
+    pageId: string | null;
+    title: string;
+    position: number;
+  };
+  const byParent = new Map<number | null, Flat[]>();
+  for (const r of rows) {
+    const parent = r.parent_id == null ? null : Number(r.parent_id);
+    const row: Flat = {
+      id: Number(r.id),
+      pageId: r.page_id == null ? null : String(r.page_id),
+      title: String(r.title),
+      position: Number(r.position),
+    };
+    const bucket = byParent.get(parent);
+    if (bucket) bucket.push(row);
+    else byParent.set(parent, [row]);
+  }
+  const slug = (s: string): string =>
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "");
+  const build = (parent: number | null, path: string): TocNode[] =>
+    (byParent.get(parent) ?? [])
+      .sort((a, b) => a.position - b.position)
+      .map((e) => {
+        if (e.pageId != null) {
+          return {
+            pageId: e.pageId,
+            title: e.title,
+            children: build(e.id, path),
+          };
+        }
+        const key = `${path}/${slug(e.title)}`;
+        return {
+          pageId: `@folder:${key}`,
+          title: e.title,
+          group: true,
+          children: build(e.id, key),
+        };
+      });
+  return build(null, "");
+}
 
 function all(
   db: Database,

@@ -149,7 +149,7 @@ mod tests {
         let toc = pages
             .iter()
             .map(|p| TocNode {
-                page_id: p.id.clone(),
+                page_id: Some(p.id.clone()),
                 title: p.title.clone(),
                 children: vec![],
             })

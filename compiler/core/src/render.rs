@@ -22,13 +22,15 @@ pub fn render(src: &SourceDocset) -> Result<RenderedDocset> {
             // Render Markdown, expand `~~~code-group` (tabs) and `~~~code-preview`
             // (command + terminal output) blocks, rewrite `assets/…` targets to the
             // `asset:` scheme, and finally render `$…$` LaTeX spans to MathML.
+            // The closure only captures `&p.id`, so it is `Copy` — passed by value
+            // each time (clippy: needless_borrows_for_generic_args).
             let ctx = || format!("page `{}`", p.id);
             let html = markdown::render_html(&p.markdown, Some(&highlighter));
-            let html = render_code_groups(&html, &highlighter).with_context(&ctx)?;
-            let html = render_code_preview(&html, &highlighter).with_context(&ctx)?;
-            let html = render_code_tree(&html, &highlighter).with_context(&ctx)?;
+            let html = render_code_groups(&html, &highlighter).with_context(ctx)?;
+            let html = render_code_preview(&html, &highlighter).with_context(ctx)?;
+            let html = render_code_tree(&html, &highlighter).with_context(ctx)?;
             let html = assets::rewrite_asset_urls(&html);
-            let rendered = render_math(&html).with_context(&ctx)?;
+            let rendered = render_math(&html).with_context(ctx)?;
             // Prepend an "On this page" nav built from the heading anchors, honouring
             // the page's `toc` frontmatter (auto when unset). It floats top-right, so
             // sitting before the H1 keeps the viewer's subtitle handling intact.
