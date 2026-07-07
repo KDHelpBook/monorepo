@@ -24,42 +24,69 @@ lists, and code — just keep them inside the `>` quote.
 
 The five types, each with its own colour — the source, then how it renders:
 
+## Note
+
+Background or context the reader should absorb even when skimming — the fact still
+matters if they skip it, so it earns a box rather than a plain sentence.
+
 ```md
 > [!NOTE]
-> Highlights information users should take note of.
+> The compiled book works fully offline — no network access is needed to read it.
 ```
 
 > [!NOTE]
-> Highlights information users should take note of.
+> The compiled book works fully offline — no network access is needed to read it.
+
+## Tip
+
+Optional advice: a shortcut, a better habit, a nicer way to do the same thing.
+Nothing breaks if the reader ignores it.
 
 ```md
 > [!TIP]
-> Optional advice to do something better.
+> Name files after their page ids — links then read like the table of contents.
 ```
 
 > [!TIP]
-> Optional advice to do something better.
+> Name files after their page ids — links then read like the table of contents.
+
+## Important
+
+Information the reader *needs* for the task at hand to succeed — skipping it means
+something won't work, even though nothing dangerous happens.
 
 ```md
 > [!IMPORTANT]
-> Key information users need to succeed.
+> Every page needs a unique id — two files can't share one.
 ```
 
 > [!IMPORTANT]
-> Key information users need to succeed.
+> Every page needs a unique id — two files can't share one.
+
+## Warning
+
+Something that demands attention *before* the reader acts — a common trap, a
+surprising behavior, a step that's easy to get wrong.
 
 ```md
 > [!WARNING]
-> Urgent info that needs immediate attention.
+> Raw HTML is escaped, not rendered — `<b>bold</b>` shows up as literal text.
 ```
 
 > [!WARNING]
-> Urgent info that needs immediate attention.
+> Raw HTML is escaped, not rendered — `<b>bold</b>` shows up as literal text.
+
+## Caution
+
+Consequences: actions that are destructive, irreversible, or costly to undo. The
+strongest signal — save it for cases where acting wrongly does real damage.
 
 ```md
 > [!CAUTION]
-> Advises about risks or negative outcomes.
+> `khb pack` starts from a clean slate — docsets already in the output directory
+> are removed before the new ones are copied in.
 ```
 
 > [!CAUTION]
-> Advises about risks or negative outcomes.
+> `khb pack` starts from a clean slate — docsets already in the output directory
+> are removed before the new ones are copied in.
