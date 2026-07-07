@@ -92,6 +92,11 @@ function copyBtn(e){var b=e.target&&e.target.closest&&e.target.closest('button[d
  try{document.execCommand('copy')}catch(_){}document.body.removeChild(ta);
  var done=b.getAttribute('data-copied')||'',orig=b.textContent;if(done){b.textContent=done}b.classList.add('done');
  setTimeout(function(){b.textContent=orig;b.classList.remove('done')},1200);return true}
+// Toggle a Docus-style CodeCollapse: flip the .open class on the block (CSS reveals or
+// clamps the code) and swap the button label (data-expand-label / data-collapse-label).
+function collapseToggle(e){var b=e.target&&e.target.closest&&e.target.closest('button[data-collapse]');if(!b)return false;e.preventDefault();
+ var box=b.closest('.code-collapse');if(box){var open=box.classList.toggle('open');
+ var t=b.querySelector('.code-collapse-text');if(t)t.textContent=open?(b.getAttribute('data-collapse-label')||''):(b.getAttribute('data-expand-label')||'')}return true}
 // A tap/click on a standalone content image (not a linked one) asks the app to
 // open its zoomable lightbox. Only our resolved inline assets (data:image/…) —
 // never an arbitrary URL — so the app can trust the source it gets.
@@ -118,7 +123,7 @@ function mathZoom(e){var t=e.target;
  var de=document.documentElement;mathPrevOverflow=de.style.overflow;
  mathOv=document.createElement('div');mathOv.className='math-overlay';mathOv.appendChild(m.cloneNode(true));
  addEventListener('keydown',mathKey);de.style.overflow='hidden';document.body.appendChild(mathOv);return true}
-addEventListener('click',function(e){if(copyBtn(e))return;if(mathZoom(e))return;if(img(e))return;link(e,false)},true);
+addEventListener('click',function(e){if(copyBtn(e))return;if(collapseToggle(e))return;if(mathZoom(e))return;if(img(e))return;link(e,false)},true);
 addEventListener('auxclick',function(e){if(e.button===1)link(e,true)},true);
 // Pull-to-refresh: a downward drag started at the top of the page posts a 'pull'
 // to the app (the reading content lives in this sandboxed frame, so the app can't
@@ -1558,30 +1563,6 @@ function start(
         btn.setAttribute("data-copied", s.copied);
         btn.textContent = s.copy;
 
-        if (collapsible) {
-          // A native <details>: the summary is the header (click to toggle); Copy
-          // sits in it, and the frame bridge's preventDefault stops that click from
-          // also toggling. No filename → fall back to the language, then a label.
-          const lang = code?.className.match(/language-([\w+#-]+)/)?.[1] ?? "";
-          const details = document.createElement("details");
-          details.className = "code-block code-collapse";
-          details.open = flags.includes("open");
-          pre.before(details);
-
-          const summary = document.createElement("summary");
-          summary.className = "code-head";
-          summary.innerHTML = '<span class="code-chevron" aria-hidden="true"></span>';
-          if (file) summary.insertAdjacentHTML("beforeend", FILE_ICON); // trusted SVG
-          const name = document.createElement("span");
-          name.className = "code-file";
-          name.textContent = file || (lang && lang !== "collapse" ? lang : s.code);
-          summary.appendChild(name);
-          summary.appendChild(btn);
-          details.appendChild(summary);
-          details.appendChild(pre);
-          return;
-        }
-
         const wrap = document.createElement("div");
         wrap.className = "code-block";
         pre.before(wrap);
@@ -1602,6 +1583,31 @@ function start(
         } else {
           wrap.appendChild(pre);
           wrap.appendChild(btn);
+        }
+
+        if (collapsible) {
+          // Docus-style collapse: keep a *peek* of the code visible (CSS clamps the
+          // pre's height + a fade), toggled full-height by a centred button. Not a
+          // <details> — that hides the body entirely; we want a partial preview. The
+          // bridge flips `.open` and swaps the label on click.
+          const startOpen = flags.includes("open");
+          wrap.classList.add("code-collapse");
+          if (startOpen) wrap.classList.add("open");
+          const toggle = document.createElement("button");
+          toggle.type = "button";
+          toggle.className = "code-collapse-toggle";
+          toggle.setAttribute("data-collapse", "");
+          toggle.setAttribute("data-expand-label", s.expandCode);
+          toggle.setAttribute("data-collapse-label", s.collapseCode);
+          const chev = document.createElement("span");
+          chev.className = "code-collapse-chevron";
+          chev.setAttribute("aria-hidden", "true");
+          const label = document.createElement("span");
+          label.className = "code-collapse-text";
+          label.textContent = startOpen ? s.collapseCode : s.expandCode;
+          toggle.appendChild(chev);
+          toggle.appendChild(label);
+          wrap.appendChild(toggle);
         }
       });
   }

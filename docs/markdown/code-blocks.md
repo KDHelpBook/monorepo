@@ -41,22 +41,34 @@ export default defineConfig({})
 
 ## Collapsible blocks
 
-Add the **`collapse`** flag after the language (and optional `[filename]`) to render the
-block as a native `<details>` disclosure — collapsed by default, click the header to
-expand. Add **`open`** as well to start expanded. With no filename the header falls back
-to the language name.
+Add the **`collapse`** flag after the language (and optional `[filename]`) to clamp a
+long block to a short **preview** — the first few lines stay visible and fade out under
+an *Expand code* / *Collapse code* button. Collapsed by default; add **`open`** to start
+expanded.
 
 ````md
 ```rust [main.rs] collapse
 fn main() {
-    println!("A long example, tucked away until you want it.");
+    let mut total = 0;
+    for i in 1..=10 {
+        total += i;
+        println!("running total after {i}: {total}");
+    }
+    println!("sum 1..=10 = {total}");
+    // …plus a long tail of code you'd rather tuck away until it's wanted.
 }
 ```
 ````
 
 ```rust [main.rs] collapse
 fn main() {
-    println!("A long example, tucked away until you want it.");
+    let mut total = 0;
+    for i in 1..=10 {
+        total += i;
+        println!("running total after {i}: {total}");
+    }
+    println!("sum 1..=10 = {total}");
+    // …plus a long tail of code you'd rather tuck away until it's wanted.
 }
 ```
 

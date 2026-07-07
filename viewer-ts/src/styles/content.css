@@ -206,36 +206,62 @@ body {
   border-color: #b9d6bd;
   opacity: 1;
 }
-/* CodeCollapse: the ```lang [file] collapse flag renders a native <details>. The
-   summary reuses the filename bar (.code-head) as its clickable header; a chevron
-   marks the open/closed state. Copy lives in the summary — the frame bridge stops
-   that click from toggling. */
-.content details.code-collapse {
-  position: relative;
-  margin: 0.8em 0;
+/* CodeCollapse (```lang [file] collapse): keep a *peek* of the code visible and toggle
+   full height with a centred button — a partial preview (à la Docus), not a full hide.
+   `.code-block` already gives position:relative + margin; JS flips `.open`. */
+.content .code-collapse:not(.open) > pre {
+  max-height: 11em;
+  overflow: hidden;
 }
-.content .code-collapse > summary.code-head {
+.content .code-collapse.open > pre {
+  padding-bottom: 2.6em; /* room for the button that overlays the bottom edge */
+}
+/* Fade the clamped code out toward the toggle button while collapsed. */
+.content .code-collapse:not(.open)::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 5.5em;
+  background: linear-gradient(to bottom, transparent, var(--code-bg));
+  pointer-events: none;
+  border-radius: 0 0 3px 3px;
+}
+.content .code-collapse-toggle {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: 1;
+  padding: 5px 12px;
+  color: var(--content-h);
+  background: #fff;
+  border: 1px solid var(--code-border);
+  border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(20, 40, 80, 0.14);
   cursor: pointer;
-  list-style: none; /* drop the default disclosure triangle; we draw our own */
-  border-radius: 3px 3px 0 0;
 }
-.content .code-collapse > summary.code-head::-webkit-details-marker {
-  display: none;
+.content .code-collapse-toggle:hover {
+  border-color: #9fb6d6;
 }
-.content .code-collapse:not([open]) > summary.code-head {
-  border-radius: 3px; /* closed: the summary is the whole box */
-}
-.content .code-chevron {
+.content .code-collapse-chevron {
   width: 0;
   height: 0;
   flex: none;
-  border-left: 5px solid var(--muted);
-  border-top: 4px solid transparent;
-  border-bottom: 4px solid transparent;
+  border-top: 5px solid currentColor; /* points down = "expand" while collapsed */
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
   transition: transform 0.12s;
 }
-.content .code-collapse[open] .code-chevron {
-  transform: rotate(90deg);
+.content .code-collapse.open .code-collapse-chevron {
+  transform: rotate(180deg); /* points up = "collapse" */
 }
 /* "On this page" — an inline nav built from the page's heading anchors. */
 .content .page-toc {
