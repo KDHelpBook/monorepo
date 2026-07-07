@@ -1,6 +1,3 @@
-import type { Database } from "sql.js";
-import { getSqlJs } from "./sql";
-
 export interface TocNode {
   /** A real page id — or a synthetic `@folder:…` / `@collection:…` key for a
    *  folder node (`group: true`), which is never navigable. */
@@ -41,11 +38,13 @@ export interface SearchHit {
 }
 
 /**
- * The common shape of a loaded book, whatever the backend (whole-file sql.js or
- * a streamed remote `.khb`). Structural queries are **synchronous** — they read
- * small tables that every backend can keep in memory. The heavy, per-navigation
- * data is **asynchronous**: a page body, an attachment, or a full-text search may
- * hit the network (streaming) or just resolve immediately (sql.js).
+ * The common shape of a loaded book. In the browser every docset is backed by the
+ * one wa-sqlite engine (`streaming-docset.ts`) — whether whole-file (in-memory
+ * bytes) or streamed page-by-page over HTTP `Range`; the native CLI/Tauri path uses
+ * the Rust `core`. Structural queries are **synchronous** — they read small tables
+ * kept in memory after an eager load. The heavy, per-navigation data is
+ * **asynchronous**: a page body, an attachment, or an FTS5 search may stream on
+ * demand (or, whole-file, resolve from memory).
  */
 export interface IDocset {
   readonly id: string;
@@ -71,237 +70,14 @@ export interface IDocset {
   close(): void;
 }
 
-/**
- * A read-only handle to one `.khb` docset, backed by sql.js. The queries mirror
- * `compiler/core/src/docset.rs` — keep the two in sync.
- */
-export class Docset implements IDocset {
-  private constructor(
-    private readonly db: Database,
-    readonly id: string,
-    readonly language: string,
-    readonly title: string,
-    readonly collection: string,
-    readonly collectionTitle: string,
-    readonly version: string,
-    readonly products: Product[],
-    // Sidecar `.khba` packs keyed by their `meta.pack` id, so the routing index
-    // can address one directly (no ordering assumptions — survives re-upload).
-    private readonly attachmentsByPack: Map<string, Database> = new Map(),
-  ) {}
-
-  // sql.js is built without FTS5, so the prebuilt `pages_fts` index is unusable
-  // in the browser. We search the stored `plain` text in JS instead (the native
-  // CLI/Tauri path still uses real FTS5). Loaded lazily on first search.
-  private searchDocs:
-    { id: string; title: string; plain: string; keywords: string }[] | null =
-    null;
-
-  static async open(
-    bytes: Uint8Array,
-    attachmentBytes: Uint8Array[] = [],
-  ): Promise<Docset> {
-    const SQL = await getSqlJs();
-    const db = new SQL.Database(bytes);
-    const id = metaValue(db, "docset_id") ?? "docset";
-    const language = metaValue(db, "language") ?? "en";
-    const title = metaValue(db, "title") ?? id;
-    const collection = metaValue(db, "collection") ?? id;
-    const collectionTitle = metaValue(db, "collection_title") ?? title;
-    const version = metaValue(db, "version") ?? "";
-    const products = readProducts(db, collection, collectionTitle);
-    const byPack = new Map<string, Database>();
-    for (const b of attachmentBytes) {
-      const adb = new SQL.Database(b);
-      const pack = metaValue(adb, "pack");
-      if (pack != null) byPack.set(pack, adb);
-    }
-    return new Docset(
-      db,
-      id,
-      language,
-      title,
-      collection,
-      collectionTitle,
-      version,
-      products,
-      byPack,
-    );
-  }
-
-  /**
-   * Resolve an attachment (image or downloadable file) by path. Uses the routing
-   * index to go straight to the owning store — the embedded `assets` table
-   * (`pack === ""`) or the sidecar `.khba` whose `meta.pack` matches — with no
-   * probing of the other packs.
-   */
-  async asset(path: string): Promise<AssetBlob | null> {
-    const pack = assetPack(this.db, path);
-    if (pack == null) return null;
-    const db = pack === "" ? this.db : this.attachmentsByPack.get(pack);
-    return db ? queryAsset(db, path) : null;
-  }
-
-  meta(key: string): string | null {
-    return metaValue(this.db, key);
-  }
-
-  missingAssets(): { path: string; pack: string }[] {
-    const loaded = new Set(this.attachmentsByPack.keys());
-    try {
-      return all(this.db, "SELECT path, pack FROM asset_index WHERE pack != ''")
-        .map((r) => ({ path: String(r.path), pack: String(r.pack) }))
-        .filter((a) => !loaded.has(a.pack));
-    } catch {
-      return []; // no asset_index (older docset) ⇒ nothing to report
-    }
-  }
-
-  tocTree(): TocNode[] {
-    return buildTocTree(
-      all(this.db, "SELECT id, page_id, parent_id, position, title FROM toc"),
-    );
-  }
-
-  categories(): Category[] {
-    return all(
-      this.db,
-      "SELECT id, title FROM categories ORDER BY position",
-    ).map((r) => ({
-      id: String(r.id),
-      title: String(r.title),
-    }));
-  }
-
-  keywords(): KeywordEntry[] {
-    const entries: KeywordEntry[] = [];
-    for (const r of all(
-      this.db,
-      "SELECT term, page_id FROM keywords ORDER BY term, page_id",
-    )) {
-      const term = String(r.term);
-      const pageId = String(r.page_id);
-      const last = entries[entries.length - 1];
-      if (last && last.term === term) last.pageIds.push(pageId);
-      else entries.push({ term, pageIds: [pageId] });
-    }
-    return entries;
-  }
-
-  async page(id: string): Promise<Page | null> {
-    const rows = all(
-      this.db,
-      "SELECT id, title, body_html FROM pages WHERE id = ?",
-      [id],
-    );
-    const r = rows[0];
-    return r
-      ? {
-          id: String(r.id),
-          title: String(r.title),
-          bodyHtml: String(r.body_html),
-        }
-      : null;
-  }
-
-  async search(query: string, limit = 40): Promise<SearchHit[]> {
-    const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
-    if (!terms.length) return [];
-    this.searchDocs ??= all(
-      this.db,
-      "SELECT id, title, plain, keywords FROM pages",
-    ).map((r) => ({
-      id: String(r.id),
-      title: String(r.title),
-      plain: String(r.plain),
-      keywords: String(r.keywords),
-    }));
-
-    const scored: { hit: SearchHit; score: number }[] = [];
-    for (const doc of this.searchDocs) {
-      const title = doc.title.toLowerCase();
-      const keywords = doc.keywords.toLowerCase();
-      const body = doc.plain.toLowerCase();
-      let score = 0;
-      for (const t of terms)
-        score += occ(title, t) * 6 + occ(keywords, t) * 3 + occ(body, t);
-      if (score > 0) {
-        scored.push({
-          score,
-          hit: {
-            pageId: doc.id,
-            title: doc.title,
-            snippet: snippet(doc.plain, terms),
-            score,
-          },
-        });
-      }
-    }
-    scored.sort((a, b) => b.score - a.score);
-    return scored.slice(0, limit).map((s) => s.hit);
-  }
-
-  pagesByCategory(categoryId: string): string[] {
-    return all(
-      this.db,
-      "SELECT page_id FROM page_categories WHERE category_id = ? ORDER BY page_id",
-      [categoryId],
-    ).map((r) => String(r.page_id));
-  }
-
-  /** A page's "See also" related ids, in author order (empty if none / v<4). */
-  related(id: string): string[] {
-    try {
-      return all(
-        this.db,
-        "SELECT related_id FROM related WHERE page_id = ? ORDER BY position",
-        [id],
-      ).map((r) => String(r.related_id));
-    } catch {
-      return []; // no `related` table (docset predates v4)
-    }
-  }
-
-  close(): void {
-    this.db.close();
-    for (const db of this.attachmentsByPack.values()) db.close();
-  }
-}
-
-/** The store id holding `path` per the routing index, or null if unknown. */
-function assetPack(db: Database, path: string): string | null {
-  try {
-    const rows = all(db, "SELECT pack FROM asset_index WHERE path = ?", [path]);
-    const r = rows[0];
-    return r ? String(r.pack) : null;
-  } catch {
-    return null; // no `asset_index` table
-  }
-}
-
-/** Query one database's `assets` table, tolerating its absence (a v1 docset). */
-function queryAsset(db: Database, path: string): AssetBlob | null {
-  try {
-    const rows = all(db, "SELECT mime, data FROM assets WHERE path = ?", [
-      path,
-    ]);
-    const r = rows[0];
-    if (!r) return null;
-    return { mime: String(r.mime), data: r.data as Uint8Array };
-  } catch {
-    return null; // no `assets` table in this database
-  }
-}
-
 type Row = Record<string, unknown>;
 
 /**
- * Build the TOC tree from flat `toc` rows (shared by the sql.js and streaming
- * engines). A row with a NULL `page_id` is a pure folder node: it gets
- * `group: true` and a synthetic `@folder:<slug-path>` key — stable across reloads
- * (it derives from the title path, not from rowids), so the tree's persisted
- * expanded-state keeps working, and never navigable (folder keys are excluded from
- * the page map exactly like the family folders' `@collection:` keys).
+ * Build the TOC tree from flat `toc` rows. A row with a NULL `page_id` is a pure
+ * folder node (format v6): it gets `group: true` and a synthetic `@folder:<slug-path>`
+ * key — stable across reloads (it derives from the title path, not from rowids), so
+ * the tree's persisted expanded-state keeps working, and never navigable (folder keys
+ * are excluded from the page map exactly like the family folders' `@collection:` keys).
  */
 export function buildTocTree(rows: Row[]): TocNode[] {
   type Flat = {
@@ -348,93 +124,4 @@ export function buildTocTree(rows: Row[]): TocNode[] {
         };
       });
   return build(null, "");
-}
-
-function all(
-  db: Database,
-  sql: string,
-  params: (string | number)[] = [],
-): Row[] {
-  const stmt = db.prepare(sql);
-  try {
-    stmt.bind(params);
-    const rows: Row[] = [];
-    while (stmt.step()) rows.push(stmt.getAsObject() as Row);
-    return rows;
-  } finally {
-    stmt.free();
-  }
-}
-
-function metaValue(db: Database, key: string): string | null {
-  const rows = all(db, "SELECT value FROM meta WHERE key = ?", [key]);
-  const r = rows[0];
-  return r ? String(r.value) : null;
-}
-
-/** Read the products table, defaulting to one = the collection when it's absent
- *  (older `.khb`) or empty — mirrors `Docset::products` in the Rust core. */
-function readProducts(
-  db: Database,
-  collection: string,
-  collectionTitle: string,
-): Product[] {
-  let rows: Row[] = [];
-  try {
-    rows = all(db, "SELECT id, title FROM products ORDER BY position");
-  } catch {
-    /* table predates products — fall through to the default */
-  }
-  const products = rows.map((r) => ({
-    id: String(r.id),
-    title: String(r.title),
-  }));
-  return products.length
-    ? products
-    : [{ id: collection, title: collectionTitle }];
-}
-
-/** Count non-overlapping occurrences of `needle` in `hay`. */
-function occ(hay: string, needle: string): number {
-  if (!needle) return 0;
-  let i = 0;
-  let count = 0;
-  while ((i = hay.indexOf(needle, i)) !== -1) {
-    count++;
-    i += needle.length;
-  }
-  return count;
-}
-
-function escHtml(s: string): string {
-  return s.replace(
-    /[&<>]/g,
-    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c] ?? c,
-  );
-}
-
-/** A ~160-char excerpt around the first matched term, with terms highlighted. */
-function snippet(text: string, terms: string[]): string {
-  const low = text.toLowerCase();
-  let pos = -1;
-  for (const t of terms) {
-    const i = low.indexOf(t);
-    if (i !== -1 && (pos === -1 || i < pos)) pos = i;
-  }
-  if (pos === -1) pos = 0;
-  const start = Math.max(0, pos - 45);
-  let slice = escHtml(
-    (start > 0 ? "…" : "") +
-      text.slice(start, start + 160) +
-      (start + 160 < text.length ? "…" : ""),
-  );
-  for (const t of terms) {
-    if (!t) continue;
-    const re = new RegExp(
-      "(" + t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")",
-      "ig",
-    );
-    slice = slice.replace(re, "<mark>$1</mark>");
-  }
-  return slice;
 }

@@ -8,7 +8,7 @@ import {
   rangeSupported,
   type DocsetSource,
 } from "./data/collection";
-import { Docset, type SearchHit, type TocNode } from "./data/docset";
+import { type SearchHit, type TocNode } from "./data/docset";
 import {
   addExtraPack,
   addRemote,
@@ -240,19 +240,19 @@ async function bootstrap(): Promise<void> {
         }
         if (!streamed) {
           const bytes = await fetchDocsetBytes(entry.url);
-          const ds = await Docset.open(bytes);
+          const { StreamingDocset } = await import("./data/streaming-docset");
+          const meta = await StreamingDocset.peekBytes(bytes);
           remotes.push({
             url: entry.url,
             bytes,
-            id: ds.id,
-            language: ds.language,
-            title: ds.title,
-            collection: ds.collection,
-            version: ds.version,
+            id: meta.id,
+            language: meta.language,
+            title: meta.title,
+            collection: meta.collection,
+            version: meta.version,
             streaming: false,
             attachments: entry.attachments, // fetched whole alongside the .khb
           });
-          ds.close();
         }
       } catch {
         /* unreachable/invalid remote — skip; the user can remove it */
@@ -1583,7 +1583,10 @@ function start(
         // filename; bare words are flags (`collapse`, plus `open` to start expanded).
         const meta = code?.getAttribute("data-meta") ?? "";
         const file = (meta.match(/\[([^\]]*)\]/)?.[1] ?? "").trim();
-        const flags = meta.replace(/\[[^\]]*\]/, "").trim().split(/\s+/);
+        const flags = meta
+          .replace(/\[[^\]]*\]/, "")
+          .trim()
+          .split(/\s+/);
         const collapsible = flags.includes("collapse");
 
         const btn = document.createElement("button");
@@ -2108,8 +2111,10 @@ function start(
             /* not Range-streamable after all — validate by fetching it whole */
           }
         }
-        if (!validated)
-          (await Docset.open(await fetchDocsetBytes(url))).close();
+        if (!validated) {
+          const { StreamingDocset } = await import("./data/streaming-docset");
+          await StreamingDocset.peekBytes(await fetchDocsetBytes(url)); // validates
+        }
         addRemote(url, streaming, packs);
         location.reload();
       } catch {
@@ -2141,19 +2146,20 @@ function start(
       const attachments = await Promise.all(
         attachmentFiles.map(async (f) => new Uint8Array(await f.arrayBuffer())),
       );
-      const ds = await Docset.open(bytes, attachments); // validates + reads meta
+      const { StreamingDocset } = await import("./data/streaming-docset");
+      const meta = await StreamingDocset.peekBytes(bytes); // validates + reads meta
       await putDocset({
-        id: ds.id,
-        language: ds.language,
-        title: ds.title,
-        collection: ds.collection,
-        version: ds.version,
+        id: meta.id,
+        language: meta.language,
+        title: meta.title,
+        collection: meta.collection,
+        version: meta.version,
         bytes,
         attachments,
       });
-      if (ds.language !== lang) {
+      if (meta.language !== lang) {
         try {
-          localStorage.setItem(LANG_KEY, ds.language);
+          localStorage.setItem(LANG_KEY, meta.language);
         } catch {
           /* ignore */
         }
