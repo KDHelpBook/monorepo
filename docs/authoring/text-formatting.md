@@ -1,22 +1,14 @@
 ---
 title: Text formatting
-keywords: [bold, italic, strikethrough, underline, highlight, superscript, subscript, inline code, line break]
+keywords: [bold, italic, strikethrough, underline, highlight, superscript, subscript, inline code, line break, horizontal rule]
 categories: [markdown]
 related: [headings, code-blocks, differences]
 ---
 
 # Text formatting
 
-Inline styling uses the usual Markdown markers, strikethrough included — exactly as
-on GitHub.
-
-```md
-**bold**, *italic*, ***bold italic***
-~~strikethrough~~
-`inline code`
-```
-
-Renders as: **bold**, *italic*, ***bold italic***, ~~strikethrough~~, `inline code`.
+Inline styling uses the usual Markdown markers — the GitHub ones work exactly as on
+GitHub, and a few extra marks come on top.
 
 > [!WARNING]
 > Raw inline HTML is **escaped, not rendered** — `<b>x</b>` shows up on the page as
@@ -24,6 +16,60 @@ Renders as: **bold**, *italic*, ***bold italic***, ~~strikethrough~~, `inline co
 
 Attribute syntax (`{.class}` on a span) is not supported either, and there are no
 inline components — see [Differences from GitHub Markdown](differences).
+
+## Bold
+
+Double asterisks make strong emphasis — key terms on first use, UI labels, the one
+word a skimming reader must not miss.
+
+```md
+Press **Compile** to build the book.
+```
+
+Renders as: Press **Compile** to build the book.
+
+## Italic
+
+Single asterisks make light emphasis — a stressed word, a book title, a term used
+in a borrowed sense.
+
+```md
+The id is *stable*: links keep working after a rename.
+```
+
+Renders as: The id is *stable*: links keep working after a rename.
+
+## Bold italic
+
+Triple asterisks combine both — rare, for the strongest inline stress.
+
+```md
+Back up the file ***before*** converting it.
+```
+
+Renders as: Back up the file ***before*** converting it.
+
+## Strikethrough
+
+Double tildes cross text out — something that no longer applies but should stay
+visible, like a superseded value or a corrected claim.
+
+```md
+The limit is ~~10~~ 25 attachments.
+```
+
+Renders as: The limit is ~~10~~ 25 attachments.
+
+## Inline code
+
+Backticks typeset identifiers verbatim in monospace — file names, ids, field values,
+anything a reader might type.
+
+```md
+Set `language = "en"` in `docset.toml`.
+```
+
+Renders as: Set `language = "en"` in `docset.toml`.
 
 ## Highlight
 
@@ -76,14 +122,30 @@ Renders as: H~2~O, x~1~ … x~n~.
 > subscript; strikethrough is `~~x~~` only. A literal tilde in prose is escaped as
 > `\~` (e.g. \~5 min).
 
-## Line breaks & rules
+## Line breaks
 
-- A **hard line break** is two trailing spaces at the end of a line, or a backslash `\`.
-- Three or more `-`, `*`, or `_` on their own line make a **horizontal rule**:
+A blank line starts a new paragraph. For a **hard line break** inside one — an
+address, a verse — end the line with a backslash (or two trailing spaces):
 
 ```md
 First line\
 forced onto a new line.
+```
 
+Renders as:
+
+First line\
+forced onto a new line.
+
+## Horizontal rules
+
+Three or more `-`, `*`, or `_` alone on a line draw a divider — a scene change
+between passages that don't deserve separate headings:
+
+```md
 ---
 ```
+
+Renders as:
+
+---
