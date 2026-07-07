@@ -10,25 +10,26 @@
     - page: compiling
     - title: Reference
       children:
+        # One Markdown section: each base construct sits next to its KD Help
+        # Book extension (links/page-links, images/assets, code-blocks/
+        # code-extensions).
         - title: Markdown
           children:
             - page: headings
             - page: text-formatting
             - page: lists
             - page: links
+            - page: page-links
             - page: images
+            - page: assets
             - page: tables
             - page: blockquotes
+            - page: callouts
             - page: code-blocks
+            - page: code-extensions
             - page: footnotes
             - page: emoji
-        - title: Markdown Extensions
-          children:
-            - page: callouts
             - page: math
-            - page: page-links
-            - page: assets
-            - page: code-extensions
         - page: frontmatter
           children:
             - page: frontmatter-id
