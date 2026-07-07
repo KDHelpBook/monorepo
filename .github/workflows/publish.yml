@@ -127,7 +127,7 @@ jobs:
         run: |
           "$BIN" pack --profile bundled --viewer viewer-dist \
             --docset out/markdown.khb \
-            --home khb-markdown:overview \
+            --home khb-markdown:index \
             --stream \
             --llms \
             -o publish

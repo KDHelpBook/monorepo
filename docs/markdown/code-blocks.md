@@ -184,4 +184,4 @@ Steps…
 - Inline code uses single backticks: `` `let x = 1` ``.
 - **Collapsible** blocks (the `collapse` flag) and **groups** (`~~~code-group`) work
   today. A **file-tree** view and code→output **preview** aren't supported yet — they'll
-  reuse the same opaque-fence mechanism (see the [overview](overview)).
+  reuse the same opaque-fence mechanism (see the [overview](index)).

@@ -1,5 +1,5 @@
 ---
-id: overview
+id: index
 title: Markdown in KD Help Book
 keywords: [Markdown, syntax, MDC, directives, reference]
 categories: [authoring]
