@@ -1192,7 +1192,7 @@ textarea {
   .tbtn.more-btn {
     display: inline-flex;
   }
-  /* Reclaim a whole row of scarce vertical space: the ms-help:// address bar is
+  /* Reclaim a whole row of scarce vertical space: the kd-help:// address bar is
      rarely typed on a phone (you navigate by tree/search/links, and Share copies
      the link). */
   .addressbar {

@@ -1850,7 +1850,7 @@ function start(
     content.style.display = "none";
     document.title = `${title} — kdhelp`;
     const { docsetId, localId } = collection.split(id);
-    address.value = `ms-help://${docsetId}/${localId}.htm`;
+    address.value = `kd-help://${docsetId}/${localId}.htm`;
     renderTabs();
     updateFavBtn();
     if (mode === "contents") revealCurrent();
@@ -2450,7 +2450,7 @@ function start(
   address.addEventListener("keydown", (e) => {
     if (e.key !== "Enter") return;
     const v = address.value.trim();
-    const m = v.match(/ms-help:\/\/([^/]+)\/([^/]+?)(?:\.htm)?$/);
+    const m = v.match(/kd-help:\/\/([^/]+)\/([^/]+?)(?:\.htm)?$/);
     if (m) openPage(`${m[1]}:${m[2]}`);
     else openPage(v.includes(":") ? v : collection.resolveLink(currentId, v));
   });
