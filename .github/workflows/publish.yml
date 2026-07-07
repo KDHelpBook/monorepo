@@ -4,7 +4,7 @@ name: Publish
 # nothing is built here: the khb CLI and the viewer dist both come from
 # build.yml (this very run when called by release.yml, the triggering run on
 # workflow_run, or the latest successful main build on manual dispatch). The
-# CLI then compiles the project documentation (docs/markdown) from the
+# CLI then compiles every documentation volume (docs/*/docset.toml) from the
 # checked-out ref, packs the distribution (with the llms.txt export) and
 # merges archived documentation versions downloaded from past releases.
 #
@@ -98,36 +98,45 @@ jobs:
           "$BIN" --version
           echo "BIN=$BIN" >> "$GITHUB_ENV"
 
-      # The site ships only the project documentation (docs/markdown); the
+      # The site ships only the documentation volumes (every docs/*/ with a
+      # docset.toml — authoring, publishing, internals, …); the
       # compiler/examples/* books are dev/test fixtures and stay out of it.
       # Compiled here (not taken from the docs-khb artifact) because the
-      # release build of that artifact carries a version-suffixed id — it is
-      # the archive asset, not the current book.
-      - name: Compile the docs
+      # release build of that artifact carries version-suffixed ids — those
+      # are the archive assets, not the current books.
+      - name: Compile the documentation volumes
+        shell: bash
         run: |
           mkdir -p out
-          # The current book is published as version "latest" (workspace-only
+          # The current books are published as version "latest" (workspace-only
           # sed, never committed): non-numeric strings sort above numeric
           # versions in the viewer's compareVersions, so "latest" is the
           # default pick in the version switcher, with the released X.Y.Z
           # books from the step below selectable behind it.
-          sed -i 's/^version = ".*"$/version = "latest"/' docs/markdown/docset.toml
-          grep -q '^version = "latest"$' docs/markdown/docset.toml
-          "$BIN" compile docs/markdown -o out/markdown.khb
+          for T in docs/*/docset.toml; do
+            DIR=$(dirname "$T")
+            ID=$(sed -n 's/^id = "\(.*\)"$/\1/p' "$T" | head -n1)
+            sed -i 's/^version = ".*"$/version = "latest"/' "$T"
+            grep -q '^version = "latest"$' "$T"
+            "$BIN" compile "$DIR" -o "out/${ID}.khb"
+          done
 
       # The bundled profile locks the dist (no open/manage-docsets UI — the
       # site serves exactly the books packed here) and keeps the PWA off (no
       # service worker — every deploy is picked up immediately, no stale
-      # offline copies). --home lands cold starts on the docs overview
-      # instead of Search. --stream marks the books for page-level
+      # offline copies). --home lands cold starts on the authoring volume's
+      # overview instead of Search. --stream marks the books for page-level
       # streaming: Pages honours HTTP Range, so the viewer reads only the
       # pages it touches (and falls back to a whole fetch where Range isn't
       # available).
       - name: Pack the distribution
+        shell: bash
         run: |
+          DOCSETS=()
+          for F in out/*.khb; do DOCSETS+=(--docset "$F"); done
           "$BIN" pack --profile bundled --viewer viewer-dist \
-            --docset out/markdown.khb \
-            --home khb-markdown:index \
+            "${DOCSETS[@]}" \
+            --home khb-authoring:index \
             --stream \
             --llms \
             -o publish
@@ -137,20 +146,21 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Every release carries a khb-markdown-vX.Y.Z.khb (versioned id
-          # and version). The site keeps one archived book per minor series —
-          # the newest patch of each X.Y (1.1.0/1.1.1/1.1.2 → only 1.1.2) —
-          # while the current main build is "latest", so nothing collides.
-          # Superseded patches stay downloadable from Releases; they just
-          # aren't merged into the site. --limit is explicit because gh
-          # defaults to a silent 30.
+          # Every release carries one <id>-vX.Y.Z.khb per documentation volume
+          # (versioned id and version; volume ids follow the khb-* convention).
+          # The site keeps one archived book per minor series — the newest
+          # patch of each X.Y (1.1.0/1.1.1/1.1.2 → only 1.1.2) — while the
+          # current main builds are "latest", so nothing collides. Superseded
+          # patches stay downloadable from Releases; they just aren't merged
+          # into the site. --limit is explicit because gh defaults to a
+          # silent 30.
           TAGS=$(gh release list -R "${{ github.repository }}" --limit 1000 --json tagName --jq '.[].tagName' \
             | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
             | sort -rV | awk -F. '!seen[$1"."$2]++' || true)
           mkdir -p old
           for TAG in $TAGS; do
             gh release download "$TAG" -R "${{ github.repository }}" \
-              --pattern 'khb-markdown-*.khb' -D "old/$TAG" || true
+              --pattern 'khb-*-v*.khb' -D "old/$TAG" || true
           done
           shopt -s nullglob
           for F in old/*/*.khb; do

@@ -37,7 +37,7 @@ Body content…
 
 ## Notes for KD Help Book
 
-- This whole `docs/markdown/` folder is authored with these fields, so it can be
+- This whole `docs/authoring/` folder is authored with these fields, so it can be
   compiled straight into a `.khb` (`khb compile`).
 - `keywords` and `categories` power the Index and the "Filter by category" scope; see
   [links](links) for how `related` renders.

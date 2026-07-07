@@ -116,20 +116,20 @@ either block is a build error.
 `````md
 ~~~code-preview
 ```bash
-khb compile docs/markdown -o markdown.khb
+khb compile docs/authoring -o authoring.khb
 ```
 ```
-compiled khb-markdown (14 pages, language en) -> markdown.khb
+compiled khb-authoring (14 pages, language en) -> markdown.khb
 ```
 ~~~
 `````
 
 ~~~code-preview
 ```bash
-khb compile docs/markdown -o markdown.khb
+khb compile docs/authoring -o authoring.khb
 ```
 ```
-compiled khb-markdown (14 pages, language en) -> markdown.khb
+compiled khb-authoring (14 pages, language en) -> markdown.khb
 ```
 ~~~
 

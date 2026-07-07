@@ -1,7 +1,7 @@
-# Compiles this folder into a docset:  khb compile docs/markdown -o markdown.khb
+# Compiles this folder into a docset:  khb compile docs/authoring -o authoring.khb
 # Pages are the flat *.md files; the TOC falls back to page order (no toc.yaml needed).
-id = "khb-markdown"
-title = "Markdown in KD Help Book"
+id = "khb-authoring"
+title = "Authoring KD Help Books"
 version = "0.1.0"
 language = "en"
 collection = "khb-docs"
