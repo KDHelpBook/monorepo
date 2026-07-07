@@ -1,14 +1,14 @@
 ---
 title: Frontmatter
-keywords: [frontmatter, metadata, id, title, keywords, categories, related]
-categories: [authoring]
-related: [headings, links]
+keywords: [frontmatter, metadata, YAML, fields, page metadata, index]
+categories: [configuration]
+related: [docset-toml, toc-yaml, getting-started]
 ---
 
 # Frontmatter
 
 Each page may begin with a YAML **frontmatter** block, fenced by `---`, that sets the
-page's metadata. Every field is optional.
+page's metadata. Every field is optional — a page of pure Markdown is a valid page.
 
 ```md
 ---
@@ -16,7 +16,8 @@ id: writing-pages
 title: Writing pages
 keywords: [Markdown, frontmatter, authoring]
 categories: [authoring]
-related: [table-of-contents, categories]
+related: [table-of-contents, other-book:overview]
+toc: true
 ---
 
 # Writing pages
@@ -24,22 +25,22 @@ related: [table-of-contents, categories]
 Body content…
 ```
 
+The block is stripped before rendering — it never appears in the page body.
+
 ## Fields
 
-| Field | Meaning |
-|-------|---------|
-| `id` | The page's stable id (used by in-book links `#id` and `related`). **Defaults to the file name** without `.md`. |
-| `title` | Display title in the TOC and tabs. Falls back to the first `# H1`, then the id. |
-| `keywords` | Terms for the **F1 keyword index** and full-text search weighting. |
-| `categories` | Facet tags (many-to-many). A category used here but absent from `categories.yaml` is auto-registered. |
-| `related` | Page ids for the **See also** footer — an in-book id, or a cross-book `docsetId:pageId`. |
-| `toc` | Force the on-page ["On this page"](headings) box `true`/`false`. Omitted → auto (shown only when the page has 2+ top-level sections). |
+| Field | Sets | Details |
+|-------|------|---------|
+| `id` | the page's stable id (defaults to the file name) | [id](frontmatter-id) |
+| `title` | the display title in the TOC, tabs and search | [title](frontmatter-title) |
+| `keywords` | the page's entries in the keyword index | [keywords](frontmatter-keywords) |
+| `categories` | facet tags for the category filter | [categories](frontmatter-categories) |
+| `related` | the **See also** footer | [related](frontmatter-related) |
+| `toc` | forces the "On this page" box on or off | [toc](frontmatter-toc) |
 
 ## Notes for KD Help Book
 
-- This whole `docs/authoring/` folder is authored with these fields, so it can be
-  compiled straight into a `.khb` (`khb compile`).
-- `keywords` and `categories` power the Index and the "Filter by category" scope; see
-  [links](links) for how `related` renders.
-- The frontmatter is stripped before rendering — it never appears in the page body,
-  and it's what the optional `md` column stores the body *without*.
+- A frontmatter block that doesn't parse (or isn't terminated by a closing `---`)
+  fails the [compile](compiling).
+- This whole book is authored with these fields — open any page's source under
+  `docs/authoring/` for a live example.

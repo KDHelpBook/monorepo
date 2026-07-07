@@ -1,7 +1,7 @@
 ---
 title: Footnotes
-keywords: [footnotes, references, citations]
-categories: [blocks]
+keywords: [footnotes, references, citations, notes, markers]
+categories: [markdown]
 related: [links, blockquotes]
 ---
 

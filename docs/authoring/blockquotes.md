@@ -1,8 +1,8 @@
 ---
 title: Blockquotes
-keywords: [blockquote, quote, callout]
-categories: [blocks]
-related: [tables, footnotes]
+keywords: [blockquote, quote, citation, nested quote, callout]
+categories: [markdown]
+related: [callouts, tables, footnotes]
 ---
 
 # Blockquotes

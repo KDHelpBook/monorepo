@@ -1,8 +1,8 @@
 ---
 title: Math
-keywords: [math, latex, mathml, equations, formulas]
-categories: [blocks]
-related: [code-blocks, text-formatting]
+keywords: [math, latex, mathml, equations, formulas, display math]
+categories: [extensions]
+related: [compiling, differences, code-blocks]
 ---
 
 # Math

@@ -1,7 +1,7 @@
 ---
 title: Tables
-keywords: [tables, GFM, columns, alignment]
-categories: [blocks]
+keywords: [tables, GFM, columns, alignment, pipe table]
+categories: [markdown]
 related: [lists, blockquotes]
 ---
 

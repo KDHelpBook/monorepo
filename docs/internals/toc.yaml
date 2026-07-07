@@ -1,0 +1,10 @@
+- page: index
+- title: Reference
+  children:
+    - page: file-formats
+    - page: sqlite-schema
+    - page: full-text-search
+    - page: streaming
+    - page: security-model
+    - page: manifest-schemas
+    - page: building-a-compiler

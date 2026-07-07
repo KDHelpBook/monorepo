@@ -1,8 +1,8 @@
 ---
 title: Callouts
 keywords: [callout, alert, note, tip, warning, admonition]
-categories: [blocks]
-related: [blockquotes, text-formatting]
+categories: [extensions]
+related: [blockquotes, text-formatting, differences]
 ---
 
 # Callouts

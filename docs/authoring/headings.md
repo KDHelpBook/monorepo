@@ -1,8 +1,8 @@
 ---
 title: Headings & paragraphs
-keywords: [headings, paragraphs, title, structure]
-categories: [structure]
-related: [text-formatting, frontmatter]
+keywords: [headings, paragraphs, title, structure, anchors, permalink, sections]
+categories: [markdown]
+related: [text-formatting, frontmatter-title, frontmatter-toc]
 ---
 
 # Headings & paragraphs
@@ -39,8 +39,8 @@ Jump back to [Where to start](#where-to-start).
 ## Notes for KD Help Book
 
 - The **first H1** is used as the page title when the frontmatter has no explicit
-  `title` — see [frontmatter](frontmatter).
+  `title` — see [title (frontmatter)](frontmatter-title).
 - Keep exactly one H1 per page (the title); start body sections at H2.
 - A page with two or more top-level sections automatically gets an **"On this page"**
   navigation box built from its headings; force it with `toc: true` / `toc: false` in
-  the [frontmatter](frontmatter).
+  the frontmatter — see [toc (frontmatter)](frontmatter-toc).

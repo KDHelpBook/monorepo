@@ -1,8 +1,8 @@
 ---
 title: Text formatting
-keywords: [bold, italic, strikethrough, inline code, emphasis, line break]
-categories: [inline]
-related: [headings, code-blocks]
+keywords: [bold, italic, strikethrough, inline code, emphasis, line break, horizontal rule]
+categories: [markdown]
+related: [headings, code-blocks, differences]
 ---
 
 # Text formatting
@@ -35,4 +35,4 @@ forced onto a new line.
 - **Raw inline HTML is escaped, not rendered** — docsets may come from untrusted
   sources, so `<b>x</b>` in Markdown shows as literal text. Use Markdown, not HTML.
 - Attribute syntax (`{.class}` on a span) is **not** supported; there are no inline
-  components. See the MDC discussion in the [overview](index).
+  components. See [Differences from GitHub Markdown](differences).

@@ -15,6 +15,11 @@ export default defineConfig({
   // transiently break the main module and leave the page unstyled). Its wasm is
   // imported separately via `sql-wasm.wasm?url`.
   optimizeDeps: { include: ["sql.js"] },
+  // Dev-server port: honour a harness-assigned PORT (several sessions can then
+  // run their own dev servers side by side); default to Vite's 5173 otherwise.
+  server: process.env.PORT
+    ? { port: Number(process.env.PORT), strictPort: true }
+    : {},
   build: {
     target: "es2022",
     sourcemap: true,

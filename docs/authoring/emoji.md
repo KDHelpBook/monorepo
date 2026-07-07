@@ -1,7 +1,7 @@
 ---
 title: Emoji
-keywords: [emoji, shortcodes, unicode]
-categories: [inline]
+keywords: [emoji, shortcodes, unicode, icons, symbols]
+categories: [markdown]
 related: [text-formatting, headings]
 ---
 

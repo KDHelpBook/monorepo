@@ -1,9 +1,33 @@
 {
   "docsets": [
     {
+      "file": "docsets/khb-authoring.khb",
+      "id": "khb-authoring",
+      "title": "Authoring KD Help Books",
+      "language": "en",
+      "collection": "khb-docs",
+      "version": "0.1.0"
+    },
+    {
+      "file": "docsets/khb-publishing.khb",
+      "id": "khb-publishing",
+      "title": "Publishing KD Help Books",
+      "language": "en",
+      "collection": "khb-docs",
+      "version": "0.1.0"
+    },
+    {
+      "file": "docsets/khb-internals.khb",
+      "id": "khb-internals",
+      "title": "KD Help Book Internals",
+      "language": "en",
+      "collection": "khb-docs",
+      "version": "0.1.0"
+    },
+    {
       "file": "docsets/examples.en.khb",
       "id": "khb-docs-en",
-      "title": "KD Help Book — Documentation",
+      "title": "KD Help Book \u2014 Documentation",
       "language": "en",
       "collection": "khb-docs",
       "version": "0.1.0"
@@ -11,7 +35,7 @@
     {
       "file": "docsets/examples.extras-en.khb",
       "id": "khb-extras-en",
-      "title": "KD Help Book — Tips & FAQ",
+      "title": "KD Help Book \u2014 Tips & FAQ",
       "language": "en",
       "collection": "khb-tips",
       "version": "0.1.0"
@@ -19,7 +43,7 @@
     {
       "file": "docsets/examples.pl.khb",
       "id": "khb-docs-pl",
-      "title": "KD Help Book — Dokumentacja",
+      "title": "KD Help Book \u2014 Dokumentacja",
       "language": "pl",
       "collection": "khb-docs",
       "version": "0.1.0",
@@ -30,7 +54,7 @@
     {
       "file": "docsets/examples.extras-pl.khb",
       "id": "khb-extras-pl",
-      "title": "KD Help Book — Porady i FAQ",
+      "title": "KD Help Book \u2014 Porady i FAQ",
       "language": "pl",
       "collection": "khb-tips",
       "version": "0.1.0"
@@ -38,7 +62,7 @@
     {
       "file": "docsets/lorem-en.khb",
       "id": "lorem-en",
-      "title": "Lorem Ipsum — Test Docset",
+      "title": "Lorem Ipsum \u2014 Test Docset",
       "language": "en",
       "collection": "lorem",
       "version": "1.0.0"

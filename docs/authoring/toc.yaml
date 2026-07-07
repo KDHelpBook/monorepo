@@ -1,0 +1,47 @@
+# Table of contents for the authoring guide.  Folder nodes (`title:` only, no
+# `page:`) group their children; page nodes take their label from the page title.
+- page: index
+- page: getting-started
+- page: differences
+- page: compiling
+- title: Reference
+  children:
+    - title: Markdown
+      children:
+        - page: headings
+        - page: text-formatting
+        - page: lists
+        - page: links
+        - page: images
+        - page: tables
+        - page: blockquotes
+        - page: code-blocks
+        - page: footnotes
+        - page: emoji
+    - title: Markdown Extensions
+      children:
+        - page: callouts
+        - page: math
+        - page: page-links
+        - page: assets
+        - page: code-extensions
+    - page: frontmatter
+      children:
+        - page: frontmatter-id
+        - page: frontmatter-title
+        - page: frontmatter-keywords
+        - page: frontmatter-categories
+        - page: frontmatter-related
+        - page: frontmatter-toc
+    - page: docset-toml
+      children:
+        - page: docset-id
+        - page: docset-title
+        - page: docset-version
+        - page: docset-language
+        - page: docset-collection
+        - page: docset-products
+    - page: toc-yaml
+      children:
+        - page: toc-nodes
+        - page: toc-ordering

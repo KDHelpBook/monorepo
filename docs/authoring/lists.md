@@ -1,7 +1,7 @@
 ---
 title: Lists & task lists
 keywords: [lists, ordered, unordered, nested, task list, checkbox]
-categories: [structure]
+categories: [markdown]
 related: [text-formatting, tables]
 ---
 
