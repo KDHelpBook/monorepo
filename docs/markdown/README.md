@@ -53,8 +53,10 @@ That is the crux of why MDC is *not* the right target for KD Help Book:
 (with `:::` for nesting), and **CommonMark generic directives** use `:::name`. But the
 difference that matters isn't the colon count — it's the **semantics**: MDC resolves a
 name to a **Vue component mounted at runtime** (what we can't do in a no-framework
-sandbox), while generic directives compile to plain `<div class="…">`. comrak also has
-**no directive extension**, so *any* colon syntax is custom work for us regardless.
+sandbox), while generic directives compile to plain `<div class="…">`. And comrak 0.53
+**has a native `block_directive` extension** (`:::warning … :::` → `<div class="warning">`),
+so the container-directive form is a flag away — no custom parser needed for the static
+blocks (tabs still need frame JS for the interactivity).
 
 **Recommendation:** don't reach for a `:::` directive parser for the code features.
 Split by shape:
@@ -82,7 +84,8 @@ What's left (all non-code blocks):
 
 | Want | How | Effort |
 |------|-----|--------|
-| **Tabs / cards / steps / badges** (non-code) | true `:::` generic directives → `<div class>` (not MDC) | medium |
+| **Tabs / cards / steps / badges** (non-code) | true `:::` generic directives → `<div class>` (not MDC; comrak 0.53 has a native `block_directive` extension) | medium |
+| **Diagrams** (`` ```mermaid ``) | render to **SVG at build time** (like math → MathML), so it stays static + sandbox-safe. Engine TBD — Mermaid needs node/`mmdc`; Graphviz/D2 have native CLIs | medium–large |
 | **Video / embeds** | a `:video`/`:embed` directive → sandboxed `<iframe>`/`<video>` | medium |
 | **Inline-code highlight** (`` `x`{:ts} ``) | per-block info-string flag | small (deferred) |
 
