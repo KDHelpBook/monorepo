@@ -114,6 +114,11 @@ pub fn pack(opts: &PackOptions) -> Result<()> {
     )?;
     if opts.llms {
         write_llms(&opts.out, &opts.docsets, opts.base_url.as_deref())?;
+        // Only now, with the export actually on disk, wire the discovery hooks into
+        // index.html — so a non-llms (or dev) build never advertises files it lacks.
+        inject_llms_hooks(&opts.out, opts.base_url.is_some())?;
+    } else {
+        strip_llms_markers(&opts.out)?;
     }
     println!(
         "packed {} docset(s) + viewer -> {}",
@@ -121,6 +126,85 @@ pub fn pack(opts: &PackOptions) -> Result<()> {
         opts.out.display()
     );
     Ok(())
+}
+
+/// The inert marker comments the viewer template carries; `pack` swaps them for the
+/// real discovery hooks under `--llms`, or strips them otherwise. Kept as exact
+/// strings so a third-party viewer without them is simply left untouched.
+const LLMS_HEAD_MARKER: &str = "<!--llms-discovery:head-->";
+const LLMS_BODY_MARKER: &str = "<!--llms-discovery:body-->";
+
+/// Replace the `index.html` discovery markers with the real hooks: a
+/// `<link rel="llms-txt">` (always, since `--llms` writes llms.txt) plus the
+/// sitemap `<link>` and the `<noscript>` landing block. `has_sitemap` (i.e.
+/// `--base-url` was given, so sitemap.xml exists) gates the sitemap bits. Tolerant:
+/// a dist whose index.html lacks the markers is left as-is with a note.
+fn inject_llms_hooks(out: &Path, has_sitemap: bool) -> Result<()> {
+    let path = out.join("index.html");
+    let Ok(html) = fs::read_to_string(&path) else {
+        println!("note: no index.html in the viewer dist — skipped discovery hooks");
+        return Ok(());
+    };
+    if !html.contains(LLMS_HEAD_MARKER) && !html.contains(LLMS_BODY_MARKER) {
+        println!("note: index.html has no llms-discovery markers — skipped hooks");
+        return Ok(());
+    }
+    let html = html
+        .replace(LLMS_HEAD_MARKER, &head_hooks(has_sitemap))
+        .replace(LLMS_BODY_MARKER, &noscript_block(has_sitemap));
+    fs::write(&path, html).with_context(|| format!("writing {}", path.display()))?;
+    println!("injected AI-discovery hooks into index.html");
+    Ok(())
+}
+
+/// Remove the discovery markers for a non-`--llms` pack, so the output carries no
+/// dangling placeholder comments (and never any dead links).
+fn strip_llms_markers(out: &Path) -> Result<()> {
+    let path = out.join("index.html");
+    let Ok(html) = fs::read_to_string(&path) else {
+        return Ok(());
+    };
+    if !html.contains(LLMS_HEAD_MARKER) && !html.contains(LLMS_BODY_MARKER) {
+        return Ok(());
+    }
+    let html = html
+        .replace(LLMS_HEAD_MARKER, "")
+        .replace(LLMS_BODY_MARKER, "");
+    fs::write(&path, html).with_context(|| format!("writing {}", path.display()))?;
+    Ok(())
+}
+
+/// The `<head>` hooks: the llms.txt link always, the sitemap link only when
+/// sitemap.xml was emitted. Relative hrefs (resolve at the deploy base).
+fn head_hooks(has_sitemap: bool) -> String {
+    let mut s = String::from(r#"<link rel="llms-txt" href="llms.txt" />"#);
+    if has_sitemap {
+        s.push_str("\n    <link rel=\"sitemap\" type=\"application/xml\" href=\"sitemap.xml\" />");
+    }
+    s
+}
+
+/// The `<noscript>` landing block handed to JS-less crawlers: a title, a line of
+/// prose, and links to the static exports. The sitemap entry appears only when
+/// sitemap.xml exists.
+fn noscript_block(has_sitemap: bool) -> String {
+    let sitemap_li = if has_sitemap {
+        "\n          <li><a href=\"sitemap.xml\">sitemap.xml</a> — every crawlable page URL</li>"
+    } else {
+        ""
+    };
+    format!(
+        "<noscript>\n\
+         \x20     <div class=\"bot-index\">\n\
+         \x20       <h1>KD Help Book</h1>\n\
+         \x20       <p>A documentation reader. This page is a client-side application and needs JavaScript to run. Machine-readable copies of the documentation are available as static files:</p>\n\
+         \x20       <ul>\n\
+         \x20         <li><a href=\"llms.txt\">llms.txt</a> — an index of every page, linking to its clean-Markdown copy</li>\n\
+         \x20         <li><a href=\"llms-full.txt\">llms-full.txt</a> — the full documentation inline, for one-shot ingestion</li>{sitemap_li}\n\
+         \x20       </ul>\n\
+         \x20     </div>\n\
+         \x20   </noscript>"
+    )
 }
 
 /// Emit the `llms.txt` family into the dist root: the link index, the full inline
@@ -488,5 +572,51 @@ mod tests {
         assert!(robots.contains("Sitemap: https://acme.github.io/proj/sitemap.xml"));
         // The subpath caveat must stay documented in the emitted file.
         assert!(robots.contains("host root"));
+    }
+
+    #[test]
+    fn head_hooks_gate_the_sitemap_link_on_a_base_url() {
+        let with = head_hooks(true);
+        assert!(with.contains(r#"rel="llms-txt""#));
+        assert!(with.contains(r#"rel="sitemap""#));
+        let without = head_hooks(false);
+        assert!(without.contains(r#"rel="llms-txt""#));
+        assert!(!without.contains("sitemap")); // no sitemap.xml → no sitemap link
+    }
+
+    #[test]
+    fn noscript_block_lists_sitemap_only_with_a_base_url() {
+        let with = noscript_block(true);
+        assert!(with.starts_with("<noscript>"));
+        assert!(with.contains("llms.txt") && with.contains("llms-full.txt"));
+        assert!(with.contains(r#"href="sitemap.xml""#));
+        let without = noscript_block(false);
+        assert!(without.contains("llms.txt") && without.contains("llms-full.txt"));
+        assert!(!without.contains("sitemap.xml"));
+    }
+
+    #[test]
+    fn inject_swaps_markers_and_strip_removes_them() {
+        let dir = std::env::temp_dir().join(format!("khb-inject-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let html = format!("<head>{LLMS_HEAD_MARKER}</head><body>{LLMS_BODY_MARKER}</body>");
+
+        // Inject with a base URL: both hooks land, no marker survives.
+        fs::write(dir.join("index.html"), &html).unwrap();
+        inject_llms_hooks(&dir, true).unwrap();
+        let injected = fs::read_to_string(dir.join("index.html")).unwrap();
+        assert!(!injected.contains(LLMS_HEAD_MARKER) && !injected.contains(LLMS_BODY_MARKER));
+        assert!(injected.contains(r#"rel="llms-txt""#));
+        assert!(injected.contains(r#"rel="sitemap""#));
+        assert!(injected.contains("<noscript>"));
+
+        // Strip leaves neither the markers nor any hooks.
+        fs::write(dir.join("index.html"), &html).unwrap();
+        strip_llms_markers(&dir).unwrap();
+        let stripped = fs::read_to_string(dir.join("index.html")).unwrap();
+        assert!(!stripped.contains(LLMS_HEAD_MARKER) && !stripped.contains(LLMS_BODY_MARKER));
+        assert!(!stripped.contains("llms-txt") && !stripped.contains("noscript"));
+
+        fs::remove_dir_all(&dir).ok();
     }
 }

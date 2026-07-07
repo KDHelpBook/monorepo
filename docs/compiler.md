@@ -189,12 +189,17 @@ The viewer is a client-side, hash-routed SPA, so a crawler that lands on the sit
 sees only the shell — the `#…` route is a fragment the server never receives, and
 the `.md` files above aren't linked from anywhere. Two things fix that:
 
-- The viewer's `index.html` ships a `<noscript>` landing block and
-  `<link rel="llms-txt">` / `<link rel="sitemap">` hooks (relative hrefs, so they
-  resolve at the deploy base). These are always present — a JS-less client reading
-  the raw HTML is handed `llms.txt`, `llms-full.txt`, and `sitemap.xml`.
-- Passing **`--base-url`** alongside `--llms` writes two more files into the dist
-  root:
+- With `--llms`, `pack` injects a `<noscript>` landing block and a
+  `<link rel="llms-txt">` hook into the dist's `index.html` (relative hrefs, so they
+  resolve at the deploy base) — a JS-less client reading the raw HTML is handed
+  `llms.txt` and `llms-full.txt`. These are wired in **only** when the export is
+  produced: a dev server or a `pack` without `--llms` ships neither, so nothing ever
+  points at files that don't exist. The base template carries inert marker comments
+  that `pack` swaps (or strips).
+- Passing **`--base-url`** alongside `--llms` additionally emits `sitemap.xml` +
+  `robots.txt` **and** adds the sitemap to the discovery hooks (a
+  `<link rel="sitemap">` and a `sitemap.xml` entry in the `<noscript>` block). The
+  two files:
   - **`sitemap.xml`** — lists the landing page, `llms.txt`, `llms-full.txt`, and
     every `md/…` page as **absolute** URLs (`<loc>` requires the full URL, hence the
     base). This is the highest-value item: real content at real, crawlable

@@ -17,45 +17,21 @@
     />
     <meta name="apple-mobile-web-app-title" content="KD Help Book" />
     <link rel="apple-touch-icon" href="icons/icon-192.png" />
-    <!-- AI/crawler discovery hooks. Relative hrefs so they resolve at the deploy's
-         base — whether that's a domain root or a project subpath (matches Vite's
-         base: "./"). The files themselves are written by `khb pack --llms`
-         (llms.txt / llms-full.txt always; sitemap.xml when --base-url is given). -->
-    <link rel="llms-txt" href="llms.txt" />
-    <link rel="sitemap" type="application/xml" href="sitemap.xml" />
+    <!-- AI/crawler discovery hooks (<link rel="llms-txt">, and rel="sitemap" when
+         --base-url is set) are injected here by `khb pack --llms`, which is what
+         actually produces llms.txt / sitemap.xml. Kept OUT of the base template so
+         a dev server or a non-llms pack never advertises files that don't exist.
+         pack replaces the exact marker below; it's an inert comment otherwise. -->
+    <!--llms-discovery:head-->
     <title>KD Help Book</title>
   </head>
   <body>
-    <!-- Fallback for clients that don't run JavaScript (crawlers, LLM fetchers):
-         the viewer is a client-side app, so a bot landing on this URL would
-         otherwise see an empty shell. These links hand it the static,
-         machine-readable exports — real files at real URLs, which llms.txt
-         indexes page-by-page. Hidden from human visitors (JS is on for them).
-         Relative hrefs resolve at the deploy base (root or subpath). The files
-         exist only in a `khb pack --llms` build (not in `npm run dev`). -->
-    <noscript>
-      <div class="bot-index">
-        <h1>KD Help Book</h1>
-        <p>
-          A documentation reader. This page is a client-side application and
-          needs JavaScript to run. Machine-readable copies of the documentation
-          are available as static files:
-        </p>
-        <ul>
-          <li>
-            <a href="llms.txt">llms.txt</a> — an index of every page, linking to
-            its clean-Markdown copy
-          </li>
-          <li>
-            <a href="llms-full.txt">llms-full.txt</a> — the full documentation
-            inline, for one-shot ingestion
-          </li>
-          <li>
-            <a href="sitemap.xml">sitemap.xml</a> — every crawlable page URL
-          </li>
-        </ul>
-      </div>
-    </noscript>
+    <!-- A JS-less <noscript> landing block (title + links to the static exports
+         llms.txt / llms-full.txt / sitemap.xml, for crawlers and LLM fetchers) is
+         injected here by `khb pack --llms`. Left out of the base template so a dev
+         server / non-llms pack doesn't point bots at files that don't exist. pack
+         replaces the exact marker below; inert comment otherwise. -->
+    <!--llms-discovery:body-->
     <div class="window" id="window" role="application" aria-label="KD Help Book Viewer">
       <!-- Menu bar (top of our chrome; the OS provides the window titlebar) -->
       <div class="menubar" id="menubar" role="menubar">
