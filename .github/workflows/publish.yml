@@ -131,8 +131,13 @@ jobs:
           # Every release carries a kdhelp-markdown-vX.Y.Z.khb (versioned id
           # and version). All of them — including the newest — are merged in:
           # the current book is "latest", so no release can collide with it.
+          # The viewer loads books lazily (only the picked version is ever
+          # fetched), so many archived versions cost site size and deploy
+          # time, not reader bandwidth. --limit is explicit because gh
+          # defaults to a silent 30; revisit it if the site nears the ~1 GB
+          # Pages ceiling.
           mkdir -p old
-          for TAG in $(gh release list -R "${{ github.repository }}" --json tagName --jq '.[].tagName'); do
+          for TAG in $(gh release list -R "${{ github.repository }}" --limit 1000 --json tagName --jq '.[].tagName'); do
             gh release download "$TAG" -R "${{ github.repository }}" \
               --pattern 'kdhelp-markdown-*.khb' -D "old/$TAG" || true
           done
