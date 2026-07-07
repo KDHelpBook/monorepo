@@ -884,6 +884,61 @@ body {
   max-width: 100%;
   height: auto;
 }
+/* Gallery (`~~~gallery`): a strip of uniform captioned image tiles. `w=` sets the shared
+   tile width via --gallery-w; `wrap` (default) flows tiles into rows when the pane is
+   narrow, `scroll` keeps them in one horizontally scrolling row. Tiles stay one fixed
+   width so identical images never squeeze unevenly (the table-cell problem this replaces). */
+.content .gallery {
+  --gallery-w: 200px;
+  display: flex;
+  gap: 14px;
+  margin: 1.2em 0;
+}
+.content .gallery-wrap {
+  flex-wrap: wrap;
+}
+.content .gallery-scroll {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  padding-bottom: 6px; /* leave room for the scrollbar under the tiles */
+}
+.content .gallery-tile {
+  flex: 0 0 var(--gallery-w);
+  width: var(--gallery-w);
+  max-width: 100%; /* a tile still shrinks below one width on a very narrow pane */
+  margin: 0;
+  text-align: center;
+  scroll-snap-align: start;
+}
+.content .gallery-tile img {
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--code-border);
+  border-radius: 2px;
+  background: var(--code-bg);
+}
+.content .gallery-tile figcaption {
+  margin-top: 0.4em;
+  color: var(--content-h);
+  font-family: var(--font-ui);
+  font-size: 0.9em;
+  font-weight: 600;
+  font-style: normal;
+}
+.content .gallery-desc {
+  margin: 0.2em 0 0;
+  color: var(--muted);
+  font-size: 0.82em;
+  line-height: 1.4;
+}
+/* In print a scrolling strip wraps instead, so no tiles are clipped off the page. */
+@media print {
+  .content .gallery-scroll {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+}
 /* Description / definition lists (Term / : details). */
 .content dl {
   margin: 0.8em 0;

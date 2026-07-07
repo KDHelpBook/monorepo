@@ -36,6 +36,20 @@ fn main() {
 Link between pages by their id, e.g. [Categories](categories); use `#heading` for an
 in-page section anchor.
 
+For a step-by-step screenshot strip, a `~~~gallery` fence lays the images out as
+uniform captioned tiles — the image's alt text is the caption, and any line after it is
+the tile's description:
+
+~~~gallery w=180 scroll
+![1. Waiting for the card](assets/step-wait.svg)
+Tap the card — its **UID** appears.
+
+![2. Scanning](assets/step-scan.svg)
+Exactly **one** tag may answer.
+
+![3. Write confirmed](assets/step-done.svg)
+~~~
+
 > [!NOTE]
 > Use `> [!NOTE]` (or `TIP`, `IMPORTANT`, `WARNING`, `CAUTION`) to set text apart in a
 > coloured callout.
