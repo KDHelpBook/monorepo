@@ -116,6 +116,14 @@ enum Command {
         /// (all pages inline), and per-page Markdown under `md/`.
         #[arg(long)]
         llms: bool,
+        /// Absolute base URL of the deploy, with a trailing slash — e.g.
+        /// `https://acme.github.io/` (root) or `https://acme.github.io/docs/`
+        /// (project subpath). Only meaningful with `--llms`: it lets the export
+        /// also write `sitemap.xml` (absolute `<loc>`s) and `robots.txt`
+        /// (advertising the sitemap). Omitted → those two are skipped; the
+        /// relative in-page discovery hooks still work.
+        #[arg(long = "base-url")]
+        base_url: Option<String>,
         /// Mark docset(s) for page-level streaming: the viewer opens them over
         /// HTTP `Range` instead of downloading the whole file (worth it for big
         /// books; needs a Range-capable host, else the viewer falls back). Bare
@@ -174,6 +182,7 @@ fn main() -> Result<()> {
             no_pwa,
             home,
             llms,
+            base_url,
             stream,
         } => {
             let mut external_sources = profile == Profile::Reader;
@@ -196,6 +205,7 @@ fn main() -> Result<()> {
                 pwa: wants_pwa,
                 home,
                 llms,
+                base_url,
                 stream,
             })
         }

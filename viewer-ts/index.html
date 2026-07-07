@@ -17,9 +17,21 @@
     />
     <meta name="apple-mobile-web-app-title" content="KD Help Book" />
     <link rel="apple-touch-icon" href="icons/icon-192.png" />
+    <!-- AI/crawler discovery hooks (<link rel="llms-txt">, and rel="sitemap" when
+         --base-url is set) are injected here by `khb pack --llms`, which is what
+         actually produces llms.txt / sitemap.xml. Kept OUT of the base template so
+         a dev server or a non-llms pack never advertises files that don't exist.
+         pack replaces the exact marker below; it's an inert comment otherwise. -->
+    <!--llms-discovery:head-->
     <title>KD Help Book</title>
   </head>
   <body>
+    <!-- A JS-less <noscript> landing block (title + links to the static exports
+         llms.txt / llms-full.txt / sitemap.xml, for crawlers and LLM fetchers) is
+         injected here by `khb pack --llms`. Left out of the base template so a dev
+         server / non-llms pack doesn't point bots at files that don't exist. pack
+         replaces the exact marker below; inert comment otherwise. -->
+    <!--llms-discovery:body-->
     <div class="window" id="window" role="application" aria-label="KD Help Book Viewer">
       <!-- Menu bar (top of our chrome; the OS provides the window titlebar) -->
       <div class="menubar" id="menubar" role="menubar">

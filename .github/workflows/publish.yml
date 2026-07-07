@@ -128,7 +128,11 @@ jobs:
       # overview instead of Search. --stream marks the books for page-level
       # streaming: Pages honours HTTP Range, so the viewer reads only the
       # pages it touches (and falls back to a whole fetch where Range isn't
-      # available).
+      # available). --llms writes the AI-facing export, and --base-url (the
+      # org-root Pages URL) adds sitemap.xml + robots.txt so the exported
+      # per-page Markdown is crawler-discoverable, not just linked from
+      # llms.txt. robots.txt is honoured because this deploy is at the host
+      # root; a project-subpath deploy would set its own /sub/ base-url.
       - name: Pack the distribution
         shell: bash
         run: |
@@ -139,6 +143,7 @@ jobs:
             --home khb-authoring:index \
             --stream \
             --llms \
+            --base-url https://kdhelpbook.github.io/ \
             -o publish
 
       - name: Merge archived doc versions from releases
