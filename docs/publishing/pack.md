@@ -21,6 +21,12 @@ khb pack --viewer viewer-ts/dist \
          -o publish/
 ```
 
+`pack` starts from a clean slate: a stale `docsets.json`, `config.json`, or
+`docsets/` left in the output (for example by a dev build) is removed and
+rewritten — the manifest describes exactly what you packed, nothing more. To
+update an existing distribution without re-packing everything, use
+[patch](patch).
+
 ## Flags
 
 | Flag | Meaning |
@@ -35,11 +41,3 @@ khb pack --viewer viewer-ts/dist \
 | `--home <id\|search>` | the cold-start landing view — see [The landing page](pack-home) |
 | `--llms` | also emit the AI-facing `llms.txt` export — see [AI export](pack-llms) |
 | `--stream [<path>…]` | mark docset(s) for page-level streaming — see [Streaming](pack-stream) |
-
-## Notes for KD Help Book
-
-- `pack` starts from a clean slate: a stale `docsets.json`, `config.json`, or
-  `docsets/` left in the output (for example by a dev build) is removed and
-  rewritten — the manifest describes exactly what you packed, nothing more.
-- To update an existing distribution without re-packing everything, use
-  [patch](patch).

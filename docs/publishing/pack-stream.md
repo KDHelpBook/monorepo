@@ -22,7 +22,8 @@ khb pack … --stream big.khb --stream atlas.khb
 
 A `--stream <path>` must name one of the `--docset` paths (matched by full path
 or by file name) — anything else is an error, so a typo can't silently ship an
-unstreamed book.
+unstreamed book. [patch](patch) accepts `--stream` too, applied to the docsets
+being added or replaced.
 
 ## What it does
 
@@ -37,7 +38,9 @@ The viewer treats it as a **preference, not a promise**: it opens the file (and
 its attachment packs) over `Range`, and if the host doesn't honour `Range` — or
 the streamed open fails for any reason — it **falls back automatically** to
 fetching the whole file. A streamed distribution works everywhere; it's just
-faster where the host cooperates.
+faster where the host cooperates. How the viewer reads a database it never
+downloads — the Range-VFS, block coalescing, and the wa-sqlite engine — is
+covered in [Internals: streaming](khb-internals:streaming).
 
 ## The uncompressed rule
 
@@ -51,11 +54,3 @@ faster where the host cooperates.
 Your host must also serve the file raw — no transparent gzip/brotli re-encoding on
 `.khb` responses — or byte offsets stop matching. See [Hosting](hosting) for
 host-side requirements.
-
-## Notes for KD Help Book
-
-- How the viewer reads a database it never downloads — the Range-VFS, block
-  coalescing, and the wa-sqlite engine — is covered in
-  [Internals: streaming](khb-internals:streaming).
-- [patch](patch) accepts `--stream` too, applied to the docsets being added or
-  replaced.

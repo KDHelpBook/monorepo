@@ -21,6 +21,10 @@ the child items.
 2. Step two
 ```
 
+Ordered lists renumber automatically — the actual starting number is respected, but
+subsequent items follow in sequence. List items can contain paragraphs, code blocks,
+and nested lists; indent continuation content to line up under the item's text.
+
 ## Task lists
 
 Task lists are a GitHub-flavoured extension (enabled): `- [ ]` for an open item and
@@ -35,10 +39,3 @@ Renders as:
 
 - [x] Compile the docset
 - [ ] Publish it
-
-## Notes for KD Help Book
-
-- Ordered lists renumber automatically — the actual starting number is respected, but
-  subsequent items follow in sequence.
-- List items can contain paragraphs, code blocks, and nested lists; indent
-  continuation content to line up under the item's text.

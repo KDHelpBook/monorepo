@@ -22,8 +22,13 @@ tree, referencing pages by [id](frontmatter-id):
 ```
 
 Two node kinds — **page nodes** (`page:`) and **folder nodes** (`title:` only) — may
-nest freely via `children:`; order in the file is order in the tree. Without a
-`toc.yaml` the book gets a flat table of contents in file-name order.
+nest freely via `children:`; order in the file is order in the tree. Every `page:`
+id must name an existing page, and every folder node needs a `title:` — either
+mistake fails the [compile](compiling). Without a `toc.yaml` the book gets a flat
+table of contents in file-name order.
+
+The tree only *arranges* pages: a page absent from `toc.yaml` still compiles, is
+searchable and linkable — it just has no Contents entry.
 
 ## In this section
 
@@ -31,10 +36,3 @@ nest freely via `children:`; order in the file is order in the tree. Without a
 |------|--------|
 | [TOC nodes](toc-nodes) | page nodes, label overrides, folder nodes |
 | [TOC ordering](toc-ordering) | ordering with and without a `toc.yaml` |
-
-## Notes for KD Help Book
-
-- Every `page:` id must name an existing page, and every folder node needs a
-  `title:` — either mistake fails the [compile](compiling).
-- The tree only *arranges* pages: a page absent from `toc.yaml` still compiles, is
-  searchable and linkable — it just has no Contents entry.

@@ -9,7 +9,9 @@ related: [distribution, hosting, khb-internals:manifest-schemas]
 
 A **`.khbm`** is a small JSON file naming several remote docsets, so a reader can
 add a whole product in one step — *Manage docsets → Import manifest…* in the
-viewer — instead of pasting URLs one by one.
+viewer — instead of pasting URLs one by one. Import needs a build with external
+sources enabled — a [locked distribution](pack-profiles) has no *Manage docsets*
+page.
 
 ## Format
 
@@ -37,7 +39,9 @@ Every `url` and `attachments` entry is resolved **relative to the manifest's own
 URL**. That's the point: publish `books.khbm` in the same directory as the
 `.khb`/`.khba` files and reference them with bare relative paths — move or mirror
 the directory and the manifest keeps working. Absolute URLs are allowed too and
-pass through untouched.
+pass through untouched. Relative resolution also lets a `.khbm` act as a disk
+entry point for the future desktop (Tauri) app, reading its books straight from a
+folder.
 
 This is the key difference from `docsets.json`, whose paths are relative to a
 **packed dist root** and which carries per-book metadata; a `.khbm` is authored
@@ -55,10 +59,3 @@ whole is the reader's auto-negotiated choice (host `Range` support, file size).
 > manifest hosted on another origin needs CORS on the files it names — see
 > [Hosting](hosting). Parsing is forgiving: an entry without a usable `url` is
 > skipped; a missing `khbm` marker or a non-array `docsets` rejects the file.
-
-## Notes for KD Help Book
-
-- Import needs a build with external sources enabled — a
-  [locked distribution](pack-profiles) has no *Manage docsets* page.
-- Relative resolution also lets a `.khbm` act as a disk entry point for the
-  future desktop (Tauri) app, reading its books straight from a folder.

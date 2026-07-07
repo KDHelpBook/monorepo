@@ -17,12 +17,7 @@ KD Help Book stores rendered HTML, never the source Markdown[^format].
 ```
 
 Renders with a numbered marker[^demo] and a collected list of notes at the foot of the
-page.
+page — definitions are gathered into that footnotes section regardless of where you
+wrote them. Ids are page-local; the same `[^1]` on two pages doesn't collide.
 
 [^demo]: This is the footnote's text; the viewer links the marker to it and back.
-
-## Notes for KD Help Book
-
-- Footnote ids are page-local; the same `[^1]` on two pages doesn't collide.
-- The compiler gathers all definitions into a footnotes section at the end of the
-  rendered page, regardless of where you wrote them.

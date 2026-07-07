@@ -18,6 +18,13 @@ extension, which KD Help Book enables.
 
 Renders as: **bold**, *italic*, ***bold italic***, ~~strikethrough~~, `inline code`.
 
+> [!WARNING]
+> Raw inline HTML is **escaped, not rendered** — docsets may come from untrusted
+> sources, so `<b>x</b>` in Markdown shows as literal text. Use Markdown, not HTML.
+
+Attribute syntax (`{.class}` on a span) is not supported either, and there are no
+inline components — see [Differences from GitHub Markdown](differences).
+
 ## Line breaks & rules
 
 - A **hard line break** is two trailing spaces at the end of a line, or a backslash `\`.
@@ -29,10 +36,3 @@ forced onto a new line.
 
 ---
 ```
-
-## Notes for KD Help Book
-
-- **Raw inline HTML is escaped, not rendered** — docsets may come from untrusted
-  sources, so `<b>x</b>` in Markdown shows as literal text. Use Markdown, not HTML.
-- Attribute syntax (`{.class}` on a span) is **not** supported; there are no inline
-  components. See [Differences from GitHub Markdown](differences).

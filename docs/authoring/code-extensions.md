@@ -10,7 +10,8 @@ related: [code-blocks, differences, compiling]
 KD Help Book extends plain [code blocks](code-blocks) two ways: **flags on the fence
 info string** (filename, collapse) and **`~~~` containers** that combine several
 blocks into one widget (tabs, command+output, file trees). No raw HTML, no directive
-syntax — just fences.
+syntax — just fences. These are the only container blocks; there is no generic `:::`
+directive syntax — see [Differences from GitHub Markdown](differences).
 
 ## Filename + copy
 
@@ -90,6 +91,8 @@ yarn add khb
 ~~~
 
 A group with no inner code blocks is a **build error** (a likely authoring mistake).
+These malformed-container errors are part of [compile-time validation](compiling) —
+an empty group or a preview missing its output block never ships.
 
 ## Command + output (`code-preview`)
 
@@ -154,11 +157,3 @@ Welcome.
 Steps…
 ```
 ~~~
-
-## Notes for KD Help Book
-
-- The malformed-container build errors are part of [compile-time
-  validation](compiling) — an empty group or a preview missing its output block never
-  ships.
-- These are the only container blocks; there is no generic `:::` directive syntax —
-  see [Differences from GitHub Markdown](differences).

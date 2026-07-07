@@ -23,6 +23,10 @@ same paragraph because there is no blank line between them.
 A new paragraph starts after a blank line.
 ```
 
+The **first H1** is used as the page title when the frontmatter has no explicit
+`title` — see [title (frontmatter)](frontmatter-title). Keep exactly one H1 per
+page (the title) and start body sections at H2.
+
 ## Anchors
 
 Every heading is given an `id` — the slug of its text — and a hover-revealed `#`
@@ -36,11 +40,7 @@ navigation still comes from the docset's `toc.yaml` / folder structure.
 Jump back to [Where to start](#where-to-start).
 ```
 
-## Notes for KD Help Book
-
-- The **first H1** is used as the page title when the frontmatter has no explicit
-  `title` — see [title (frontmatter)](frontmatter-title).
-- Keep exactly one H1 per page (the title); start body sections at H2.
-- A page with two or more top-level sections automatically gets an **"On this page"**
-  navigation box built from its headings; force it with `toc: true` / `toc: false` in
-  the frontmatter — see [toc (frontmatter)](frontmatter-toc).
+Headings also drive the **"On this page"** navigation box: a page with two or more
+top-level sections gets one automatically, built from its headings. Force it on or
+off with `toc: true` / `toc: false` in the frontmatter — see
+[toc (frontmatter)](frontmatter-toc).

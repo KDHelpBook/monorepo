@@ -29,7 +29,10 @@ the file, not the file name):
   attachment packs take its place;
 - a **new id** is appended to the manifest.
 
-Everything else in `docsets.json` — and all of `config.json` — is left untouched.
+Like `pack`, `patch` picks up sibling attachment packs (`foo.khba`,
+`foo.<tag>.khba`) next to each `.khb` and records them in the entry's
+`attachments`. Everything else in `docsets.json` — and all of `config.json` — is
+left untouched.
 
 ## Flags
 
@@ -40,12 +43,6 @@ Everything else in `docsets.json` — and all of `config.json` — is left untou
 | `--stream [<path>…]` | mark the patched books for streaming — see [Streaming](pack-stream) |
 
 `--mode` and `--stream` apply **only to the docsets being added or replaced**;
-existing entries keep whatever they were packed with.
-
-## Notes for KD Help Book
-
-- Like `pack`, `patch` picks up sibling attachment packs (`foo.khba`,
-  `foo.<tag>.khba`) next to each `.khb` and records them in the entry's
-  `attachments`.
-- `patch` is the natural CI verb for [archived versions](versioning): pack the
-  current site once, then patch in each archived book downloaded from a release.
+existing entries keep whatever they were packed with. That makes `patch` the
+natural CI verb for [archived versions](versioning): pack the current site once,
+then patch in each archived book downloaded from a release.

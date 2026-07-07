@@ -27,6 +27,10 @@ id = "suite"
 title = "The Suite"
 ```
 
+One folder, one book, one language: the same product in other languages or versions
+is a *separate* source folder whose manifest shares the `collection` (and, for
+languages, the `version`).
+
 ## Fields
 
 | Field | Required | Sets | Details |
@@ -38,10 +42,5 @@ title = "The Suite"
 | `collection`, `collection_title` | no | the merge/family key | [collection](docset-collection) |
 | `[[products]]` | no | the product filter facet | [products](docset-products) |
 
-## Notes for KD Help Book
-
-- One folder, one book, one language: the same product in other languages or versions
-  is a *separate* source folder whose manifest shares the `collection` (and, for
-  languages, the `version`).
-- The manifest is stored in the compiled `.khb`'s metadata — `khb inspect my.khb`
-  prints it back (see [Compiling a book](compiling)).
+The manifest is stored in the compiled `.khb`'s metadata — `khb inspect my.khb`
+prints it back (see [Compiling a book](compiling)).

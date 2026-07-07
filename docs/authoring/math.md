@@ -27,8 +27,6 @@ $$\int_0^1 x^2 \, dx = \frac{1}{3}$$
 
 $$\int_0^1 x^2 \, dx = \frac{1}{3}$$
 
-## Notes for KD Help Book
-
-- A formula the converter can't parse **fails the build** (with the page id and the
-  offending LaTeX), rather than silently degrading to raw text — a broken equation is a
-  content bug worth catching at compile time.
+A formula the converter can't parse **fails the build** (with the page id and the
+offending LaTeX), rather than silently degrading to raw text — a broken equation is a
+content bug worth catching at compile time.

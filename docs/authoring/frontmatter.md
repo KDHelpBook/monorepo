@@ -25,7 +25,9 @@ toc: true
 Body content…
 ```
 
-The block is stripped before rendering — it never appears in the page body.
+The block is stripped before rendering — it never appears in the page body. A block
+that doesn't parse (or isn't terminated by a closing `---`) fails the
+[compile](compiling).
 
 ## Fields
 
@@ -37,10 +39,3 @@ The block is stripped before rendering — it never appears in the page body.
 | `categories` | facet tags for the category filter | [categories](frontmatter-categories) |
 | `related` | the **See also** footer | [related](frontmatter-related) |
 | `toc` | forces the "On this page" box on or off | [toc](frontmatter-toc) |
-
-## Notes for KD Help Book
-
-- A frontmatter block that doesn't parse (or isn't terminated by a closing `---`)
-  fails the [compile](compiling).
-- This whole book is authored with these fields — open any page's source under
-  `docs/authoring/` for a live example.
