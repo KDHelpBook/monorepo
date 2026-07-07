@@ -325,6 +325,51 @@ impl Docset {
         Ok(rows)
     }
 
+    /// Every `(page_id, related_id)` "See also" pair, in author order — the whole
+    /// `related` table at once (for a consumer that caches all edges, e.g. the Tauri
+    /// provider). Empty if the docset predates the `related` table (v<4).
+    pub fn related_all(&self) -> Result<Vec<(String, String)>> {
+        let mut stmt = match self
+            .conn
+            .prepare("SELECT page_id, related_id FROM related ORDER BY position")
+        {
+            Ok(s) => s,
+            Err(_) => return Ok(Vec::new()), // no `related` table
+        };
+        let rows = stmt
+            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows)
+    }
+
+    /// Every `(category_id, page_id)` pair — the whole category facet at once.
+    pub fn page_categories_all(&self) -> Result<Vec<(String, String)>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT category_id, page_id FROM page_categories ORDER BY page_id")?;
+        let rows = stmt
+            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows)
+    }
+
+    /// Every `(path, pack)` routing entry that points at a **sidecar** pack (`pack != ''`).
+    /// A consumer keeps the ones whose pack isn't loaded → the "missing assets" list.
+    /// Empty if the docset has no `asset_index` (older format).
+    pub fn external_assets(&self) -> Result<Vec<(String, String)>> {
+        let mut stmt = match self
+            .conn
+            .prepare("SELECT path, pack FROM asset_index WHERE pack != ''")
+        {
+            Ok(s) => s,
+            Err(_) => return Ok(Vec::new()), // no `asset_index`
+        };
+        let rows = stmt
+            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows)
+    }
+
     /// The table of contents as a nested tree (rebuilt from the flat rows).
     pub fn toc_tree(&self) -> Result<Vec<TocNode>> {
         Ok(build_toc_tree(&self.toc()?, None))

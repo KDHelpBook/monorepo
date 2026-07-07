@@ -9,6 +9,7 @@ import {
   type DocsetSource,
 } from "./data/collection";
 import { type SearchHit, type TocNode } from "./data/docset";
+import { TauriDocset, isTauri } from "./data/tauri-docset";
 import {
   addExtraPack,
   addRemote,
@@ -194,6 +195,10 @@ async function loadConfig(): Promise<Config> {
 }
 
 async function bootstrap(): Promise<void> {
+  // The desktop (Tauri) shell reads docsets through the native Rust `khb-core`
+  // (real FTS5) instead of the browser engine — a wholly separate, simpler path.
+  if (isTauri()) return bootstrapTauri();
+
   const manifestRes = await fetch(fresh("docsets.json"));
   const manifest = (await manifestRes.json()) as Manifest;
   const config = await loadConfig();
@@ -399,6 +404,62 @@ async function bootstrap(): Promise<void> {
     updates,
     variants,
   );
+}
+
+/**
+ * Desktop (Tauri) startup: open the bundled docsets through the native Rust `khb-core`
+ * (real FTS5) and show one edition per family in the chosen language. Deliberately
+ * minimal for now — no service worker, and the web open/upload/remote affordances are
+ * hidden (`externalSources:false`); native File → Open and the live language/version
+ * switchers are follow-ups (they'd reuse the same `TauriDocset` path). See docs/tauri.md.
+ */
+async function bootstrapTauri(): Promise<void> {
+  const all = await TauriDocset.bundled();
+  const lang = chooseLang([...new Set(all.map((d) => d.language))]);
+  document.documentElement.lang = lang;
+  applyStatic(lang);
+  unregisterServiceWorker();
+  const shown = pickTauriEditions(all, lang);
+  const config: Config = { externalSources: false, pwa: false };
+  start(Collection.of(shown, lang), lang, [lang], config, [], [], [], []);
+}
+
+/** One edition per family (`collection`): prefer `lang`, then `en`, then any — and the
+ *  highest version within that pool. Dedupes the bundled set (en/pl + v1/v2) to one book. */
+function pickTauriEditions(all: TauriDocset[], lang: string): TauriDocset[] {
+  const byCollection = new Map<string, TauriDocset[]>();
+  for (const d of all) {
+    (
+      byCollection.get(d.collection) ??
+      byCollection.set(d.collection, []).get(d.collection)!
+    ).push(d);
+  }
+  const out: TauriDocset[] = [];
+  for (const eds of byCollection.values()) {
+    const inLang = (l: string): TauriDocset[] =>
+      eds.filter((d) => d.language === l);
+    const pool = inLang(lang).length
+      ? inLang(lang)
+      : inLang("en").length
+        ? inLang("en")
+        : eds;
+    out.push(
+      pool.reduce((a, b) => (cmpVersion(b.version, a.version) > 0 ? b : a)),
+    );
+  }
+  return out;
+}
+
+/** Compare dotted numeric versions ("2.0.0" > "1.4.0"); non-numeric parts count as 0. */
+function cmpVersion(a: string, b: string): number {
+  const pa = a.split(".");
+  const pb = b.split(".");
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d =
+      (parseInt(pa[i] ?? "0", 10) || 0) - (parseInt(pb[i] ?? "0", 10) || 0);
+    if (d) return d;
+  }
+  return 0;
 }
 
 /** Where a book came from + its packs — for the Manage docsets page. */

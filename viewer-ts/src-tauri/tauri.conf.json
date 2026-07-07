@@ -1,0 +1,36 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "KD Help Book",
+  "version": "0.1.0",
+  "identifier": "app.kdhelpbook.desktop",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5177",
+    "beforeDevCommand": "npm run dev -- --port 5177 --strictPort",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "KD Help Book",
+        "width": 1100,
+        "height": 760,
+        "minWidth": 640,
+        "minHeight": 480
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": ["icons/icon.png"],
+    "resources": {
+      "../public/docsets/*.khb": "docsets/",
+      "../public/docsets/*.khba": "docsets/"
+    }
+  }
+}

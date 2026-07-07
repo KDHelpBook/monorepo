@@ -1,5 +1,7 @@
 # Rust
 /compiler/target/
+/viewer-ts/src-tauri/target/
+/viewer-ts/src-tauri/gen/
 **/*.rs.bk
 
 # Node / Vite

@@ -19,7 +19,10 @@ format, and the `khb://` address scheme; the git repo is `KDHelpBook/monorepo`.
   - `examples/{en,pl}/` — seed content compiled into the demo docsets.
 - `viewer-ts/` — Vite + TypeScript viewer. In the **browser** it queries `.khb`
   with a **custom FTS5-enabled `wa-sqlite`** (one engine for both whole-file and
-  streamed books); on **Tauri** it will call the native Rust `core`.
+  streamed books); on **Tauri** (`viewer-ts/src-tauri/`) it calls the native Rust
+  `core` over IPC (`TauriDocset` ⇄ commands in `src-tauri/src/lib.rs`) — real FTS5,
+  one native source of truth for the future embedded MCP server. See
+  [docs/tauri.md](docs/tauri.md).
 
 ## Browser SQLite (important)
 `rusqlite`'s bundled C SQLite **cannot compile to browser wasm** (`wasm32-unknown-unknown`
