@@ -4,17 +4,15 @@
 - page: index
   children:
     - page: getting-published
-    - title: Reference
+    - page: pack
       children:
-        - page: pack
-          children:
-            - page: pack-profiles
-            - page: pack-home
-            - page: pack-stream
-            - page: pack-llms
-            - page: pack-mode
-        - page: patch
-        - page: distribution
-        - page: hosting
-        - page: versioning
-        - page: khbm-manifests
+        - page: pack-profiles
+        - page: pack-home
+        - page: pack-stream
+        - page: pack-llms
+        - page: pack-mode
+    - page: patch
+    - page: distribution
+    - page: hosting
+    - page: versioning
+    - page: khbm-manifests
