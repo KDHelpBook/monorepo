@@ -19,8 +19,8 @@ on GitHub.
 Renders as: **bold**, *italic*, ***bold italic***, ~~strikethrough~~, `inline code`.
 
 > [!WARNING]
-> Raw inline HTML is **escaped, not rendered** — docsets may come from untrusted
-> sources, so `<b>x</b>` in Markdown shows as literal text. Use Markdown, not HTML.
+> Raw inline HTML is **escaped, not rendered** — `<b>x</b>` shows up on the page as
+> literal text. Use Markdown, not HTML.
 
 Attribute syntax (`{.class}` on a span) is not supported either, and there are no
 inline components — see [Differences from GitHub Markdown](differences).

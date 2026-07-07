@@ -35,7 +35,7 @@ Jump to [Setup](#setup), then read the [Notes](#notes).
 
 `http(s)://` and `mailto:` targets open outside the book, per the viewer's link
 policy (a new tab with modifier keys held). `javascript:` and other unsafe schemes
-are neutralised — docsets are untrusted.
+are neutralised.
 
 ## Autolinks
 

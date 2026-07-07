@@ -9,8 +9,7 @@ related: [getting-started, page-links, code-extensions, callouts]
 
 The baseline is **GitHub-flavoured Markdown**: tables, task lists, strikethrough,
 autolinks and footnotes all work exactly as on GitHub. On top of that KD Help Book
-adds book-aware constructs — and, because docsets render in a sandboxed frame and may
-come from untrusted sources, it deliberately refuses a few things GFM tolerates.
+adds book-aware constructs — and deliberately refuses a few things GFM tolerates.
 
 ## What KD Help Book adds
 
@@ -38,6 +37,5 @@ come from untrusted sources, it deliberately refuses a few things GFM tolerates.
 | `__x__` as bold, single-tilde `~x~` as strikethrough | those marks mean **underline** / **subscript** here — bold is `**x**`, strikethrough `~~x~~` — see [Text formatting](text-formatting) |
 
 > [!NOTE]
-> These are security decisions, not gaps: docsets are treated as **untrusted**, pages
-> render origin-isolated and offline-first, so arbitrary HTML and network fetches are
-> off the table by design.
+> These are deliberate design decisions, not gaps — the reasoning is described in
+> [Security model](khb-internals:security-model) in *KD Help Book Internals*.
