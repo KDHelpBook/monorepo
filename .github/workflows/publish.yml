@@ -99,6 +99,13 @@ jobs:
       - name: Compile the docs
         run: |
           mkdir -p out
+          # The current book is published as version "latest" (workspace-only
+          # sed, never committed): non-numeric strings sort above numeric
+          # versions in the viewer's compareVersions, so "latest" is the
+          # default pick in the version switcher, with the released X.Y.Z
+          # books from the step below selectable behind it.
+          sed -i 's/^version = ".*"$/version = "latest"/' docs/markdown/docset.toml
+          grep -q '^version = "latest"$' docs/markdown/docset.toml
           "$BIN" compile docs/markdown -o out/markdown.khb
 
       - name: Pack the distribution
@@ -113,14 +120,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Every release carries a kdhelp-markdown-vX.Y.Z.khb (versioned id).
-          # Skip the release matching the current version: the freshly compiled
-          # book already covers it, and two variants with the same version
-          # string would both render in the viewer.
-          CUR=$(sed -n 's/^version = "\(.*\)"$/\1/p' docs/markdown/docset.toml | head -n1)
+          # Every release carries a kdhelp-markdown-vX.Y.Z.khb (versioned id
+          # and version). All of them — including the newest — are merged in:
+          # the current book is "latest", so no release can collide with it.
           mkdir -p old
           for TAG in $(gh release list -R "${{ github.repository }}" --json tagName --jq '.[].tagName'); do
-            [[ "$TAG" == "v$CUR" ]] && continue
             gh release download "$TAG" -R "${{ github.repository }}" \
               --pattern 'kdhelp-markdown-*.khb' -D "old/$TAG" || true
           done
