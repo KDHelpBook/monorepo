@@ -28,6 +28,17 @@ fn main() {
 
 A fence **without** a language renders as plain monospace text.
 
+## Filename + copy
+
+Add `[filename]` after the language to label the block with a header bar, and every
+code block gets a **Copy** button (revealed on hover; always shown on touch).
+
+````md
+```ts [nuxt.config.ts]
+export default defineConfig({})
+```
+````
+
 ## How highlighting works
 
 - The compiler emits **CSS classes** (not inline colours); the viewer injects the
@@ -39,6 +50,6 @@ A fence **without** a language renders as plain monospace text.
 ## Notes for kdhelp
 
 - Inline code uses single backticks: `` `let x = 1` ``.
-- Docus-style extras — a **filename** tag (` ```ts [file.ts] `), a **copy** button,
-  and `::code-group` **tabs** — are **not** supported yet; they're on the roadmap in
-  the [overview](overview) (filename/copy are cheap; tabs would use a directive).
+- Grouping code blocks into **tabs** (`::code-group`), a collapsible block, and a
+  file-tree view are **not** supported yet — they'll use a directive renderer (see the
+  [overview](overview)).

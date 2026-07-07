@@ -55,18 +55,15 @@ de-facto standard outside Vue, and degrade gracefully. Authoring feels close to 
 
 ### Roadmap
 
-Heading **anchors** and **emoji** are done (comrak `header_ids` + `shortcodes`). The
-rest, roughly by effort — note some earlier "tiny" guesses were wrong: comrak **0.29
-has no `alerts`** (callouts need a comrak upgrade), and `math_dollars` only *parses*
-math, so visual rendering needs a LaTeX→MathML step:
+Done so far: heading **anchors** + an **"On this page"** box, **emoji**, code-block
+**filenames** and a **copy** button. The rest, roughly by effort — note some earlier
+"tiny" guesses were wrong: comrak **0.29 has no `alerts`** (callouts need a comrak
+upgrade), and `math_dollars` only *parses* math, so rendering needs a LaTeX→MathML step:
 
 | Want | How | Effort |
 |------|-----|--------|
 | **Callouts** (note / tip / warning / caution) | upgrade comrak → `alerts`, or a custom transform | small–medium |
-| **On-page TOC** ("On this page" rail) | viewer reads the heading anchors | small |
 | **Math** `$…$` | comrak `math_dollars` + a Rust LaTeX→MathML pass (native MathML) | medium |
-| Code **filename** title bar | parse the ` ```ts [file.ts] ` info string | small |
-| Code **copy** button | viewer-side, in the frame bridge (clipboard via parent) | small |
 | **Code group / collapse / preview / tree** | a **directive** renderer + interactive frame JS | medium–large |
 | **Tabs / cards / steps / badges** | the same **directive** renderer (not MDC) | medium |
 | **Video / embeds** | a `:video`/`:embed` directive → sandboxed `<iframe>`/`<video>` | medium |

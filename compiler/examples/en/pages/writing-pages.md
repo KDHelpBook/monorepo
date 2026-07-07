@@ -24,9 +24,10 @@ The `id` defaults to the file name; `title` falls back to the first `# heading`.
 ## Markdown features
 
 Standard Markdown plus tables, task lists, strikethrough and autolinks are
-supported. Fenced code blocks render with monospace styling:
+supported. A fenced code block is highlighted; add `[filename]` after the language to
+label it, and every block gets a copy button:
 
-```rust
+```rust [hello.rs]
 fn main() {
     println!("Hello from a docset!");
 }

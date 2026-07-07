@@ -61,6 +61,10 @@ export interface Strings {
   ready: string;
   keywordsLabel: string;
   seeAlso: string;
+  /** Code-block copy button, its post-copy confirmation, and the on-page TOC title. */
+  copy: string;
+  copied: string;
+  onThisPage: string;
   notFoundTitle: string;
   notFoundBody: (id: string) => string;
   // about
@@ -159,6 +163,9 @@ const en: Strings = {
   ready: "Ready",
   keywordsLabel: "Keywords:",
   seeAlso: "See also:",
+  copy: "Copy",
+  copied: "Copied",
+  onThisPage: "On this page",
   notFoundTitle: "Topic not found",
   notFoundBody: (id) => `No page with address <code>${id}</code>.`,
   aboutTagline:
@@ -256,6 +263,9 @@ const pl: Strings = {
   ready: "Gotowe",
   keywordsLabel: "Słowa kluczowe:",
   seeAlso: "Zobacz też:",
+  copy: "Kopiuj",
+  copied: "Skopiowano",
+  onThisPage: "Na tej stronie",
   notFoundTitle: "Nie znaleziono tematu",
   notFoundBody: (id) => `Brak strony o adresie <code>${id}</code>.`,
   aboutTagline:

@@ -70,6 +70,9 @@ pub fn render_html(markdown: &str, highlighter: Option<&SyntectAdapter>) -> Stri
     options.extension.header_ids = Some(String::new());
     // `:shortcode:` emoji, e.g. `:tada:` → 🎉.
     options.extension.shortcodes = true;
+    // Keep the info-string text *after* the language on the `<code>` as `data-meta`,
+    // so ```ts [nuxt.config.ts] surfaces a filename the viewer shows above the block.
+    options.render.full_info_string = true;
 
     let mut plugins = Plugins::default();
     if let Some(h) = highlighter {

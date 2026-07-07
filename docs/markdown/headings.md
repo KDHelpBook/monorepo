@@ -41,5 +41,5 @@ Jump back to [Where to start](#where-to-start).
 - The **first H1** is used as the page title when the frontmatter has no explicit
   `title` — see [frontmatter](frontmatter).
 - Keep exactly one H1 per page (the title); start body sections at H2.
-- An on-page "On this page" table of contents (a rail listing the headings) is on the
-  roadmap — see the [overview](overview).
+- A page with two or more sections gets an **"On this page"** navigation box built from
+  its headings.

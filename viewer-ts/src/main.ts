@@ -79,6 +79,14 @@ function link(e,mid){var a=e.target&&e.target.closest&&e.target.closest('a');if(
  if(a.hasAttribute('data-anchor')){e.preventDefault();var t=document.getElementById(a.getAttribute('data-anchor'));if(t)t.scrollIntoView({behavior:'smooth',block:'start'})}
  else if(a.hasAttribute('data-target')){e.preventDefault();post({t:'kdhelp',a:'open',id:a.getAttribute('data-target'),newTab:!!(mid||e.ctrlKey||e.metaKey)})}
  else if(a.hasAttribute('data-ext')){e.preventDefault();post({t:'kdhelp',a:'ext',url:a.getAttribute('data-ext')})}}
+// Copy a code block. execCommand runs inside this frame's click gesture, so it works
+// even though the sandbox (no allow-same-origin) blocks the async clipboard API.
+function copyBtn(e){var b=e.target&&e.target.closest&&e.target.closest('button[data-copy]');if(!b)return false;e.preventDefault();
+ var pre=b.parentNode.querySelector('pre');var txt=pre?(pre.textContent||''):'';
+ var ta=document.createElement('textarea');ta.value=txt;ta.style.position='fixed';ta.style.top='-2000px';document.body.appendChild(ta);ta.select();
+ try{document.execCommand('copy')}catch(_){}document.body.removeChild(ta);
+ var done=b.getAttribute('data-copied')||'',orig=b.textContent;if(done){b.textContent=done}b.classList.add('done');
+ setTimeout(function(){b.textContent=orig;b.classList.remove('done')},1200);return true}
 // A tap/click on a standalone content image (not a linked one) asks the app to
 // open its zoomable lightbox. Only our resolved inline assets (data:image/…) —
 // never an arbitrary URL — so the app can trust the source it gets.
@@ -87,7 +95,7 @@ function img(e){var el=e.target;if(!el||el.tagName!=='IMG')return false;
  var src=el.currentSrc||el.getAttribute('src')||'';
  if(src.indexOf('data:image/')!==0)return false;
  e.preventDefault();post({t:'kdhelp',a:'img',src:src,alt:el.getAttribute('alt')||''});return true}
-addEventListener('click',function(e){if(img(e))return;link(e,false)},true);
+addEventListener('click',function(e){if(copyBtn(e))return;if(img(e))return;link(e,false)},true);
 addEventListener('auxclick',function(e){if(e.button===1)link(e,true)},true);
 // Pull-to-refresh: a downward drag started at the top of the page posts a 'pull'
 // to the app (the reading content lives in this sandboxed frame, so the app can't
@@ -1489,6 +1497,83 @@ function start(
   // full page id in `data-target`; external links keep their href + `data-ext`. The
   // bridge intercepts clicks and posts them to the app. `javascript:` etc. are
   // neutralised (href removed) so they never run even with scripts enabled.
+  // Wrap each highlighted code block with a header (the ```lang [file] filename, if
+  // any — carried on the <code> as data-meta) and a Copy button. The button is inert
+  // markup here; the frame bridge handles the click (copies the code text).
+  function enhanceCodeBlocks(root: ParentNode): void {
+    root
+      .querySelectorAll<HTMLPreElement>("pre.syntax-highlighting")
+      .forEach((pre) => {
+        const code = pre.querySelector("code");
+        const meta = code?.getAttribute("data-meta") ?? "";
+        const file = meta.replace(/^\[/, "").replace(/\]$/, "").trim();
+
+        const wrap = document.createElement("div");
+        wrap.className = "code-block";
+        pre.before(wrap);
+        if (file) {
+          const head = document.createElement("div");
+          head.className = "code-head";
+          const name = document.createElement("span");
+          name.className = "code-file";
+          name.textContent = file;
+          head.appendChild(name);
+          wrap.appendChild(head);
+        }
+        wrap.appendChild(pre);
+
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "code-copy";
+        btn.setAttribute("data-copy", "");
+        btn.setAttribute("data-copied", s.copied);
+        btn.textContent = s.copy;
+        wrap.appendChild(btn);
+      });
+  }
+
+  // Build an inline "On this page" nav from the page's headings (they carry ids from
+  // the compiler's header anchors). The `#slug` links reuse the in-page anchor path
+  // (rewriteFrameLinks → data-anchor → frame scroll). Skipped for short pages.
+  function insertPageToc(root: ParentNode): void {
+    // header_ids puts the slug on an empty `<a class="anchor" id="…">` inside the
+    // heading, not on the heading element — read the id from there.
+    const items = [...root.querySelectorAll<HTMLElement>("h2, h3")]
+      .map((h) => ({
+        h,
+        id: h.querySelector("[id]")?.id ?? "",
+        text: (h.textContent ?? "").trim(),
+      }))
+      .filter((x) => x.id && x.text);
+    if (items.length < 2) return;
+
+    const nav = document.createElement("nav");
+    nav.className = "page-toc";
+    nav.setAttribute("aria-label", s.onThisPage);
+    const title = document.createElement("p");
+    title.className = "page-toc-title";
+    title.textContent = s.onThisPage;
+    nav.appendChild(title);
+    const ul = document.createElement("ul");
+    for (const { h, id, text } of items) {
+      const li = document.createElement("li");
+      if (h.tagName === "H3") li.className = "sub";
+      const a = document.createElement("a");
+      a.setAttribute("href", `#${id}`);
+      a.textContent = text;
+      li.appendChild(a);
+      ul.appendChild(li);
+    }
+    nav.appendChild(ul);
+
+    // Place it after the H1 (+ its subtitle), else at the top.
+    const h1 = root.querySelector("h1");
+    const sub = h1?.nextElementSibling?.classList.contains("sub")
+      ? h1.nextElementSibling
+      : h1;
+    (sub ?? (root as Element).firstElementChild)?.after(nav);
+  }
+
   function rewriteFrameLinks(root: ParentNode, fromId: string): void {
     root.querySelectorAll<HTMLAnchorElement>("a").forEach((a) => {
       const rel = a.getAttribute("data-rel");
@@ -1687,6 +1772,8 @@ function start(
       await resolveAssets(holder, id); // parked asset: → data: (may stream)
       if (token !== loadSeq) return;
       applyHighlight(holder);
+      enhanceCodeBlocks(holder); // filename bar + copy button
+      insertPageToc(holder); // "On this page" nav (before link rewriting)
       rewriteFrameLinks(holder, id);
       frame.srcdoc = frameDoc(holder.innerHTML);
     } else {
