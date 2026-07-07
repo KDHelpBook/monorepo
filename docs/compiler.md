@@ -1,4 +1,4 @@
-# The `kdhelp` CLI
+# The `khb` CLI
 
 Build it from the workspace:
 

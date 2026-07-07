@@ -7,10 +7,10 @@ import {
 
 // The example line-up: two products in en+pl, one (lorem) en-only.
 const variants = [
-  { collection: "kdhelp-docs", language: "en", id: "docs-en" },
-  { collection: "kdhelp-docs", language: "pl", id: "docs-pl" },
-  { collection: "kdhelp-tips", language: "en", id: "tips-en" },
-  { collection: "kdhelp-tips", language: "pl", id: "tips-pl" },
+  { collection: "khb-docs", language: "en", id: "docs-en" },
+  { collection: "khb-docs", language: "pl", id: "docs-pl" },
+  { collection: "khb-tips", language: "en", id: "tips-en" },
+  { collection: "khb-tips", language: "pl", id: "tips-pl" },
   { collection: "lorem", language: "en", id: "lorem-en" },
 ];
 
@@ -19,7 +19,7 @@ const ids = (vs: { id: string }[]): string[] => vs.map((v) => v.id).sort();
 describe("languagesByCollection", () => {
   it("lists available languages per collection in first-seen order", () => {
     const m = languagesByCollection(variants);
-    expect(m.get("kdhelp-docs")).toEqual(["en", "pl"]);
+    expect(m.get("khb-docs")).toEqual(["en", "pl"]);
     expect(m.get("lorem")).toEqual(["en"]);
   });
 });
@@ -56,8 +56,8 @@ describe("pickLanguages", () => {
   });
 
   it("honours a per-collection override even against the UI language", () => {
-    // UI = pl, but pin kdhelp-docs to en.
-    const shown = pickLanguages(variants, "pl", { "kdhelp-docs": "en" }, [
+    // UI = pl, but pin khb-docs to en.
+    const shown = pickLanguages(variants, "pl", { "khb-docs": "en" }, [
       "en",
     ]);
     expect(ids(shown)).toEqual(["docs-en", "lorem-en", "tips-pl"]);

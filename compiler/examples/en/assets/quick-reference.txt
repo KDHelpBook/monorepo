@@ -1,17 +1,17 @@
-kdhelp — quick reference card
+KD Help Book — quick reference card
 =============================
 
 Compile a docset:
-  kdhelp compile <src-dir> -o out.khb
-  kdhelp compile <src-dir> -o out.khb --assets sidecar   (attachments -> out.khba)
+  khb compile <src-dir> -o out.khb
+  khb compile <src-dir> -o out.khb --assets sidecar   (attachments -> out.khba)
 
 Convert:
-  kdhelp convert out.khb  -o out.khbb
-  kdhelp convert out.khbb -o out.khb
+  khb convert out.khb  -o out.khbb
+  khb convert out.khbb -o out.khb
 
 Publish:
-  kdhelp pack  --viewer viewer-ts/dist --docset out.khb -o publish/
-  kdhelp patch publish/ --docset new.khb
+  khb pack  --viewer viewer-ts/dist --docset out.khb -o publish/
+  khb patch publish/ --docset new.khb
 
 Assets:
   Put files under assets/ and link them as assets/<name>.

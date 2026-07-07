@@ -36,7 +36,7 @@ navigation still comes from the docset's `toc.yaml` / folder structure.
 Jump back to [Where to start](#where-to-start).
 ```
 
-## Notes for kdhelp
+## Notes for KD Help Book
 
 - The **first H1** is used as the page title when the frontmatter has no explicit
   `title` — see [frontmatter](frontmatter).

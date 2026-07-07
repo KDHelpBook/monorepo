@@ -1,10 +1,10 @@
-id = "kdhelp-extras-pl"
-title = "kdhelp — Porady i FAQ"
+id = "khb-extras-pl"
+title = "KD Help Book — Porady i FAQ"
 version = "0.1.0"
 language = "pl"
-collection = "kdhelp-tips"
+collection = "khb-tips"
 collection_title = "Porady i FAQ"
 
 [[products]]
-id = "kdhelp"
-title = "kdhelp"
+id = "khb"
+title = "KD Help Book"

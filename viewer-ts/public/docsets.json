@@ -2,26 +2,26 @@
   "docsets": [
     {
       "file": "docsets/examples.en.khb",
-      "id": "kdhelp-docs-en",
-      "title": "kdhelp — Documentation",
+      "id": "khb-docs-en",
+      "title": "KD Help Book — Documentation",
       "language": "en",
-      "collection": "kdhelp-docs",
+      "collection": "khb-docs",
       "version": "0.1.0"
     },
     {
       "file": "docsets/examples.extras-en.khb",
-      "id": "kdhelp-extras-en",
-      "title": "kdhelp — Tips & FAQ",
+      "id": "khb-extras-en",
+      "title": "KD Help Book — Tips & FAQ",
       "language": "en",
-      "collection": "kdhelp-tips",
+      "collection": "khb-tips",
       "version": "0.1.0"
     },
     {
       "file": "docsets/examples.pl.khb",
-      "id": "kdhelp-docs-pl",
-      "title": "kdhelp — Dokumentacja",
+      "id": "khb-docs-pl",
+      "title": "KD Help Book — Dokumentacja",
       "language": "pl",
-      "collection": "kdhelp-docs",
+      "collection": "khb-docs",
       "version": "0.1.0",
       "attachments": [
         "docsets/examples.pl.khba"
@@ -29,10 +29,10 @@
     },
     {
       "file": "docsets/examples.extras-pl.khb",
-      "id": "kdhelp-extras-pl",
-      "title": "kdhelp — Porady i FAQ",
+      "id": "khb-extras-pl",
+      "title": "KD Help Book — Porady i FAQ",
       "language": "pl",
-      "collection": "kdhelp-tips",
+      "collection": "khb-tips",
       "version": "0.1.0"
     },
     {

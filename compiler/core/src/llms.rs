@@ -9,7 +9,7 @@
 //! - **per-page `md/<docset>/<page>.md`** — clean Markdown a consumer can fetch singly.
 //!
 //! Pure content transformation (no I/O beyond querying the readers), so it works on
-//! any `.khb` and needs no network. `kdhelp pack --llms` writes the result into a
+//! any `.khb` and needs no network. `khb pack --llms` writes the result into a
 //! distribution; a static host serves it as-is (unlike MCP, which needs a backend).
 
 use std::collections::HashSet;
@@ -72,7 +72,7 @@ pub fn export(docsets: &[&Docset], site_title: Option<&str>) -> Result<LlmsExpor
 
     index.push_str(&format!("# {title}\n\n"));
     index.push_str(&format!(
-        "> Documentation exported for language models by kdhelp — {total} page(s) across {} book(s). \
+        "> Documentation exported for language models by KD Help Book — {total} page(s) across {} book(s). \
          Each link points at a clean-Markdown copy; `llms-full.txt` has everything inline.\n",
         books.len()
     ));

@@ -6,7 +6,7 @@ categories: [guide]
 # Sample SDK
 
 You are reading the **1.0** documentation for the Sample SDK — a small, fictional
-library used here to demonstrate kdhelp's *multiple versions of one product*
+library used here to demonstrate KD Help Book's *multiple versions of one product*
 feature. Use the **Version** selector to switch between 1.0 and 2.0 and watch the
 table of contents and pages change.
 

@@ -7,7 +7,7 @@ related: [images-and-assets, frontmatter]
 
 # Links
 
-kdhelp understands five kinds of link, distinguished purely by the target:
+KD Help Book understands five kinds of link, distinguished purely by the target:
 
 ```md
 In-page anchor: [Setup](#setup)
@@ -50,7 +50,7 @@ See the [SDK overview](sample-sdk:overview).
 Bare URLs (a GitHub-flavoured extension, enabled) become links automatically:
 `https://example.com`.
 
-## Notes for kdhelp
+## Notes for KD Help Book
 
 - External links open per the viewer's link policy (a new tab with modifiers);
   `javascript:` and other unsafe schemes are neutralised.

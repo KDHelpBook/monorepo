@@ -6,8 +6,8 @@ collection = "sample-sdk"
 collection_title = "Sample SDK"
 
 [[products]]
-id = "kdhelp"
-title = "kdhelp"
+id = "khb"
+title = "KD Help Book"
 
 [[products]]
 id = "sdk"

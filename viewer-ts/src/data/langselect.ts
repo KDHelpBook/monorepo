@@ -1,6 +1,6 @@
 // Which language variant of each docset collection to show.
 //
-// A `collection` is a product/family shared across languages (e.g. `kdhelp-docs`
+// A `collection` is a product/family shared across languages (e.g. `khb-docs`
 // exists in both `en` and `pl`). We show exactly ONE language per collection so
 // the same book isn't merged twice into the TOC. The choice, per collection:
 //   1. the user's explicit override (Manage docsets), if that language exists;

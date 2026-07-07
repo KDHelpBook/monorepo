@@ -26,7 +26,7 @@ Renders as:
 Blockquotes can contain other Markdown — lists, code, even nested quotes (prefix with
 `> >`).
 
-## Notes for kdhelp
+## Notes for KD Help Book
 
 - For a coloured, labelled box (note / tip / warning / …) use a **[callout](callouts)**
   — a blockquote whose first line is `[!TYPE]`. A plain blockquote stays neutral.

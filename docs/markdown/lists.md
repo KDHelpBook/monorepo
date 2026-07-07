@@ -36,7 +36,7 @@ Renders as:
 - [x] Compile the docset
 - [ ] Publish it
 
-## Notes for kdhelp
+## Notes for KD Help Book
 
 - Ordered lists renumber automatically — the actual starting number is respected, but
   subsequent items follow in sequence.

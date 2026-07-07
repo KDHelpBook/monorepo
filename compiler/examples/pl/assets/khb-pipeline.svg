@@ -15,7 +15,7 @@
   <text class="s" x="74"  y="90">+ assets/</text>
 
   <rect class="box" x="182" y="45" width="132" height="60" rx="6"/>
-  <text class="t" x="248" y="72">kdhelp</text>
+  <text class="t" x="248" y="72">khb</text>
   <text class="s" x="248" y="90">kompilator (Rust)</text>
 
   <rect class="box" x="356" y="45" width="132" height="60" rx="6"/>

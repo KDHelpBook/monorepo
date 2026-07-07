@@ -1,13 +1,13 @@
 ---
-title: Witaj w kdhelp
-keywords: [kdhelp, pierwsze kroki, przegląd, witaj]
+title: Witaj w KD Help Book
+keywords: [KD Help Book, pierwsze kroki, przegląd, witaj]
 categories: [basics]
 ---
-# Witaj w kdhelp
+# Witaj w KD Help Book
 
 *Przeglądarka dokumentacji w duchu klasycznego desktopowego czytnika pomocy.*
 
-kdhelp kompiluje Twoją dokumentację do samowystarczalnego pliku **`.khb`** — bazy
+KD Help Book kompiluje Twoją dokumentację do samowystarczalnego pliku **`.khb`** — bazy
 SQLite z gotowym indeksem pełnotekstowym — i wyświetla ją w szybkiej przeglądarce
 z interfejsem w stylu klasycznego czytnika pomocy: drzewem spisu treści, indeksem słów kluczowych
 (F1), wyszukiwarką offline, ulubionymi i kartami.

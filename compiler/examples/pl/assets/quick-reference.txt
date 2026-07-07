@@ -1,17 +1,17 @@
-kdhelp — ściąga
+KD Help Book — ściąga
 ===============
 
 Kompilacja docsetu:
-  kdhelp compile <katalog> -o out.khb
-  kdhelp compile <katalog> -o out.khb --assets sidecar   (załączniki -> out.khba)
+  khb compile <katalog> -o out.khb
+  khb compile <katalog> -o out.khb --assets sidecar   (załączniki -> out.khba)
 
 Konwersja:
-  kdhelp convert out.khb  -o out.khbb
-  kdhelp convert out.khbb -o out.khb
+  khb convert out.khb  -o out.khbb
+  khb convert out.khbb -o out.khb
 
 Publikacja:
-  kdhelp pack  --viewer viewer-ts/dist --docset out.khb -o publish/
-  kdhelp patch publish/ --docset new.khb
+  khb pack  --viewer viewer-ts/dist --docset out.khb -o publish/
+  khb patch publish/ --docset new.khb
 
 Załączniki:
   Umieść pliki w katalogu assets/ i linkuj jako assets/<nazwa>.

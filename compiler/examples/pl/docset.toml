@@ -1,10 +1,10 @@
-id = "kdhelp-docs-pl"
-title = "kdhelp — Dokumentacja"
+id = "khb-docs-pl"
+title = "KD Help Book — Dokumentacja"
 version = "0.1.0"
 language = "pl"
-collection = "kdhelp-docs"
+collection = "khb-docs"
 collection_title = "Dokumentacja"
 
 [[products]]
-id = "kdhelp"
-title = "kdhelp"
+id = "khb"
+title = "KD Help Book"
