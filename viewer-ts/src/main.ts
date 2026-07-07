@@ -1,6 +1,7 @@
 import "./styles/main.css";
 // The page-body typography, injected as a string into the sandboxed content frame.
 import contentCss from "./styles/content.css?inline";
+import syntaxCss from "./styles/syntax.css?inline";
 import {
   Collection,
   fetchDocsetBytes,
@@ -1517,7 +1518,9 @@ function start(
   const frameDoc = (bodyHtml: string): string =>
     `<!doctype html><html><head><meta charset="utf-8">` +
     `<meta name="referrer" content="no-referrer">` +
-    `<style>${contentCss}\n:root{--content-size:${fontSize}px}</style>` +
+    // Typography + the syntax-highlighting theme (colours the compiler's class-tagged
+    // code spans; the light theme, with a dormant [data-theme="dark"] block).
+    `<style>${contentCss}\n${syntaxCss}\n:root{--content-size:${fontSize}px}</style>` +
     `</head><body class="content">${bodyHtml}<script>${FRAME_BRIDGE}</script></body></html>`;
 
   // Wrap every occurrence of the active search terms in the content in <mark>,

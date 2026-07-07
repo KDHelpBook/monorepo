@@ -13,6 +13,9 @@ serde.workspace = true
 serde_yaml = "0.9"
 toml = "0.8"
 comrak = "0.29"
+# Same syntect comrak already pulls in — used directly to emit the code-block theme
+# CSS (class-based highlighting, so the viewer can re-theme it, e.g. for dark mode).
+syntect = "5"
 rusqlite = { version = "0.32", features = ["bundled"] }
 walkdir = "2"
 postcard = { version = "1", features = ["alloc"] }
