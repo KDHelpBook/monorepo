@@ -263,6 +263,56 @@ body {
 .content .code-collapse.open .code-collapse-chevron {
   transform: rotate(180deg); /* points up = "collapse" */
 }
+/* CodeGroup: ~~~code-group … ~~~ → tabbed panels, one highlighted block per tab.
+   The compiler emits the tabs + panels; the frame bridge toggles `.active`. */
+.content .code-group {
+  margin: 0.8em 0;
+  border: 1px solid var(--code-border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.content .code-group-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 0 6px;
+  background: #fff;
+  border-bottom: 1px solid var(--code-border);
+}
+.content .code-group-tab {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1;
+  padding: 9px 12px;
+  color: var(--muted);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+.content .code-group-tab:hover {
+  color: var(--content-h);
+}
+.content .code-group-tab.active {
+  color: var(--content-h);
+  border-bottom-color: var(--swoosh);
+}
+.content .code-group-panel {
+  display: none;
+}
+.content .code-group-panel.active {
+  display: block;
+}
+/* Inside a group the panel's code block owns no chrome of its own — the group frames
+   it (drop the block margin + the <pre>'s border/radius). */
+.content .code-group .code-block {
+  margin: 0;
+}
+.content .code-group .code-block pre {
+  border: none;
+  border-radius: 0;
+  margin: 0;
+}
 /* "On this page" — an inline nav built from the page's heading anchors. */
 .content .page-toc {
   float: right;

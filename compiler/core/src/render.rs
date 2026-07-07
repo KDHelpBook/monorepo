@@ -3,6 +3,7 @@
 //! This is where Markdown is turned into HTML, **once**, at build time.
 
 use anyhow::{Context, Result};
+use comrak::plugins::syntect::SyntectAdapter;
 
 use crate::model::{RenderedDocset, RenderedPage, SourceDocset};
 use crate::{assets, markdown};
@@ -18,13 +19,14 @@ pub fn render(src: &SourceDocset) -> Result<RenderedDocset> {
         .pages
         .iter()
         .map(|p| -> Result<RenderedPage> {
-            // Rewrite `assets/…` image/link targets to the `asset:` scheme, then
-            // render `$…$` LaTeX spans to MathML.
-            let rendered = render_math(&assets::rewrite_asset_urls(&markdown::render_html(
-                &p.markdown,
-                Some(&highlighter),
-            )))
-            .with_context(|| format!("page `{}`", p.id))?;
+            // Render Markdown, then expand `~~~code-group` blocks into tabbed panels,
+            // rewrite `assets/…` targets to the `asset:` scheme, and finally render
+            // `$…$` LaTeX spans to MathML.
+            let html = markdown::render_html(&p.markdown, Some(&highlighter));
+            let html = render_code_groups(&html, &highlighter)
+                .with_context(|| format!("page `{}`", p.id))?;
+            let html = assets::rewrite_asset_urls(&html);
+            let rendered = render_math(&html).with_context(|| format!("page `{}`", p.id))?;
             // Prepend an "On this page" nav built from the heading anchors, honouring
             // the page's `toc` frontmatter (auto when unset). It floats top-right, so
             // sitting before the H1 keeps the viewer's subtitle handling intact.
@@ -178,6 +180,128 @@ fn render_math(html: &str) -> Result<String> {
     Ok(out)
 }
 
+/// Expand `~~~code-group … ~~~` blocks into a tabbed group. comrak renders the outer
+/// fence as one opaque `language-code-group` block whose body is the inner ```` ``` ````
+/// fences as plain text; we split those out, re-render each through the normal
+/// highlighter path (so panels get real syntect highlighting, minus the `[label]`,
+/// which becomes the tab), and emit `.code-group` markup the viewer makes interactive.
+/// A group with no inner code blocks is a build error.
+fn render_code_groups(html: &str, highlighter: &SyntectAdapter) -> Result<String> {
+    const OPEN: &str = "<pre class=\"syntax-highlighting\"><code class=\"language-code-group\">";
+    const CLOSE: &str = "</code></pre>";
+    let mut out = String::with_capacity(html.len());
+    let mut i = 0;
+    while let Some(rel) = html[i..].find(OPEN) {
+        let start = i + rel;
+        let inner_start = start + OPEN.len();
+        let Some(end_rel) = html[inner_start..].find(CLOSE) else {
+            break;
+        };
+        // The opaque block's body is plaintext-highlighted: strip syntect's `<span>`s
+        // and decode entities to recover the verbatim inner fences.
+        let raw = unescape_html(&strip_tags(&html[inner_start..inner_start + end_rel]));
+        let blocks = split_group_fences(&raw);
+        if blocks.is_empty() {
+            anyhow::bail!("`~~~code-group` contains no code blocks");
+        }
+        let mut tabs = String::new();
+        let mut panels = String::new();
+        for (idx, (info, code)) in blocks.iter().enumerate() {
+            let (lang, label) = parse_code_info(info);
+            let tab = if !label.is_empty() {
+                label
+            } else if !lang.is_empty() {
+                lang.clone()
+            } else {
+                (idx + 1).to_string()
+            };
+            let active = if idx == 0 { " active" } else { "" };
+            tabs.push_str(&format!(
+                "<button class=\"code-group-tab{active}\" type=\"button\" data-group-tab=\"{idx}\">{}</button>",
+                esc(&tab)
+            ));
+            // Re-render the panel without the `[label]` so the viewer draws no filename
+            // bar inside it (the label is the tab); it still gets a floating Copy button.
+            let panel_md = if lang.is_empty() {
+                format!("```\n{code}\n```")
+            } else {
+                format!("```{lang}\n{code}\n```")
+            };
+            let panel_html = markdown::render_html(&panel_md, Some(highlighter));
+            panels.push_str(&format!(
+                "<div class=\"code-group-panel{active}\" data-group-panel=\"{idx}\">{}</div>",
+                panel_html.trim()
+            ));
+        }
+        out.push_str(&html[i..start]);
+        out.push_str(&format!(
+            "<div class=\"code-group\"><div class=\"code-group-tabs\" role=\"tablist\">{tabs}</div>{panels}</div>"
+        ));
+        i = inner_start + end_rel + CLOSE.len();
+    }
+    out.push_str(&html[i..]);
+    Ok(out)
+}
+
+/// Split a code-group's raw body into `(info-string, code)` per inner ```` ``` ```` fence.
+fn split_group_fences(inner: &str) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let mut lines = inner.lines();
+    while let Some(line) = lines.next() {
+        let t = line.trim_start();
+        if t.starts_with("```") {
+            let info = t.trim_start_matches('`').trim().to_string();
+            let mut code: Vec<&str> = Vec::new();
+            for l in lines.by_ref() {
+                let tl = l.trim();
+                if !tl.is_empty() && tl.chars().all(|c| c == '`') {
+                    break; // closing fence
+                }
+                code.push(l);
+            }
+            out.push((info, code.join("\n")));
+        }
+    }
+    out
+}
+
+/// Parse a code fence's info string into `(language, label)` — the language is the first
+/// token, the label is the text inside `[…]` (used as the tab title).
+fn parse_code_info(info: &str) -> (String, String) {
+    let label = info
+        .find('[')
+        .and_then(|s| {
+            info[s + 1..]
+                .find(']')
+                .map(|e| info[s + 1..s + 1 + e].trim().to_string())
+        })
+        .unwrap_or_default();
+    let lang = info
+        .split('[')
+        .next()
+        .unwrap_or("")
+        .split_whitespace()
+        .next()
+        .unwrap_or("")
+        .to_string();
+    (lang, label)
+}
+
+/// Strip HTML tags (`<…>`) from a string, keeping text content and newlines.
+fn strip_tags(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut in_tag = false;
+    for c in s.chars() {
+        match c {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            _ if !in_tag => out.push(c),
+            _ => {}
+        }
+    }
+    out
+}
+
 /// Decode the HTML entities comrak escapes into a math span's LaTeX literal.
 fn unescape_html(s: &str) -> String {
     s.replace("&lt;", "<")
@@ -230,6 +354,26 @@ mod tests {
         // than silently degrading to raw text.
         let bad = "<span data-math-style=\"inline\">\\begin{matrix}</span>";
         assert!(render_math(bad).is_err());
+    }
+
+    #[test]
+    fn expands_code_group() {
+        let h = markdown::highlighter();
+        let md = "~~~code-group\n```bash [npm]\nnpm i\n```\n```bash [pnpm]\npnpm add\n```\n~~~\n";
+        let html = render_code_groups(&markdown::render_html(md, Some(&h)), &h).unwrap();
+        assert!(html.contains("class=\"code-group\""));
+        assert!(!html.contains("language-code-group")); // opaque block consumed
+                                                        // Two tabs from the [labels]; the first tab + panel start active.
+        assert!(html.contains("code-group-tab active"));
+        assert!(html.contains(">npm</button>") && html.contains(">pnpm</button>"));
+        assert!(html.contains("data-group-tab=\"1\""));
+        assert!(html.contains("data-group-panel=\"0\"") && html.contains("data-group-panel=\"1\""));
+        assert!(html.contains("language-bash")); // panels really highlighted
+        assert!(!html.contains("[npm]")); // label became the tab, not a filename
+
+        // A code-group with no inner fences is a build error.
+        let empty = markdown::render_html("~~~code-group\n~~~\n", Some(&h));
+        assert!(render_code_groups(&empty, &h).is_err());
     }
 
     #[test]

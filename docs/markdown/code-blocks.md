@@ -72,6 +72,41 @@ fn main() {
 }
 ```
 
+## Groups (tabs)
+
+Wrap several code blocks in a **`~~~code-group … ~~~`** fence (tildes on the outside,
+so the inner blocks keep their backticks) to render them as **tabs** — one highlighted
+panel per block, its `[label]` (or the language) as the tab. Handy for
+npm/pnpm/yarn or the same idea in several languages.
+
+`````md
+~~~code-group
+```bash [npm]
+npm install kdhelp
+```
+```bash [pnpm]
+pnpm add kdhelp
+```
+```bash [yarn]
+yarn add kdhelp
+```
+~~~
+`````
+
+~~~code-group
+```bash [npm]
+npm install kdhelp
+```
+```bash [pnpm]
+pnpm add kdhelp
+```
+```bash [yarn]
+yarn add kdhelp
+```
+~~~
+
+A group with no inner code blocks is a **build error** (a likely authoring mistake).
+
 ## How highlighting works
 
 - The compiler emits **CSS classes** (not inline colours); the viewer injects the
@@ -83,7 +118,6 @@ fn main() {
 ## Notes for kdhelp
 
 - Inline code uses single backticks: `` `let x = 1` ``.
-- **Collapsible** blocks work today (the `collapse` flag above). Grouping code blocks
-  into **tabs** and a **file-tree** view aren't supported yet — those need a container,
-  so they'll use an opaque `~~~code-group … ~~~` fence we post-process (see the
-  [overview](overview)).
+- **Collapsible** blocks (the `collapse` flag) and **groups** (`~~~code-group`) work
+  today. A **file-tree** view and code→output **preview** aren't supported yet — they'll
+  reuse the same opaque-fence mechanism (see the [overview](overview)).
