@@ -29,6 +29,9 @@ pub fn render(src: &SourceDocset) -> Result<RenderedDocset> {
             let html = render_code_groups(&html, &highlighter).with_context(ctx)?;
             let html = render_code_preview(&html, &highlighter).with_context(ctx)?;
             let html = render_code_tree(&html, &highlighter).with_context(ctx)?;
+            // ` ```dot ` / ` ```graphviz ` → a Graphviz graph laid out to inline SVG at
+            // build time (pure-Rust `layout`). Fails the build on unparseable DOT.
+            let html = render_diagrams(&html).with_context(ctx)?;
             let html = render_line_highlight(&html);
             // `` `x`{:lang} `` → inline-highlighted code; `` `x`{.badge} `` → a badge.
             let html = render_inline_attrs(&html);
@@ -417,6 +420,74 @@ fn render_code_tree(html: &str, highlighter: &SyntectAdapter) -> Result<String> 
     }
     out.push_str(&html[i..]);
     Ok(out)
+}
+
+/// Render ` ```dot ` / ` ```graphviz ` fenced blocks to inline SVG with the pure-Rust
+/// `layout` engine — a static diagram baked in at build time, like math → MathML, so the
+/// viewer needs no JS renderer and the SVG is sandbox-safe (no scripts / foreignObject).
+/// comrak emits the fence as an opaque `language-dot` block; we recover its verbatim body
+/// (strip syntect spans + decode entities) and lay it out. Unparseable DOT is a build error.
+fn render_diagrams(html: &str) -> Result<String> {
+    const PRE: &str = "<pre class=\"syntax-highlighting\"><code ";
+    const CLOSE: &str = "</code></pre>";
+    let mut out = String::with_capacity(html.len());
+    let mut i = 0;
+    while let Some(rel) = html[i..].find(PRE) {
+        let block_start = i + rel;
+        let attrs_start = block_start + PRE.len();
+        let Some(gtrel) = html[attrs_start..].find('>') else {
+            break;
+        };
+        let inner_start = attrs_start + gtrel + 1;
+        let Some(crel) = html[inner_start..].find(CLOSE) else {
+            break;
+        };
+        let lang = attr_value(&html[attrs_start..inner_start], "class")
+            .and_then(|c| c.strip_prefix("language-").map(str::to_string));
+        out.push_str(&html[i..block_start]);
+        if matches!(lang.as_deref(), Some("dot") | Some("graphviz")) {
+            let raw = unescape_html(&strip_tags(&html[inner_start..inner_start + crel]));
+            let svg = render_dot(&raw)?;
+            out.push_str(&format!("<figure class=\"diagram\">{svg}</figure>"));
+        } else {
+            out.push_str(&html[block_start..inner_start + crel + CLOSE.len()]);
+        }
+        i = inner_start + crel + CLOSE.len();
+    }
+    out.push_str(&html[i..]);
+    Ok(out)
+}
+
+/// Lay out one DOT graph to an inline `<svg>` (XML prolog stripped). A parse error, or a
+/// panic from the layout engine on a graph it can't handle, becomes a clean build error
+/// rather than aborting the compile.
+fn render_dot(dot: &str) -> Result<String> {
+    use layout::backends::svg::SVGWriter;
+    use layout::gv::{DotParser, GraphBuilder};
+
+    // The layout engine panics on some inputs it parses but can't lay out; catch it (with
+    // a silenced hook so no backtrace spills) and report it as a build error. render() is
+    // sequential, so swapping the global panic hook here is safe.
+    let prev = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> Result<String> {
+        let mut parser = DotParser::new(dot);
+        let graph = parser
+            .process()
+            .map_err(|e| anyhow::anyhow!("invalid DOT diagram: {e}"))?;
+        let mut gb = GraphBuilder::new();
+        gb.visit_graph(&graph);
+        let mut svg = SVGWriter::new();
+        gb.get().do_it(false, false, false, &mut svg);
+        Ok(svg.finalize())
+    }));
+    std::panic::set_hook(prev);
+    let svg = match result {
+        Ok(inner) => inner?,
+        Err(_) => anyhow::bail!("DOT diagram engine failed to lay out the graph"),
+    };
+    // Drop the `<?xml …?>` prolog so the SVG embeds inline cleanly.
+    Ok(svg[svg.find("<svg").unwrap_or(0)..].to_string())
 }
 
 /// Apply the `{2,4-6}` line-highlight flag: for each highlighted code block whose
@@ -822,6 +893,24 @@ mod tests {
 
         let empty = markdown::render_html("~~~code-tree\n~~~\n", Some(&h));
         assert!(render_code_tree(&empty, &h).is_err());
+    }
+
+    #[test]
+    fn renders_dot_diagram() {
+        let h = markdown::highlighter();
+        let md = "```dot\ndigraph { A -> B; B -> C; }\n```\n";
+        let out = render_diagrams(&markdown::render_html(md, Some(&h))).unwrap();
+        assert!(out.contains("<figure class=\"diagram\"><svg"));
+        assert!(!out.contains("language-dot")); // opaque block consumed
+        assert!(!out.contains("<script") && !out.contains("<?xml")); // sandbox-safe, no prolog
+
+        // A non-diagram code block is left untouched.
+        let code = markdown::render_html("```rust\nlet x = 1;\n```\n", Some(&h));
+        assert!(render_diagrams(&code).unwrap().contains("language-rust"));
+
+        // Garbage that isn't a graph fails the build rather than rendering nothing.
+        let bad = markdown::render_html("```dot\n@@@ not a graph @@@\n```\n", Some(&h));
+        assert!(render_diagrams(&bad).is_err());
     }
 
     #[test]

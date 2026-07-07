@@ -30,6 +30,7 @@ carries frontmatter, so this reference is itself a compilable docset.
 | Callouts (`> [!NOTE]` alerts) | [callouts.md](callouts.md) |
 | Directives (`:::note`, `:::card`) | [directives.md](directives.md) |
 | Math (`$…$` → MathML) | [math.md](math.md) |
+| Diagrams (`` ```dot `` → SVG) | [diagrams.md](diagrams.md) |
 | Footnotes | [footnotes.md](footnotes.md) |
 | Page frontmatter (`title`, `keywords`, `categories`, `related`) | [frontmatter.md](frontmatter.md) |
 
@@ -86,13 +87,14 @@ Done so far: heading **anchors** + an **"On this page"** box, **emoji**, code-bl
 `^sup^`, `~sub~`, `__u__`, `||spoiler||`), **figures** (image title → `<figcaption>`),
 **description lists**, **inline footnotes** (`^[…]`), **container directives**
 (`:::note` / `:::card` callouts + cards, `:::tabs` interactive tabs, `:::steps`
-walkthroughs), **fenced blockquotes** (`>>>`), and **inline-code attributes**
-(`` `x`{:lang} `` highlight, `` `x`{.badge} `` badges).
-What's left (all non-code blocks):
+walkthroughs), **fenced blockquotes** (`>>>`), **inline-code attributes**
+(`` `x`{:lang} `` highlight, `` `x`{.badge} `` badges), and **diagrams** (`` ```dot ``
+→ build-time SVG via a pure-Rust Graphviz engine).
+What's left:
 
 | Want | How | Effort |
 |------|-----|--------|
-| **Diagrams** (`` ```mermaid ``) | render to **SVG at build time** (like math → MathML), so it stays static + sandbox-safe. Engine TBD — Mermaid needs node/`mmdc`; Graphviz/D2 have native CLIs | medium–large |
+| **Mermaid diagrams** (`` ```mermaid ``) | opt-in on top of the DOT support — needs an external `mmdc` (node + headless browser), so it stays behind a compiler flag, never the default | medium |
 | **Video / embeds** | a `:video`/`:embed` directive → sandboxed `<iframe>`/`<video>` | medium |
 
 Deliberately **out of scope**: anything needing a live framework runtime — MDC's Vue
@@ -112,5 +114,6 @@ components, Docus's `CodePreview` live *component* output, `NuxtImg`.
 - [Callouts](callouts.md)
 - [Directives](directives.md)
 - [Math](math.md)
+- [Diagrams](diagrams.md)
 - [Footnotes](footnotes.md)
 - [Frontmatter](frontmatter.md)

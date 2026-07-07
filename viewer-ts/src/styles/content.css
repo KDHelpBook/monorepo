@@ -868,6 +868,17 @@ body {
   font-size: 0.9em;
   font-style: italic;
 }
+/* Diagrams (`` ```dot `` → build-time SVG via the layout engine). Centre it, let it
+   scroll if wider than the pane, and scale it down to fit narrow viewports. */
+.content figure.diagram {
+  margin: 1em 0;
+  text-align: center;
+  overflow-x: auto;
+}
+.content figure.diagram svg {
+  max-width: 100%;
+  height: auto;
+}
 /* Description / definition lists (Term / : details). */
 .content dl {
   margin: 0.8em 0;
