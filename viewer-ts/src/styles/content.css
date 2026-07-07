@@ -168,9 +168,6 @@ body {
   border-radius: 0 0 3px 3px;
 }
 .content .code-copy {
-  position: absolute;
-  top: 4px;
-  right: 4px;
   font-family: var(--font-ui);
   font-size: 11px;
   line-height: 1;
@@ -180,16 +177,27 @@ body {
   border: 1px solid var(--code-border);
   border-radius: 3px;
   cursor: pointer;
+}
+/* In the filename header: a flex child, so `align-items: center` on `.code-head`
+   vertically centres it; pushed to the right and always visible. */
+.content .code-head .code-copy {
+  margin-left: auto;
+}
+/* No header: floats over the code, top-right, revealed on hover. */
+.content .code-block > .code-copy {
+  position: absolute;
+  top: 4px;
+  right: 4px;
   opacity: 0;
   transition: opacity 0.12s;
 }
-.content .code-block:hover .code-copy,
-.content .code-copy:focus {
+.content .code-block:hover > .code-copy,
+.content .code-block > .code-copy:focus {
   opacity: 1;
 }
-/* No hover on touch — keep the button visible. */
+/* No hover on touch — keep the floating button visible. */
 @media (pointer: coarse) {
-  .content .code-copy {
+  .content .code-block > .code-copy {
     opacity: 0.7;
   }
 }

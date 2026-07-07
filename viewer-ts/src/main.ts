@@ -1520,17 +1520,6 @@ function start(
         const wrap = document.createElement("div");
         wrap.className = "code-block";
         pre.before(wrap);
-        if (file) {
-          const head = document.createElement("div");
-          head.className = "code-head";
-          head.innerHTML = FILE_ICON; // trusted, hardcoded inline SVG
-          const name = document.createElement("span");
-          name.className = "code-file";
-          name.textContent = file;
-          head.appendChild(name);
-          wrap.appendChild(head);
-        }
-        wrap.appendChild(pre);
 
         const btn = document.createElement("button");
         btn.type = "button";
@@ -1538,7 +1527,24 @@ function start(
         btn.setAttribute("data-copy", "");
         btn.setAttribute("data-copied", s.copied);
         btn.textContent = s.copy;
-        wrap.appendChild(btn);
+
+        if (file) {
+          // With a filename bar the Copy button lives in the header, vertically
+          // centred; without one it floats over the code (hover-revealed).
+          const head = document.createElement("div");
+          head.className = "code-head";
+          head.innerHTML = FILE_ICON; // trusted, hardcoded inline SVG
+          const name = document.createElement("span");
+          name.className = "code-file";
+          name.textContent = file;
+          head.appendChild(name);
+          head.appendChild(btn);
+          wrap.appendChild(head);
+          wrap.appendChild(pre);
+        } else {
+          wrap.appendChild(pre);
+          wrap.appendChild(btn);
+        }
       });
   }
 
