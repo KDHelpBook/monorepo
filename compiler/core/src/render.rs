@@ -14,10 +14,12 @@ pub fn render(src: &SourceDocset) -> RenderedDocset {
         .pages
         .iter()
         .map(|p| {
-            // Rewrite `assets/…` image/link targets to the `asset:` scheme so the
-            // viewer resolves them from the docset's attachment store.
-            let rendered =
-                assets::rewrite_asset_urls(&markdown::render_html(&p.markdown, Some(&highlighter)));
+            // Rewrite `assets/…` image/link targets to the `asset:` scheme, then
+            // render `$…$` LaTeX spans to MathML.
+            let rendered = render_math(&assets::rewrite_asset_urls(&markdown::render_html(
+                &p.markdown,
+                Some(&highlighter),
+            )));
             // Prepend an "On this page" nav built from the heading anchors, honouring
             // the page's `toc` frontmatter (auto when unset). It floats top-right, so
             // sitting before the H1 keeps the viewer's subtitle handling intact.
@@ -135,6 +137,52 @@ fn attr_value(html: &str, attr: &str) -> Option<String> {
     Some(html[start..end].to_string())
 }
 
+/// Replace comrak's math spans (`<span data-math-style="…">LaTeX</span>`) with native
+/// MathML, rendered at build time so the viewer needs no KaTeX/MathJax. A formula
+/// comrak's converter can't parse is left as its raw-LaTeX span.
+fn render_math(html: &str) -> String {
+    use latex2mathml::{latex_to_mathml, DisplayStyle};
+    const MARK: &str = "<span data-math-style=\"";
+    const CLOSE: &str = "</span>";
+    let mut out = String::with_capacity(html.len());
+    let mut i = 0;
+    while let Some(rel) = html[i..].find(MARK) {
+        let start = i + rel;
+        let after = start + MARK.len();
+        let Some(qpos) = html[after..].find("\">") else {
+            break;
+        };
+        let style = &html[after..after + qpos];
+        let latex_start = after + qpos + 2; // skip `">`
+        let Some(end_rel) = html[latex_start..].find(CLOSE) else {
+            break;
+        };
+        let latex = unescape_html(&html[latex_start..latex_start + end_rel]);
+        let display = if style == "display" {
+            DisplayStyle::Block
+        } else {
+            DisplayStyle::Inline
+        };
+        out.push_str(&html[i..start]);
+        match latex_to_mathml(&latex, display) {
+            Ok(mathml) => out.push_str(&mathml),
+            Err(_) => out.push_str(&html[start..latex_start + end_rel + CLOSE.len()]),
+        }
+        i = latex_start + end_rel + CLOSE.len();
+    }
+    out.push_str(&html[i..]);
+    out
+}
+
+/// Decode the HTML entities comrak escapes into a math span's LaTeX literal.
+fn unescape_html(s: &str) -> String {
+    s.replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&amp;", "&")
+}
+
 /// HTML-escape text for attribute/element content.
 fn esc(s: &str) -> String {
     s.replace('&', "&amp;")
@@ -161,6 +209,18 @@ mod tests {
         assert!(nav.contains("<li><a href=\"#a\">Alpha</a></li>"));
         assert!(nav.contains("<li class=\"sub\"><a href=\"#a1\">Sub</a></li>")); // H3 nested
         assert!(nav.contains("<li><a href=\"#b\">Beta</a></li>"));
+    }
+
+    #[test]
+    fn renders_math_to_mathml() {
+        let html = "<p>x <span data-math-style=\"inline\">a^2</span> y</p>\
+                    <p><span data-math-style=\"display\">a+b</span></p>";
+        let out = render_math(html);
+        assert!(out.contains("<math") && out.contains("display=\"inline\""));
+        assert!(out.contains("display=\"block\""));
+        assert!(!out.contains("data-math-style")); // spans replaced
+        assert!(out.contains("<p>x ") && out.contains(" y</p>")); // surrounding text kept
+        assert!(out.contains("<msup>")); // a^2 → superscript
     }
 
     #[test]

@@ -73,6 +73,8 @@ pub fn render_html(markdown: &str, highlighter: Option<&SyntectAdapter>) -> Stri
     options.extension.shortcodes = true;
     // GitHub-style callouts: `> [!NOTE]` → a labelled `markdown-alert` block.
     options.extension.alerts = true;
+    // `$…$` / `$$…$$` math (parsed to LaTeX; rendered to MathML in [`crate::render`]).
+    options.extension.math_dollars = true;
     // Keep the info-string text *after* the language on the `<code>` as `data-meta`,
     // so ```ts [nuxt.config.ts] surfaces a filename the viewer shows above the block.
     options.render.full_info_string = true;

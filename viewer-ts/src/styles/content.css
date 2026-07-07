@@ -296,6 +296,14 @@ body {
   --callout-bg: #fdf3f3;
   --callout-border: #f3d0d0;
 }
+/* Compile-time MathML (`$…$` / `$$…$$`). Display math is already block-level
+   (`display: block math`) — don't override `display` or the browser stops laying it
+   out as math. Just add spacing and let wide equations scroll. */
+.content math[display="block"] {
+  overflow-x: auto;
+  overflow-y: hidden;
+  margin: 0.9em 0;
+}
 .content table {
   border-collapse: collapse;
   margin: 0.9em 0;

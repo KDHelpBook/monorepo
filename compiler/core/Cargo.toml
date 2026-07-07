@@ -16,6 +16,8 @@ comrak = { version = "0.53", features = ["shortcodes"] }
 # Same syntect comrak already pulls in — used directly to emit the code-block theme
 # CSS (class-based highlighting, so the viewer can re-theme it, e.g. for dark mode).
 syntect = "5"
+# Render `$…$` LaTeX math to native MathML at build time (no runtime KaTeX/MathJax).
+latex2mathml = "0.2"
 rusqlite = { version = "0.32", features = ["bundled"] }
 walkdir = "2"
 postcard = { version = "1", features = ["alloc"] }

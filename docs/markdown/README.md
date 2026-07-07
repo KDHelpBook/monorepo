@@ -28,6 +28,7 @@ carries frontmatter, so this reference is itself a compilable docset.
 | Tables (GFM) | [tables.md](tables.md) |
 | Blockquotes | [blockquotes.md](blockquotes.md) |
 | Callouts (`> [!NOTE]` alerts) | [callouts.md](callouts.md) |
+| Math (`$…$` → MathML) | [math.md](math.md) |
 | Footnotes | [footnotes.md](footnotes.md) |
 | Page frontmatter (`title`, `keywords`, `categories`, `related`) | [frontmatter.md](frontmatter.md) |
 
@@ -57,13 +58,11 @@ de-facto standard outside Vue, and degrade gracefully. Authoring feels close to 
 ### Roadmap
 
 Done so far: heading **anchors** + an **"On this page"** box, **emoji**, code-block
-**filenames** and a **copy** button, and **callouts** (comrak was upgraded to 0.53 for
-native `alerts`). The rest, roughly by effort — note `math_dollars` only *parses* math,
-so rendering needs a LaTeX→MathML step:
+**filenames** and a **copy** button, **callouts** (comrak upgraded to 0.53 for native
+`alerts`), and **math** (`$…$` → build-time MathML). What's left:
 
 | Want | How | Effort |
 |------|-----|--------|
-| **Math** `$…$` | comrak `math_dollars` + a Rust LaTeX→MathML pass (native MathML) | medium |
 | **Code group / collapse / preview / tree** | a **directive** renderer + interactive frame JS | medium–large |
 | **Tabs / cards / steps / badges** | the same **directive** renderer (not MDC) | medium |
 | **Video / embeds** | a `:video`/`:embed` directive → sandboxed `<iframe>`/`<video>` | medium |
@@ -83,5 +82,6 @@ components, Docus's `CodePreview` live *component* output, `NuxtImg`.
 - [Tables](tables.md)
 - [Blockquotes](blockquotes.md)
 - [Callouts](callouts.md)
+- [Math](math.md)
 - [Footnotes](footnotes.md)
 - [Frontmatter](frontmatter.md)
