@@ -8,6 +8,7 @@ import type {
   SearchHit,
   TocNode,
 } from "./docset";
+import { buildTocTree } from "./docset";
 import { StreamingDb } from "./streaming";
 
 /**
@@ -97,7 +98,7 @@ export class StreamingDocset implements IDocset {
     const version = (await meta("version")) ?? "";
 
     // --- eager structure (all small tables) ---
-    const toc = buildToc(
+    const toc = buildTocTree(
       await db.all("SELECT id, page_id, parent_id, position, title FROM toc"),
     );
     const cats: Category[] = (
@@ -289,30 +290,6 @@ export class StreamingDocset implements IDocset {
   }
 }
 
-/** Build the TOC tree from flat rows (mirrors docset.ts). */
-function buildToc(rows: Record<string, unknown>[]): TocNode[] {
-  type Row = { id: number; pageId: string; title: string; position: number };
-  const byParent = new Map<number | null, Row[]>();
-  for (const r of rows) {
-    const parent = r.parent_id == null ? null : Number(r.parent_id);
-    const row: Row = {
-      id: Number(r.id),
-      pageId: String(r.page_id),
-      title: String(r.title),
-      position: Number(r.position),
-    };
-    (byParent.get(parent) ?? byParent.set(parent, []).get(parent)!).push(row);
-  }
-  const build = (parent: number | null): TocNode[] =>
-    (byParent.get(parent) ?? [])
-      .sort((a, b) => a.position - b.position)
-      .map((e) => ({
-        pageId: e.pageId,
-        title: e.title,
-        children: build(e.id),
-      }));
-  return build(null);
-}
 
 function escHtml(s: string): string {
   return s.replace(

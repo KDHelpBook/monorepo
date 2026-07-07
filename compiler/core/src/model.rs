@@ -56,11 +56,14 @@ pub struct SourceDocset {
 // Shared structure (identical in both stages)
 // ---------------------------------------------------------------------------
 
-/// A node in the table-of-contents tree. `page_id` points at a page; `title` may
-/// override the page title for display in the tree.
+/// A node in the table-of-contents tree. `page_id` points at a page — or is `None`
+/// for a pure folder node (format v6), which only groups its children and cannot be
+/// opened. `title` overrides the page title for display; for a folder it is the only
+/// label there is.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TocNode {
-    pub page_id: String,
+    #[serde(default)]
+    pub page_id: Option<String>,
     pub title: String,
     #[serde(default)]
     pub children: Vec<TocNode>,

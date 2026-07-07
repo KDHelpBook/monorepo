@@ -53,9 +53,12 @@ struct CategoryYaml {
     title: String,
 }
 
+/// A `toc.yaml` node: `page` + optional display `title`, or — a pure folder node —
+/// a `title` alone with `children` (no page to open; format v6).
 #[derive(Deserialize)]
 struct TocYaml {
-    page: String,
+    #[serde(default)]
+    page: Option<String>,
     #[serde(default)]
     title: Option<String>,
     #[serde(default)]
@@ -284,40 +287,47 @@ fn load_toc(dir: &Path, pages: &[SourcePage]) -> Result<Vec<TocNode>> {
             .iter()
             .map(|p| (p.id.as_str(), p.title.as_str()))
             .collect();
-        return Ok(raw.iter().map(|n| toc_from_yaml(n, &titles)).collect());
+        return raw.iter().map(|n| toc_from_yaml(n, &titles)).collect();
     }
     // Fallback: flat TOC in page order.
     Ok(pages
         .iter()
         .map(|p| TocNode {
-            page_id: p.id.clone(),
+            page_id: Some(p.id.clone()),
             title: p.title.clone(),
             children: Vec::new(),
         })
         .collect())
 }
 
-fn toc_from_yaml(node: &TocYaml, titles: &BTreeMap<&str, &str>) -> TocNode {
-    let title = node
-        .title
-        .clone()
-        .or_else(|| titles.get(node.page.as_str()).map(|s| s.to_string()))
-        .unwrap_or_else(|| node.page.clone());
-    TocNode {
+fn toc_from_yaml(node: &TocYaml, titles: &BTreeMap<&str, &str>) -> Result<TocNode> {
+    let title = match (&node.page, &node.title) {
+        // A page node falls back to the page's own title, then to its id.
+        (Some(page), title) => title
+            .clone()
+            .or_else(|| titles.get(page.as_str()).map(|s| s.to_string()))
+            .unwrap_or_else(|| page.clone()),
+        // A folder node has no page to inherit a label from.
+        (None, Some(title)) => title.clone(),
+        (None, None) => bail!("a toc folder node (no `page`) needs a `title`"),
+    };
+    Ok(TocNode {
         page_id: node.page.clone(),
         title,
         children: node
             .children
             .iter()
             .map(|c| toc_from_yaml(c, titles))
-            .collect(),
-    }
+            .collect::<Result<Vec<_>>>()?,
+    })
 }
 
 fn validate_toc(nodes: &[TocNode], page_ids: &BTreeSet<&str>) -> Result<()> {
     for node in nodes {
-        if !page_ids.contains(node.page_id.as_str()) {
-            bail!("toc references unknown page id `{}`", node.page_id);
+        if let Some(page_id) = &node.page_id {
+            if !page_ids.contains(page_id.as_str()) {
+                bail!("toc references unknown page id `{}`", page_id);
+            }
         }
         validate_toc(&node.children, page_ids)?;
     }
@@ -334,4 +344,50 @@ fn slug(s: &str) -> String {
             }
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A minimal on-disk source: docset.toml + two pages + the given toc.yaml.
+    fn write_source(dir: &Path, toc_yaml: Option<&str>) {
+        fs::write(
+            dir.join("docset.toml"),
+            "id = \"t\"\ntitle = \"T\"\nversion = \"1\"\nlanguage = \"en\"\n",
+        )
+        .unwrap();
+        let pages = dir.join("pages");
+        fs::create_dir(&pages).unwrap();
+        fs::write(pages.join("a.md"), "# A\n\nbody").unwrap();
+        fs::write(pages.join("b.md"), "# B\n\nbody").unwrap();
+        if let Some(y) = toc_yaml {
+            fs::write(dir.join("toc.yaml"), y).unwrap();
+        }
+    }
+
+    #[test]
+    fn toc_yaml_folder_node_groups_children() {
+        let dir = tempfile::tempdir().unwrap();
+        write_source(
+            dir.path(),
+            Some("- page: a\n- title: Group\n  children:\n    - page: b\n"),
+        );
+        let src = load_dir(dir.path()).unwrap();
+        assert_eq!(src.toc.len(), 2);
+        assert_eq!(src.toc[0].page_id.as_deref(), Some("a"));
+        let folder = &src.toc[1];
+        assert_eq!(folder.page_id, None);
+        assert_eq!(folder.title, "Group");
+        assert_eq!(folder.children.len(), 1);
+        assert_eq!(folder.children[0].page_id.as_deref(), Some("b"));
+    }
+
+    #[test]
+    fn toc_yaml_folder_node_requires_a_title() {
+        let dir = tempfile::tempdir().unwrap();
+        write_source(dir.path(), Some("- children:\n    - page: a\n"));
+        let err = load_dir(dir.path()).unwrap_err().to_string();
+        assert!(err.contains("needs a `title`"), "unexpected error: {err}");
+    }
 }

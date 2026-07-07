@@ -28,9 +28,10 @@ it.
 
 ## SQLite schema
 
-`meta.format_version` identifies the schema version (currently `5`: `assets` was
-added in v2, `meta.collection` in v3, the `related` table in v4, and the optional
-`pages.md` column in v5).
+`meta.format_version` identifies the schema version (currently `6`: `assets` was
+added in v2, `meta.collection` in v3, the `related` table in v4, the optional
+`pages.md` column in v5, and nullable `toc.page_id` — page-less folder nodes —
+in v6).
 
 ```sql
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -47,7 +48,8 @@ CREATE TABLE pages (
 
 CREATE TABLE toc (
   id        INTEGER PRIMARY KEY,
-  page_id   TEXT NOT NULL REFERENCES pages(id),
+  page_id   TEXT REFERENCES pages(id),  -- NULL = pure folder node (v6): groups its
+                                        --   children, cannot be opened
   parent_id INTEGER REFERENCES toc(id),
   position  INTEGER NOT NULL,
   title     TEXT NOT NULL
