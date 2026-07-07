@@ -111,6 +111,15 @@ function ready(){var m=document.querySelector('mark.hl');if(m)m.scrollIntoView({
 if(document.readyState!=='loading')ready();else addEventListener('DOMContentLoaded',ready);
 })();`;
 
+// A generic document glyph for the code-block filename header (inline SVG so it stays
+// self-contained in the sandboxed frame — no icon font or external ref).
+const FILE_ICON =
+  '<svg class="code-file-icon" viewBox="0 0 16 16" aria-hidden="true">' +
+  '<path d="M4 1.7h5.1L12.8 5.4V13.4a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2.7a1 1 0 0 1 1-1Z" ' +
+  'fill="none" stroke="currentColor" stroke-width="1.2"/>' +
+  '<path d="M9 1.8V5.5h3.7" fill="none" stroke="currentColor" stroke-width="1.2" ' +
+  'stroke-linejoin="round"/></svg>';
+
 // ---------------------------------------------------------------------------
 // Manifest loading (single docset for now; collections come later)
 // ---------------------------------------------------------------------------
@@ -1514,6 +1523,7 @@ function start(
         if (file) {
           const head = document.createElement("div");
           head.className = "code-head";
+          head.innerHTML = FILE_ICON; // trusted, hardcoded inline SVG
           const name = document.createElement("span");
           name.className = "code-file";
           name.textContent = file;
