@@ -288,65 +288,83 @@ inline components — see [Differences from GitHub Markdown](md/khb-authoring/di
 Double asterisks make strong emphasis — key terms on first use, UI labels, the one
 word a skimming reader must not miss.
 
+~~~code-preview example
 ```md
 Press **Compile** to build the book.
 ```
-
-Renders as: Press **Compile** to build the book.
+```md
+Press **Compile** to build the book.
+```
+~~~
 
 ## Italic
 
 Single asterisks make light emphasis — a stressed word, a book title, a term used
 in a borrowed sense.
 
+~~~code-preview example
 ```md
 The id is *stable*: links keep working after a rename.
 ```
-
-Renders as: The id is *stable*: links keep working after a rename.
+```md
+The id is *stable*: links keep working after a rename.
+```
+~~~
 
 ## Bold italic
 
 Triple asterisks combine both — rare, for the strongest inline stress.
 
+~~~code-preview example
 ```md
 Back up the file ***before*** converting it.
 ```
-
-Renders as: Back up the file ***before*** converting it.
+```md
+Back up the file ***before*** converting it.
+```
+~~~
 
 ## Strikethrough
 
 Double tildes cross text out — something that no longer applies but should stay
 visible, like a superseded value or a corrected claim.
 
+~~~code-preview example
 ```md
 The limit is ~~10~~ 25 attachments.
 ```
-
-Renders as: The limit is ~~10~~ 25 attachments.
+```md
+The limit is ~~10~~ 25 attachments.
+```
+~~~
 
 ## Insert
 
 Double pluses mark text as an addition — the counterpart of strikethrough, for
 diff-style edits where the old and the new stand side by side.
 
+~~~code-preview example
 ```md
 The limit is ~~10~~ ++25++ attachments.
 ```
-
-Renders as: The limit is ~~10~~ ++25++ attachments.
+```md
+The limit is ~~10~~ ++25++ attachments.
+```
+~~~
 
 ## Inline code
 
 Backticks typeset identifiers verbatim in monospace — file names, ids, field values,
 anything a reader might type.
 
+~~~code-preview example
 ```md
 Set `language = "en"` in `docset.toml`.
 ```
-
-Renders as: Set `language = "en"` in `docset.toml`.
+```md
+Set `language = "en"` in `docset.toml`.
+```
+~~~
 
 ## Inline code attributes
 
@@ -369,22 +387,28 @@ a space is just text.
 Double equals signs mark text like a highlighter pen — for drawing the eye to the
 key fragment of a sentence, a value in a longer line, the part that changed.
 
+~~~code-preview example
 ```md
 Set the ==id== field before anything else.
 ```
-
-Renders as: Set the ==id== field before anything else.
+```md
+Set the ==id== field before anything else.
+```
+~~~
 
 ## Underline
 
 Double underscores underline text — useful for terms that carry a defined meaning,
 or wherever house style calls for underlining instead of italics.
 
+~~~code-preview example
 ```md
 A __docset__ is one compiled book.
 ```
-
-Renders as: A __docset__ is one compiled book.
+```md
+A __docset__ is one compiled book.
+```
+~~~
 
 > [!IMPORTANT]
 > In plain Markdown `__x__` means bold — here it means underline. Write bold with
@@ -394,21 +418,27 @@ Renders as: A __docset__ is one compiled book.
 
 Carets raise text — exponents, ordinals, footnote-style markers in prose.
 
+~~~code-preview example
 ```md
 E = mc^2^, the 4^th^ edition
 ```
-
-Renders as: E = mc^2^, the 4^th^ edition.
+```md
+E = mc^2^, the 4^th^ edition
+```
+~~~
 
 ## Subscript
 
 Single tildes lower text — chemical formulas, variable indices.
 
+~~~code-preview example
 ```md
 H~2~O, x~1~ … x~n~
 ```
-
-Renders as: H~2~O, x~1~ … x~n~.
+```md
+H~2~O, x~1~ … x~n~
+```
+~~~
 
 > [!IMPORTANT]
 > In GitHub Markdown a single tilde can mean strikethrough — here it means
@@ -419,11 +449,14 @@ Renders as: H~2~O, x~1~ … x~n~.
 Double pipes black out text until the reader clicks it — for hiding answers, solutions,
 or plot points.
 
+~~~code-preview example
 ```md
 The answer is ||42||.
 ```
-
-Renders as: The answer is ||42|| (click to reveal).
+```md
+The answer is ||42||.
+```
+~~~
 
 ## Literal characters
 
@@ -433,11 +466,14 @@ the *character*, a backslash before it turns the syntax off: `\~`, `\*`, `\_`,
 (a single `~` is subscript syntax), asterisks and underscores occasionally, the
 rest rarely.
 
+~~~code-preview example
 ```md
 Takes \~5 minutes; required fields are marked with \*.
 ```
-
-Renders as: Takes \~5 minutes; required fields are marked with \*.
+```md
+Takes \~5 minutes; required fields are marked with \*.
+```
+~~~
 
 Inside `inline code` and code blocks nothing is ever escaped — write `~/books`,
 `a * b` or `__init__` there as-is.
@@ -447,28 +483,30 @@ Inside `inline code` and code blocks nothing is ever escaped — write `~/books`
 A blank line starts a new paragraph. For a **hard line break** inside one — an
 address, a verse — end the line with a backslash (or two trailing spaces):
 
+~~~code-preview example
 ```md
 First line\
 forced onto a new line.
 ```
-
-Renders as:
-
+```md
 First line\
 forced onto a new line.
+```
+~~~
 
 ## Horizontal rules
 
 Three or more `-`, `*`, or `_` alone on a line draw a divider — a scene change
 between passages that don't deserve separate headings:
 
+~~~code-preview example
 ```md
 ---
 ```
-
-Renders as:
-
+```md
 ---
+```
+~~~
 
 ---
 
@@ -485,17 +523,18 @@ number), nested to any depth, and check-box task lists.
 A `-` at the start of a line makes a bullet item (`*` and `+` work too — pick one
 and stay consistent).
 
+~~~code-preview example
 ```md
 - Compile the book
 - Open it in the viewer
 - Publish
 ```
-
-Renders as:
-
+```md
 - Compile the book
 - Open it in the viewer
 - Publish
+```
+~~~
 
 ## Ordered lists
 
@@ -503,49 +542,52 @@ A number and a dot make a numbered item. Only the **first** number matters — i
 renumber automatically from it, so a lazy `1. / 1. / 1.` still counts up and
 inserting a step never means renumbering the rest by hand.
 
+~~~code-preview example
 ```md
 1. Write a page
 1. Compile
 1. Preview
 ```
-
-Renders as:
-
+```md
 1. Write a page
 1. Compile
 1. Preview
+```
+~~~
 
 To start elsewhere, give the first item that number — handy when a procedure
 continues after an interruption, like a code block or a paragraph:
 
+~~~code-preview example
 ```md
 4. Package the viewer
 5. Deploy
 ```
-
-Renders as:
-
+```md
 4. Package the viewer
 5. Deploy
+```
+~~~
 
 ## Nested lists
 
 Indent child items under their parent (align with the parent's text). Bullets and
 numbers can mix freely across levels.
 
+~~~code-preview example
 ```md
 1. Prepare the source
    - docset.toml
    - at least one page
 2. Compile
 ```
-
-Renders as:
-
+```md
 1. Prepare the source
    - docset.toml
    - at least one page
 2. Compile
+```
+~~~
 
 An item can also hold whole paragraphs or code blocks — indent that continuation
 content to line up under the item's text.
@@ -555,21 +597,23 @@ content to line up under the item's text.
 Task lists work exactly as on GitHub: `- [ ]` for an open item and
 `- [x]` for a done one.
 
+~~~code-preview example
 ```md
 - [x] Compile the docset
 - [ ] Publish it
 ```
-
-Renders as:
-
+```md
 - [x] Compile the docset
 - [ ] Publish it
+```
+~~~
 
 ## Description lists
 
 A **term** on its own line, then a line starting with `: ` for its **definition**, makes
 a description list (`<dl>`):
 
+~~~code-preview example
 ```md
 Docset
 : A compiled `.khb` — one book.
@@ -577,12 +621,14 @@ Docset
 Collection
 : Several docsets that merge into one tree.
 ```
-
+```md
 Docset
 : A compiled `.khb` — one book.
 
 Collection
 : Several docsets that merge into one tree.
+```
+~~~
 
 ---
 
@@ -854,19 +900,20 @@ Pipe tables work exactly as on GitHub. The header row is
 separated from the body by a row of dashes; colons in that separator set column
 alignment.
 
+~~~code-preview example
 ```md
 | Prop  | Default | Type   |
 |-------|:-------:|-------:|
 | name  |         | string |
 | size  | md      | string |
 ```
-
-Renders as:
-
+```md
 | Prop  | Default | Type   |
 |-------|:-------:|-------:|
 | name  |         | string |
 | size  | md      | string |
+```
+~~~
 
 - `:---` left-aligns, `:--:` centres, `---:` right-aligns.
 - Cells are inline Markdown, so `**bold**`, `` `code` `` and links work inside them.
@@ -885,6 +932,7 @@ reach for lists or headings for richer structure.
 
 Prefix lines with `>`. Separate paragraphs inside a quote with a `>` on its own line.
 
+~~~code-preview example
 ```md
 > A single-line quote.
 
@@ -892,12 +940,14 @@ Prefix lines with `>`. Separate paragraphs inside a quote with a `>` on its own 
 >
 > Second paragraph, still quoted.
 ```
-
-Renders as:
+```md
+> A single-line quote.
 
 > First paragraph of a quote.
 >
 > Second paragraph, still quoted.
+```
+~~~
 
 Blockquotes can contain other Markdown — lists, code, even nested quotes (prefix with
 `> >`).
@@ -907,6 +957,7 @@ Blockquotes can contain other Markdown — lists, code, even nested quotes (pref
 For a long quote with several paragraphs, prefixing every line with `>` is tedious.
 Fence the whole quote with `>>>` instead — everything between the markers is quoted:
 
+~~~code-preview example
 ```md
 >>>
 First paragraph of the quote.
@@ -914,14 +965,14 @@ First paragraph of the quote.
 Second paragraph — no `>` on any line.
 >>>
 ```
-
-Renders as:
-
+```md
 >>>
 First paragraph of the quote.
 
 Second paragraph — no `>` on any line.
 >>>
+```
+~~~
 
 ## Callouts
 
@@ -949,67 +1000,82 @@ The five types, each with its own colour — the source, then how it renders:
 Background or context the reader should absorb even when skimming — the fact still
 matters if they skip it, so it earns a box rather than a plain sentence.
 
+~~~code-preview example
 ```md
 > [!NOTE]
 > The compiled book works fully offline — no network access is needed to read it.
 ```
-
+```md
 > [!NOTE]
 > The compiled book works fully offline — no network access is needed to read it.
+```
+~~~
 
 ### Tip
 
 Optional advice: a shortcut, a better habit, a nicer way to do the same thing.
 Nothing breaks if the reader ignores it.
 
+~~~code-preview example
 ```md
 > [!TIP]
 > Name files after their page ids — links then read like the table of contents.
 ```
-
+```md
 > [!TIP]
 > Name files after their page ids — links then read like the table of contents.
+```
+~~~
 
 ### Important
 
 Information the reader *needs* for the task at hand to succeed — skipping it means
 something won't work, even though nothing dangerous happens.
 
+~~~code-preview example
 ```md
 > [!IMPORTANT]
 > Every page needs a unique id — two files can't share one.
 ```
-
+```md
 > [!IMPORTANT]
 > Every page needs a unique id — two files can't share one.
+```
+~~~
 
 ### Warning
 
 Something that demands attention *before* the reader acts — a common trap, a
 surprising behavior, a step that's easy to get wrong.
 
+~~~code-preview example
 ```md
 > [!WARNING]
 > Raw HTML is escaped, not rendered — `<b>bold</b>` shows up as literal text.
 ```
-
+```md
 > [!WARNING]
 > Raw HTML is escaped, not rendered — `<b>bold</b>` shows up as literal text.
+```
+~~~
 
 ### Caution
 
 Consequences: actions that are destructive, irreversible, or costly to undo. The
 strongest signal — save it for cases where acting wrongly does real damage.
 
+~~~code-preview example
 ```md
 > [!CAUTION]
 > `khb pack` starts from a clean slate — docsets already in the output directory
 > are removed before the new ones are copied in.
 ```
-
+```md
 > [!CAUTION]
 > `khb pack` starts from a clean slate — docsets already in the output directory
 > are removed before the new ones are copied in.
+```
+~~~
 
 ---
 
@@ -1036,18 +1102,8 @@ content can't inject markup.
 Five names render as coloured, self-labelling callouts — a portable alternative to the
 `> [!NOTE]` [callout](md/khb-authoring/blockquotes.md) syntax:
 
+~~~code-preview example
 ```md
-:::note
-Background a reader can skip.
-:::
-
-:::warning
-Something that can bite you.
-:::
-```
-
-Renders as:
-
 :::note
 Background a reader can skip.
 :::
@@ -1067,6 +1123,29 @@ Something that can bite you.
 :::caution
 A destructive or irreversible action.
 :::
+```
+```md
+:::note
+Background a reader can skip.
+:::
+
+:::tip
+A shortcut worth knowing.
+:::
+
+:::info
+A neutral aside.
+:::
+
+:::warning
+Something that can bite you.
+:::
+
+:::caution
+A destructive or irreversible action.
+:::
+```
+~~~
 
 The available kinds are `note`, `tip`, `info`, `warning`, and `caution` (`danger` is an
 alias for `caution`). Each supplies its own heading — the type *is* the label.
@@ -1076,17 +1155,18 @@ alias for `caution`). Each supplies its own heading — the type *is* the label.
 `:::card` is a plain framed box with no accent bar and no auto-heading — reach for it
 when you want to set a block apart without implying note/warning semantics:
 
+~~~code-preview example
 ```md
 :::card
 A self-contained block: a summary, a definition, a call-out box of your own making.
 :::
 ```
-
-Renders as:
-
+```md
 :::card
 A self-contained block: a summary, a definition, a call-out box of your own making.
 :::
+```
+~~~
 
 ## Tabs
 
@@ -1094,6 +1174,7 @@ A self-contained block: a summary, a definition, a call-out box of your own maki
 label. The words after `tab` are the label; a panel holds any Markdown (prose, code,
 even another directive). Give the outer `tabs` fence more colons than the inner `tab`s:
 
+~~~code-preview example
 ```md
 ::::tabs
 :::tab macOS
@@ -1106,17 +1187,19 @@ Install with Homebrew:
 :::
 ::::
 ```
-
-Renders as an interactive tab strip:
-
+```md
 ::::tabs
 :::tab macOS
-Install with Homebrew: `brew install foo`{:bash}
+Install with Homebrew:
+
+`brew install foo`{:bash}
 :::
 :::tab Linux
 `apt install foo`{:bash}
 :::
 ::::
+```
+~~~
 
 Tabs are the one directive that needs the viewer's frame bridge (a tiny click handler);
 everything else on this page is pure CSS. A `tab` with no label falls back to `Tab 1`,
@@ -1127,6 +1210,7 @@ everything else on this page is pure CSS. A `tab` with no label falls back to `T
 `:::steps` turns an **ordered list** into a numbered walkthrough — big numerals down a
 connector line, with room for rich content under each step:
 
+~~~code-preview example
 ```md
 :::steps
 1. **Install** the CLI.
@@ -1138,14 +1222,18 @@ connector line, with room for rich content under each step:
 3. **Open** it in the viewer.
 :::
 ```
-
-Renders as:
-
+```md
 :::steps
-1. **Install** the CLI. `cargo install khb`{:bash}
+1. **Install** the CLI.
+
+   `cargo install khb`{:bash}
+
 2. **Compile** your sources into a `.khb`.
+
 3. **Open** it in the viewer.
 :::
+```
+~~~
 
 ## Nesting
 
@@ -1345,6 +1433,52 @@ compiled khb-authoring (36 pages, language en) -> authoring.khb
 ```
 ~~~
 
+That terminal panel is the **default skin**. Add a skin token to change how the second
+block renders — see `example` below.
+
+### Source + rendered result (`example` skin)
+
+`~~~code-preview example` pairs a construct's **source** (first block, shown as code) with
+its **rendered result** (second block, rendered as Markdown) — for showing syntax next to
+what it produces, in one connected frame. Both blocks are still required, and given
+separately, so the result needn't be the literal render of the source.
+
+`````md
+~~~code-preview example
+```md
+> [!TIP]
+> Name files after their page ids.
+```
+```md
+> [!TIP]
+> Name files after their page ids.
+```
+~~~
+`````
+
+~~~code-preview example
+```md
+> [!TIP]
+> Name files after their page ids.
+```
+```md
+> [!TIP]
+> Name files after their page ids.
+```
+~~~
+
+Add **`split`** (`~~~code-preview example split`) to place source and result side by side;
+it falls back to stacked on a narrow pane.
+
+~~~code-preview example split
+```md
+**Bold**, ==highlight==, and `inline code`.
+```
+```md
+**Bold**, ==highlight==, and `inline code`.
+```
+~~~
+
 ### File tree (`code-tree`)
 
 A **`~~~code-tree … ~~~`** fence turns each block's `[path]` label into a **file tree**
@@ -1469,11 +1603,14 @@ this one] — it joins the same numbered list at the foot of the page.
 Write emoji with `:shortcode:` names — the compiler replaces them with the Unicode
 character at build time.
 
+~~~code-preview example
 ```md
 Shipped it :tada: — tests are green :white_check_mark:.
 ```
-
-Renders as: Shipped it :tada: — tests are green :white_check_mark:.
+```md
+Shipped it :tada: — tests are green :white_check_mark:.
+```
+~~~
 
 > [!NOTE]
 > An unknown `:name:` is left in the text as-is — a typo in a shortcode shows up
@@ -3411,19 +3548,25 @@ the browser renders it natively — no KaTeX or MathJax at runtime.
 
 Inline math uses single `$…$`:
 
+~~~code-preview example
 ```md
 The relation $E = mc^2$ links mass and energy.
 ```
-
+```md
 The relation $E = mc^2$ links mass and energy.
+```
+~~~
 
 Display math (its own centred block) uses `$$…$$`:
 
+~~~code-preview example
 ```md
 $$\int_0^1 x^2 \, dx = \frac{1}{3}$$
 ```
-
+```md
 $$\int_0^1 x^2 \, dx = \frac{1}{3}$$
+```
+~~~
 
 ## Code-fence syntax
 

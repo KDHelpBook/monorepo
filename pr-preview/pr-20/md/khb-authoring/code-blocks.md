@@ -166,6 +166,52 @@ compiled khb-authoring (36 pages, language en) -> authoring.khb
 ```
 ~~~
 
+That terminal panel is the **default skin**. Add a skin token to change how the second
+block renders — see `example` below.
+
+### Source + rendered result (`example` skin)
+
+`~~~code-preview example` pairs a construct's **source** (first block, shown as code) with
+its **rendered result** (second block, rendered as Markdown) — for showing syntax next to
+what it produces, in one connected frame. Both blocks are still required, and given
+separately, so the result needn't be the literal render of the source.
+
+`````md
+~~~code-preview example
+```md
+> [!TIP]
+> Name files after their page ids.
+```
+```md
+> [!TIP]
+> Name files after their page ids.
+```
+~~~
+`````
+
+~~~code-preview example
+```md
+> [!TIP]
+> Name files after their page ids.
+```
+```md
+> [!TIP]
+> Name files after their page ids.
+```
+~~~
+
+Add **`split`** (`~~~code-preview example split`) to place source and result side by side;
+it falls back to stacked on a narrow pane.
+
+~~~code-preview example split
+```md
+**Bold**, ==highlight==, and `inline code`.
+```
+```md
+**Bold**, ==highlight==, and `inline code`.
+```
+~~~
+
 ### File tree (`code-tree`)
 
 A **`~~~code-tree … ~~~`** fence turns each block's `[path]` label into a **file tree**

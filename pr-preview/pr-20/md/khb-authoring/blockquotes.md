@@ -3,6 +3,7 @@
 
 Prefix lines with `>`. Separate paragraphs inside a quote with a `>` on its own line.
 
+~~~code-preview example
 ```md
 > A single-line quote.
 
@@ -10,12 +11,14 @@ Prefix lines with `>`. Separate paragraphs inside a quote with a `>` on its own 
 >
 > Second paragraph, still quoted.
 ```
-
-Renders as:
+```md
+> A single-line quote.
 
 > First paragraph of a quote.
 >
 > Second paragraph, still quoted.
+```
+~~~
 
 Blockquotes can contain other Markdown — lists, code, even nested quotes (prefix with
 `> >`).
@@ -25,6 +28,7 @@ Blockquotes can contain other Markdown — lists, code, even nested quotes (pref
 For a long quote with several paragraphs, prefixing every line with `>` is tedious.
 Fence the whole quote with `>>>` instead — everything between the markers is quoted:
 
+~~~code-preview example
 ```md
 >>>
 First paragraph of the quote.
@@ -32,14 +36,14 @@ First paragraph of the quote.
 Second paragraph — no `>` on any line.
 >>>
 ```
-
-Renders as:
-
+```md
 >>>
 First paragraph of the quote.
 
 Second paragraph — no `>` on any line.
 >>>
+```
+~~~
 
 ## Callouts
 
@@ -67,64 +71,79 @@ The five types, each with its own colour — the source, then how it renders:
 Background or context the reader should absorb even when skimming — the fact still
 matters if they skip it, so it earns a box rather than a plain sentence.
 
+~~~code-preview example
 ```md
 > [!NOTE]
 > The compiled book works fully offline — no network access is needed to read it.
 ```
-
+```md
 > [!NOTE]
 > The compiled book works fully offline — no network access is needed to read it.
+```
+~~~
 
 ### Tip
 
 Optional advice: a shortcut, a better habit, a nicer way to do the same thing.
 Nothing breaks if the reader ignores it.
 
+~~~code-preview example
 ```md
 > [!TIP]
 > Name files after their page ids — links then read like the table of contents.
 ```
-
+```md
 > [!TIP]
 > Name files after their page ids — links then read like the table of contents.
+```
+~~~
 
 ### Important
 
 Information the reader *needs* for the task at hand to succeed — skipping it means
 something won't work, even though nothing dangerous happens.
 
+~~~code-preview example
 ```md
 > [!IMPORTANT]
 > Every page needs a unique id — two files can't share one.
 ```
-
+```md
 > [!IMPORTANT]
 > Every page needs a unique id — two files can't share one.
+```
+~~~
 
 ### Warning
 
 Something that demands attention *before* the reader acts — a common trap, a
 surprising behavior, a step that's easy to get wrong.
 
+~~~code-preview example
 ```md
 > [!WARNING]
 > Raw HTML is escaped, not rendered — `<b>bold</b>` shows up as literal text.
 ```
-
+```md
 > [!WARNING]
 > Raw HTML is escaped, not rendered — `<b>bold</b>` shows up as literal text.
+```
+~~~
 
 ### Caution
 
 Consequences: actions that are destructive, irreversible, or costly to undo. The
 strongest signal — save it for cases where acting wrongly does real damage.
 
+~~~code-preview example
 ```md
 > [!CAUTION]
 > `khb pack` starts from a clean slate — docsets already in the output directory
 > are removed before the new ones are copied in.
 ```
-
+```md
 > [!CAUTION]
 > `khb pack` starts from a clean slate — docsets already in the output directory
 > are removed before the new ones are copied in.
+```
+~~~
