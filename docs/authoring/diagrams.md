@@ -2,7 +2,7 @@
 title: Diagrams
 keywords: [diagram, graph, dot, graphviz, flowchart, svg]
 categories: [blocks]
-related: [code-blocks, math, images-and-assets]
+related: [code-blocks, math, images]
 ---
 
 # Diagrams
