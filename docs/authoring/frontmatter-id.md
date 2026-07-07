@@ -2,12 +2,12 @@
 title: id (frontmatter)
 keywords: [id, page id, identifier, slug, file name, stable links]
 categories: [configuration]
-related: [frontmatter, page-links, toc-nodes]
+related: [frontmatter, links, toc-nodes]
 ---
 
 # id (frontmatter)
 
-The page's stable identifier — the name every link uses: [page links](page-links) in
+The page's stable identifier — the name every link uses: [links](links) in
 other pages, [`related`](frontmatter-related) lists, and [toc.yaml](toc-yaml).
 
 ## Syntax

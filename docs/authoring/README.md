@@ -31,7 +31,7 @@ each piece does in the viewer.
     [images](images), [tables](tables), [blockquotes](blockquotes),
     [code blocks](code-blocks), [footnotes](footnotes), [emoji](emoji).
   - **Markdown Extensions** — the KD Help Book additions: [callouts](callouts),
-    [math](math), [page links](page-links), [assets](assets), and the
+    [math](math), [links](links), [assets](assets), and the
     [code extensions](code-extensions).
   - **[Frontmatter](frontmatter)** — the per-page metadata fields.
   - **[docset.toml](docset-toml)** — the book manifest.
@@ -42,7 +42,7 @@ each piece does in the viewer.
 | I want to… | Read |
 |------------|------|
 | Build my first book | [Getting started](getting-started) |
-| Link between pages and books | [Page links](page-links) |
+| Link between pages and books | [Links](links) |
 | Bundle images or downloadable files | [Images](images) / [Assets](assets) |
 | Put tabs, terminals, or file trees around code | [Code extensions](code-extensions) |
 | Get a page into the keyword index | [keywords (frontmatter)](frontmatter-keywords) |

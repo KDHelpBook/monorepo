@@ -11,7 +11,7 @@
     - title: Reference
       children:
         # One Markdown section: each base construct sits next to its KD Help
-        # Book extension (links/page-links, images/assets, code-blocks/
+        # Book extension (images/assets, code-blocks/
         # code-extensions).
         - title: Markdown
           children:
@@ -19,7 +19,6 @@
             - page: text-formatting
             - page: lists
             - page: links
-            - page: page-links
             - page: images
             - page: assets
             - page: tables

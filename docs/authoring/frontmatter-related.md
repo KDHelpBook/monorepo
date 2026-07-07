@@ -2,7 +2,7 @@
 title: related (frontmatter)
 keywords: [related, see also, footer, cross-book, curated links, references]
 categories: [configuration]
-related: [frontmatter, page-links, frontmatter-id]
+related: [frontmatter, links, frontmatter-id]
 ---
 
 # related (frontmatter)
@@ -16,7 +16,7 @@ related: [writing-pages, table-of-contents, other-book:overview]
 ```
 
 Each entry is an in-book page [id](frontmatter-id), or a cross-book
-`docsetId:pageId` — the same two forms as [page links](page-links).
+`docsetId:pageId` — the same two forms as [links](links).
 
 ## Default
 

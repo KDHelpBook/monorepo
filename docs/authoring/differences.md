@@ -2,7 +2,7 @@
 title: Differences from GitHub Markdown
 keywords: [GFM, differences, compatibility, extensions, unsupported, HTML, directives]
 categories: [authoring, markdown]
-related: [getting-started, page-links, code-extensions, callouts]
+related: [getting-started, links, code-extensions, callouts]
 ---
 
 # Differences from GitHub Markdown
@@ -15,7 +15,7 @@ adds book-aware constructs — and deliberately refuses a few things GFM tolerat
 
 | Addition | Looks like | Reference |
 |----------|------------|-----------|
-| In-book & cross-book page links | `[label](page-id)`, `[label](book:page)` | [Page links](page-links) |
+| In-book & cross-book page links | `[label](page-id)`, `[label](book:page)` | [Links](links) |
 | Bundled images & downloads | `![alt](assets/pic.svg)` | [Assets](assets) |
 | Callouts | `> [!NOTE]` | [Callouts](callouts) |
 | Math, rendered to MathML at build time | `$E = mc^2$`, `$$…$$` | [Math](math) |

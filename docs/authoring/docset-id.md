@@ -2,7 +2,7 @@
 title: id (docset.toml)
 keywords: [docset id, book id, namespace, cross-book, identifier, unique]
 categories: [configuration]
-related: [docset-toml, frontmatter-id, page-links]
+related: [docset-toml, frontmatter-id, links]
 ---
 
 # id (docset.toml)
@@ -31,7 +31,7 @@ id = "khb-authoring"
 
 The id namespaces every page — `docsetId:pageId` — which is what lets many books
 merge into one collection without colliding. It's the prefix in
-[cross-book links](page-links) and cross-book [related](frontmatter-related) entries,
+[cross-book links](links) and cross-book [related](frontmatter-related) entries,
 the id recorded in a published site's `docsets.json`, and the host in the address bar
 (`khb://my-docs/welcome.htm`). Versioned editions of one book use **distinct ids**
 that share a [collection](docset-collection).
