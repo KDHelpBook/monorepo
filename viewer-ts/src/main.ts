@@ -348,6 +348,7 @@ async function bootstrap(): Promise<void> {
   if (!sources.length) throw new Error("no docsets to show");
 
   if (config.pwa) registerServiceWorker(strings(lang));
+  else unregisterServiceWorker();
   start(
     await Collection.load(sources, lang),
     lang,
@@ -446,6 +447,18 @@ interface CollectionVersionInfo {
   title: string;
   versions: string[]; // latest-first
   chosen: string;
+}
+
+// A worker registered by an earlier deploy (when `config.pwa` was on) never
+// expires on its own — drop it so a PWA-off site stops serving through it.
+function unregisterServiceWorker(): void {
+  if (!("serviceWorker" in navigator)) return;
+  navigator.serviceWorker
+    .getRegistrations()
+    .then((regs) => regs.forEach((reg) => void reg.unregister()))
+    .catch(() => {
+      /* best-effort cleanup */
+    });
 }
 
 function registerServiceWorker(s: Strings): void {
