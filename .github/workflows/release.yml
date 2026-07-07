@@ -104,9 +104,9 @@ jobs:
     uses: ./.github/workflows/publish.yml
     with:
       ref: ${{ needs.tag.outputs.tag }}
+    # The cross-repo Pages deploy authenticates with the PAGES_DEPLOY_KEY
+    # secret (via `secrets: inherit`), not with workflow permissions.
     permissions:
       contents: read
-      pages: write
-      id-token: write
       actions: read
     secrets: inherit

@@ -8,7 +8,12 @@ name: Publish
 # checked-out ref, packs the distribution (with the llms.txt export) and
 # merges archived documentation versions downloaded from past releases.
 #
-# Requires: repo Settings → Pages → Source = "GitHub Actions".
+# The site is served from the org root (https://kdhelpbook.github.io/) — that
+# URL belongs to the specially-named KDHelpBook/kdhelpbook.github.io repo, so
+# the built dist is force-pushed to its gh-pages branch instead of this repo's
+# own Pages. Requires: the PAGES_DEPLOY_KEY secret (private half of a
+# write-enabled deploy key on that repo) and its Pages source set to the
+# gh-pages branch.
 
 on:
   # After every successful build of main — guarantees the deployed viewer and
@@ -26,10 +31,10 @@ on:
         type: string
         default: ""
 
+# Cross-repo deploy authenticates with the deploy key, so no pages/id-token
+# permissions are needed here.
 permissions:
   contents: read
-  pages: write
-  id-token: write
   actions: read
 
 concurrency:
@@ -111,15 +116,16 @@ jobs:
           "$BIN" compile docs/markdown -o out/markdown.khb
 
       # The bundled profile locks the dist (no open/manage-docsets UI — the
-      # site serves exactly the books packed here); --pwa re-enables the
-      # service worker that profile turns off, so the docs keep working
-      # offline. --home lands cold starts on the docs overview instead of
-      # Search. --stream marks the books for page-level streaming: Pages
-      # honours HTTP Range, so the viewer reads only the pages it touches
-      # (and falls back to a whole fetch where Range isn't available).
+      # site serves exactly the books packed here) and keeps the PWA off (no
+      # service worker — every deploy is picked up immediately, no stale
+      # offline copies). --home lands cold starts on the docs overview
+      # instead of Search. --stream marks the books for page-level
+      # streaming: Pages honours HTTP Range, so the viewer reads only the
+      # pages it touches (and falls back to a whole fetch where Range isn't
+      # available).
       - name: Pack the distribution
         run: |
-          "$BIN" pack --profile bundled --pwa --viewer viewer-dist \
+          "$BIN" pack --profile bundled --viewer viewer-dist \
             --docset out/markdown.khb \
             --home kdhelp-markdown:overview \
             --stream \
@@ -152,17 +158,14 @@ jobs:
             "$BIN" patch publish --docset "$F" --stream
           done
 
-      - uses: actions/configure-pages@v6
-      - uses: actions/upload-pages-artifact@v5
+      # Force-push the dist to the site repo's gh-pages branch (a single
+      # orphan commit — no ballooning history). Its Pages then serves the org
+      # root URL.
+      - name: Deploy to kdhelpbook.github.io
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          path: publish
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v5
+          deploy_key: ${{ secrets.PAGES_DEPLOY_KEY }}
+          external_repository: KDHelpBook/kdhelpbook.github.io
+          publish_branch: gh-pages
+          publish_dir: publish
+          force_orphan: true

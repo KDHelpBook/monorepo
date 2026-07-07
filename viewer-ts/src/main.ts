@@ -166,9 +166,18 @@ function chooseLang(available: string[]): string {
   return available.includes("en") ? "en" : (available[0] ?? "en");
 }
 
+// config.json / docsets.json are fetched with a build-stamped query: the
+// previously shipped service worker cached them cache-first, so a stale
+// locked/unlocked state (or book list) could outlive every deploy. A URL that
+// changes per build punches through that cache exactly when a new deploy
+// lands, while staying stable within one (HTTP caching keeps working); the
+// current sw.js treats both as network-first and caches them under their
+// bare pathname (see sw.js).
+const fresh = (file: string): string => `${file}?v=${__BUILD_ID__}`;
+
 async function loadConfig(): Promise<Config> {
   try {
-    const res = await fetch("config.json");
+    const res = await fetch(fresh("config.json"));
     if (res.ok) return (await res.json()) as Config;
   } catch {
     /* no config.json → defaults */
@@ -177,7 +186,7 @@ async function loadConfig(): Promise<Config> {
 }
 
 async function bootstrap(): Promise<void> {
-  const manifestRes = await fetch("docsets.json");
+  const manifestRes = await fetch(fresh("docsets.json"));
   const manifest = (await manifestRes.json()) as Manifest;
   const config = await loadConfig();
 
@@ -371,6 +380,7 @@ async function bootstrap(): Promise<void> {
   if (!sources.length) throw new Error("no docsets to show");
 
   if (config.pwa) registerServiceWorker(strings(lang));
+  else unregisterServiceWorker();
   start(
     await Collection.load(sources, lang),
     lang,
@@ -469,6 +479,18 @@ interface CollectionVersionInfo {
   title: string;
   versions: string[]; // latest-first
   chosen: string;
+}
+
+// A worker registered by an earlier deploy (when `config.pwa` was on) never
+// expires on its own — drop it so a PWA-off site stops serving through it.
+function unregisterServiceWorker(): void {
+  if (!("serviceWorker" in navigator)) return;
+  navigator.serviceWorker
+    .getRegistrations()
+    .then((regs) => regs.forEach((reg) => void reg.unregister()))
+    .catch(() => {
+      /* best-effort cleanup */
+    });
 }
 
 function registerServiceWorker(s: Strings): void {
@@ -1913,11 +1935,14 @@ function start(
       case "find":
         status.textContent = "Use your browser Find (Ctrl/⌘-F).";
         break;
+      // The open affordances are hidden in a locked build, but guard the
+      // actions too — like openManagePage, they must not work if something
+      // (a stale UI state, a future dispatcher) still reaches them.
       case "open-docset":
-        pickDocset();
+        if (config.externalSources) pickDocset();
         break;
       case "open-url":
-        openUrl();
+        if (config.externalSources) openUrl();
         break;
       case "manage-docsets":
         openManagePage();
