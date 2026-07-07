@@ -2,7 +2,7 @@
 title: Directives
 keywords: [directive, container, callout, card, note, tip, warning, block_directive]
 categories: [blocks]
-related: [callouts, blockquotes, code-blocks]
+related: [blockquotes, code-blocks]
 ---
 
 # Directives
@@ -23,7 +23,7 @@ HTML-escaped when it becomes the class, so directive content can't inject markup
 ## Callout directives
 
 Five names render as coloured, self-labelling callouts — a portable alternative to the
-`> [!NOTE]` [callout](callouts) syntax:
+`> [!NOTE]` [callout](blockquotes) syntax:
 
 ```md
 :::note
