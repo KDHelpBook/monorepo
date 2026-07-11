@@ -131,6 +131,11 @@ enum Command {
         /// (repeatable). Streamed files stay uncompressed even in compact mode.
         #[arg(long, num_args = 0.., value_name = "DOCSET")]
         stream: Option<Vec<PathBuf>>,
+        /// Optional JSON file with a `folders` tree grouping product families
+        /// into nested TOC folders (see docs/internals/manifest-schemas.md).
+        /// Copied into `docsets.json`; `patch` preserves it.
+        #[arg(long, value_name = "FILE")]
+        folders: Option<PathBuf>,
     },
     /// Add or replace docsets in an already-built distribution.
     Patch {
@@ -184,6 +189,7 @@ fn main() -> Result<()> {
             llms,
             base_url,
             stream,
+            folders,
         } => {
             let mut external_sources = profile == Profile::Reader;
             if lock {
@@ -207,6 +213,7 @@ fn main() -> Result<()> {
                 llms,
                 base_url,
                 stream,
+                folders,
             })
         }
         Command::Patch {

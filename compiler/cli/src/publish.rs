@@ -3,6 +3,7 @@
 //! A distribution is: the built viewer + a `docsets/` folder + a `docsets.json`
 //! manifest the viewer loads on start + a `config.json` describing the profile.
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -42,6 +43,99 @@ struct ManifestEntry {
 #[derive(Serialize, Deserialize, Default)]
 struct Manifest {
     docsets: Vec<ManifestEntry>,
+    /// Optional presentation tree grouping product families (`collection` ids)
+    /// into nested TOC folders. Families it doesn't mention render at the root,
+    /// so a manifest without it behaves exactly as before.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    folders: Vec<Folder>,
+}
+
+/// A node of the `folders` tree: a folder with a stable `id` (the viewer keys
+/// expansion state on it), a default `title`, optional per-UI-language `titles`
+/// (the viewer picks `titles[uiLang]`, else `title`), and children.
+#[derive(Serialize, Deserialize, Clone)]
+struct Folder {
+    id: String,
+    title: String,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    titles: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    children: Vec<FolderChild>,
+}
+
+/// A folder child: a leaf placing a product family (`{ "collection": "<id>" }`)
+/// or a nested folder. `Ref` must stay first: the variants are disjoint (a ref
+/// lacks `id`/`title`, a folder lacks `collection`), but untagged serde tries
+/// them in order.
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(untagged)]
+enum FolderChild {
+    Ref { collection: String },
+    Folder(Folder),
+}
+
+/// Check a `folders` tree before packing it: a collection placed twice or a
+/// reused folder id is an error (the viewer keys nodes by them); a reference to
+/// a collection not among the packed docsets is only a warning — the same
+/// folders file may serve a registry hosting a superset of books.
+fn validate_folders(folders: &[Folder], known_collections: &BTreeSet<String>) -> Result<()> {
+    fn walk(
+        children: &[FolderChild],
+        refs: &mut BTreeSet<String>,
+        ids: &mut BTreeSet<String>,
+        known: &BTreeSet<String>,
+    ) -> Result<()> {
+        for child in children {
+            match child {
+                FolderChild::Ref { collection } => {
+                    if !refs.insert(collection.clone()) {
+                        bail!("folders: collection {collection:?} is placed more than once");
+                    }
+                    if !known.contains(collection) {
+                        eprintln!(
+                            "warning: folders reference collection {collection:?}, \
+                             which is not among the packed docsets"
+                        );
+                    }
+                }
+                FolderChild::Folder(f) => {
+                    if !ids.insert(f.id.clone()) {
+                        bail!("folders: folder id {:?} is used more than once", f.id);
+                    }
+                    walk(&f.children, refs, ids, known)?;
+                }
+            }
+        }
+        Ok(())
+    }
+    let mut refs = BTreeSet::new();
+    let mut ids = BTreeSet::new();
+    for f in folders {
+        if !ids.insert(f.id.clone()) {
+            bail!("folders: folder id {:?} is used more than once", f.id);
+        }
+        walk(&f.children, &mut refs, &mut ids, known_collections)?;
+    }
+    Ok(())
+}
+
+/// Load a `--folders` JSON file and validate it against the packed docsets
+/// (their `collection`, falling back to `id` — the same rule the viewer uses).
+fn read_folders(path: &Path, docsets: &[ManifestEntry]) -> Result<Vec<Folder>> {
+    let folders: Vec<Folder> = serde_json::from_str(&fs::read_to_string(path)?)
+        .with_context(|| format!("parsing {}", path.display()))?;
+    let known: BTreeSet<String> = docsets
+        .iter()
+        .map(|e| {
+            if e.collection.is_empty() {
+                e.id.clone()
+            } else {
+                e.collection.clone()
+            }
+        })
+        .collect();
+    validate_folders(&folders, &known)?;
+    Ok(folders)
 }
 
 /// Routing for a docset's attachment packs: each pack's stable id (`meta.pack`)
@@ -79,6 +173,9 @@ pub struct PackOptions {
     /// `--stream`: `None` = no streaming, `Some([])` = mark every docset, else mark
     /// only the listed `--docset` paths.
     pub stream: Option<Vec<PathBuf>>,
+    /// `--folders`: a JSON file with a `folders` tree grouping product families
+    /// into nested TOC folders, copied into the manifest after validation.
+    pub folders: Option<PathBuf>,
 }
 
 /// Assemble a fresh distribution at `out`.
@@ -101,6 +198,9 @@ pub fn pack(opts: &PackOptions) -> Result<()> {
         manifest
             .docsets
             .push(add_docset(docset, &docsets_dir, opts.compact, stream)?);
+    }
+    if let Some(path) = &opts.folders {
+        manifest.folders = read_folders(path, &manifest.docsets)?;
     }
 
     write_json(&opts.out.join("docsets.json"), &manifest)?;
@@ -531,6 +631,92 @@ fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const FOLDERS_JSON: &str = r#"[
+      { "id": "tools", "title": "Developer Tools", "titles": { "pl": "Narzędzia" },
+        "children": [
+          { "collection": "khb" },
+          { "id": "legacy", "title": "Legacy",
+            "children": [ { "collection": "oldapp" } ] }
+        ] }
+    ]"#;
+
+    fn known(ids: &[&str]) -> BTreeSet<String> {
+        ids.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn folders_round_trip() {
+        let folders: Vec<Folder> = serde_json::from_str(FOLDERS_JSON).unwrap();
+        let manifest = Manifest {
+            docsets: Vec::new(),
+            folders,
+        };
+        let json = serde_json::to_value(&manifest).unwrap();
+        // The nested folder must come back as a folder, the ref as a ref.
+        assert_eq!(json["folders"][0]["children"][0]["collection"], "khb");
+        assert_eq!(json["folders"][0]["children"][1]["id"], "legacy");
+        assert_eq!(json["folders"][0]["titles"]["pl"], "Narzędzia");
+        let back: Manifest = serde_json::from_value(json.clone()).unwrap();
+        assert_eq!(serde_json::to_value(&back).unwrap(), json);
+    }
+
+    #[test]
+    fn folderless_manifest_omits_the_key() {
+        let json = serde_json::to_string(&Manifest::default()).unwrap();
+        assert!(!json.contains("folders"));
+    }
+
+    #[test]
+    fn folders_validation_rejects_duplicates() {
+        let dup_ref: Vec<Folder> = serde_json::from_str(
+            r#"[ { "id": "a", "title": "A", "children": [ { "collection": "x" } ] },
+                 { "id": "b", "title": "B", "children": [ { "collection": "x" } ] } ]"#,
+        )
+        .unwrap();
+        assert!(validate_folders(&dup_ref, &known(&["x"])).is_err());
+
+        let dup_id: Vec<Folder> = serde_json::from_str(
+            r#"[ { "id": "a", "title": "A" },
+                 { "id": "b", "title": "B", "children": [ { "id": "a", "title": "A2" } ] } ]"#,
+        )
+        .unwrap();
+        assert!(validate_folders(&dup_id, &known(&[])).is_err());
+
+        let ok: Vec<Folder> = serde_json::from_str(FOLDERS_JSON).unwrap();
+        // Unknown collections only warn — the tree may serve a superset host.
+        assert!(validate_folders(&ok, &known(&["khb"])).is_ok());
+    }
+
+    #[test]
+    fn patch_manifest_read_modify_write_preserves_folders() {
+        // `patch` deserializes the whole manifest, replaces entries by id, and
+        // re-serializes — folders must survive that round untouched.
+        let src = format!(
+            r#"{{ "docsets": [ {{ "file": "docsets/a.khb", "id": "a",
+                                 "title": "A", "language": "en" }} ],
+                 "folders": {FOLDERS_JSON} }}"#
+        );
+        let mut manifest: Manifest = serde_json::from_str(&src).unwrap();
+        manifest.docsets.retain(|e| e.id != "a");
+        manifest.docsets.push(ManifestEntry {
+            file: "docsets/a.khb".into(),
+            id: "a".into(),
+            title: "A v2".into(),
+            language: "en".into(),
+            collection: String::new(),
+            version: String::new(),
+            attachments: Vec::new(),
+            streaming: false,
+        });
+        let json = serde_json::to_value(&manifest).unwrap();
+        assert_eq!(json["docsets"][0]["title"], "A v2");
+        assert_eq!(json["folders"][0]["id"], "tools");
+        assert_eq!(
+            json["folders"][0]["children"][1]["children"][0]["collection"],
+            "oldapp"
+        );
+    }
 
     #[test]
     fn normalize_base_forces_one_trailing_slash() {
