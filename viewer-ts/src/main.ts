@@ -175,7 +175,7 @@ const LANG_KEY = "khb.lang";
 function readSavedLang(): string | null {
   try {
     return localStorage.getItem(LANG_KEY);
-  } catch {
+  } catch (e) {
     return null;
   }
 }
@@ -201,7 +201,7 @@ async function loadConfig(): Promise<Config> {
   try {
     const res = await fetch(fresh("config.json"));
     if (res.ok) return (await res.json()) as Config;
-  } catch {
+  } catch (e) {
     /* no config.json → defaults */
   }
   return { externalSources: true, pwa: true };
@@ -248,8 +248,10 @@ async function bootstrap(): Promise<void> {
               attachments: entry.attachments,
             });
             streamed = true;
-          } catch {
-            /* streaming open failed despite Range — fall back to a whole fetch */
+          } catch (e) {
+            // Fall back to a whole fetch — but say why, or a host/engine bug
+            // hides behind a silently slower load.
+            console.warn("khb: streaming open failed, fetching whole", e);
           }
         }
         if (!streamed) {
@@ -268,7 +270,7 @@ async function bootstrap(): Promise<void> {
             attachments: entry.attachments, // fetched whole alongside the .khb
           });
         }
-      } catch {
+      } catch (e) {
         /* unreachable/invalid remote — skip; the user can remove it */
       }
     }
@@ -317,8 +319,9 @@ async function bootstrap(): Promise<void> {
             resolveManifestUrl(p, document.baseURI),
           ),
         };
-      } catch {
-        /* streaming open failed despite Range — fall back to a whole fetch */
+      } catch (e) {
+        // Same fallback as remotes: whole fetch, with the reason logged.
+        console.warn("khb: streaming open failed, fetching whole", e);
       }
     }
     bundled.push({
@@ -2017,7 +2020,7 @@ function start(
         await navigator.clipboard.writeText(url);
         status.textContent = s.linkCopied;
       }
-    } catch {
+    } catch (e) {
       /* user dismissed the share sheet */
     }
   }
@@ -2145,7 +2148,7 @@ function start(
             const { StreamingDocset } = await import("./data/streaming-docset");
             await StreamingDocset.peek(url);
             validated = true;
-          } catch {
+          } catch (e) {
             /* not Range-streamable after all — validate by fetching it whole */
           }
         }
@@ -2155,7 +2158,7 @@ function start(
         }
         addRemote(url, streaming, packs);
         location.reload();
-      } catch {
+      } catch (e) {
         err.style.color = "#a33";
         err.textContent = s.openUrlError;
         add.disabled = false;
@@ -2198,12 +2201,12 @@ function start(
       if (meta.language !== lang) {
         try {
           localStorage.setItem(LANG_KEY, meta.language);
-        } catch {
+        } catch (e) {
           /* ignore */
         }
       }
       location.reload();
-    } catch {
+    } catch (e) {
       status.textContent = s.uploadError;
     }
   }
@@ -2452,7 +2455,7 @@ function start(
       sel.addEventListener("change", () => {
         try {
           localStorage.setItem(LANG_KEY, sel.value);
-        } catch {
+        } catch (e) {
           /* ignore storage errors */
         }
         location.reload();
