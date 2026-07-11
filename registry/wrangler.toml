@@ -1,0 +1,31 @@
+# The KD Help Book registry worker. Manual account setup (bucket, domain,
+# secrets) is documented in README.md; deploys happen via `wrangler deploy`
+# (see .github/workflows/registry-deploy.yml).
+
+name = "khb-registry"
+main = "src/index.ts"
+compatibility_date = "2025-09-06"
+
+# The built viewer (viewer-ts/dist) is copied into ./public at deploy time —
+# the directory is gitignored except for a placeholder. Dynamic routes must
+# run the Worker even if a same-named static file exists.
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = [
+  "/docsets.json",
+  "/config.json",
+  "/d/*",
+  "/publish/*",
+  "/mcp",
+]
+
+[[r2_buckets]]
+binding = "DOCSETS"
+bucket_name = "khb-registry-docsets"
+
+[vars]
+# Must match the `audience` the publishing workflows request their OIDC token
+# with (and the `audience` field in config/permissions.json, which is the
+# documentation copy of the same value).
+REGISTRY_AUDIENCE = "https://docs.example.com"
