@@ -1,0 +1,51 @@
+# Deploy the registry worker (registry/) + the built viewer as its static
+# assets. Manual trigger only: the Cloudflare account, R2 bucket, and secrets
+# (CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID) are set up out of band — see
+# registry/README.md. The GitHub Pages flow (publish.yml) is unaffected.
+
+name: Registry deploy
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: registry-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build the viewer
+        working-directory: viewer-ts
+        run: |
+          npm ci
+          npm run build
+
+      - name: Test the registry
+        working-directory: registry
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+
+      - name: Stage viewer assets
+        run: |
+          rm -rf registry/public
+          cp -r viewer-ts/dist registry/public
+
+      - name: Deploy
+        working-directory: registry
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy
