@@ -31,6 +31,28 @@ by family:
 So books of one product (Guide + API + Tutorials, all `collection = "myapp"`) read as
 one book, while a second product loaded alongside gets its own folder.
 
+## Folders — grouping families (manifest-driven)
+
+A distribution's `docsets.json` may carry an optional **`folders`** tree that
+groups families into nested folders **above** the family level — e.g. a "Tools"
+shelf holding two products, with a "Legacy" subfolder inside. It is a
+presentation concern of the *site*, not of any book, so it lives in the manifest
+(`khb pack --folders`, or a registry's central config), never in a docset.
+
+- A family placed in a folder renders inside it — **even when it is the only
+  family loaded** (the folder still wraps it, unlike the no-wrapper single-family
+  default).
+- Families the tree doesn't mention stay at the root, after the folders — and so
+  do **uploaded and remote books**, which a shipped manifest can't know about.
+- Folder titles localize via a `titles` map keyed by UI language, falling back
+  to `title`.
+- The category/product filters prune *through* folders (a folder survives while
+  any descendant matches), and expansion state persists on the stable folder id.
+
+Schema and validation rules: [manifest schemas](internals/manifest-schemas.md).
+`.khbm` import manifests deliberately have no folders — see
+[.khbm manifests](publishing/khbm-manifests.md).
+
 ## Products — the filter facet (many-to-many)
 
 `collection` merges books; **`products`** filters them, and the two are independent.
