@@ -36,10 +36,17 @@ import {
   saveSeenVersions,
   saveTabs,
 } from "./data/uistate";
+import {
+  applyFolders,
+  folderCollections,
+  sanitizeFolders,
+  SHELF_PREFIX,
+} from "./data/folders";
 import { languagesByCollection, pickLanguages } from "./data/langselect";
 import {
   resolveManifestUrl,
   streamEligible,
+  type FolderNode,
   type Manifest,
 } from "./data/manifest";
 import {
@@ -405,6 +412,7 @@ async function bootstrap(): Promise<void> {
     versionInfo,
     updates,
     variants,
+    sanitizeFolders(manifest.folders),
   );
 }
 
@@ -622,6 +630,7 @@ function start(
   versionInfo: CollectionVersionInfo[],
   updates: { title: string; from: string; to: string }[],
   variants: DocVariant[],
+  folders: FolderNode[],
 ): void {
   const s: Strings = strings(lang);
   // Locked (bundled) builds hide the "open other docsets" affordances.
@@ -732,7 +741,21 @@ function start(
   let verByCol = new Map(versionInfo.map((v) => [v.collection, v]));
   let langByCol = new Map(langInfo.map((l) => [l.collection, l]));
   let switchableCols = new Set([...verByCol.keys(), ...langByCol.keys()]);
-  let toc = collection.tocTree(switchableCols);
+  // A family placed in a manifest folder must render as a folder even when it is
+  // the only family loaded — force its `@collection:` wrapper, then re-parent the
+  // family roots into `@shelf:` nodes per the manifest's folders tree.
+  const folderCols = folderCollections(folders);
+  const computeToc = (): TocNode[] => {
+    const forced = new Set([
+      ...switchableCols,
+      ...collection
+        .families()
+        .map((f) => f.id)
+        .filter((id) => folderCols.has(id)),
+    ]);
+    return applyFolders(collection.tocTree(forced), folders, lang);
+  };
+  let toc = computeToc();
 
   // (Re)build the page-info and keyword maps from the current `collection`/`toc`.
   function buildPages(nodes: TocNode[], path: string[]): void {
@@ -771,6 +794,10 @@ function start(
   // A stack of books for a product/family folder.
   const groupIcon = (): string =>
     '<svg class="ico" viewBox="0 0 16 16"><rect x="2.2" y="2.5" width="3.2" height="11" rx=".4" fill="#7fa8dd" stroke="#33608f"/><rect x="6.1" y="3" width="3.2" height="10.5" rx=".4" fill="#a9c6ea" stroke="#33608f"/><rect x="10" y="2.5" width="3.6" height="11" rx=".4" fill="#d6e5f7" stroke="#33608f"/></svg>';
+  // A closed folder (bookshelf) for a manifest `folders` node, in the same
+  // blue palette as the family books so the two levels read as one system.
+  const shelfIcon = (): string =>
+    '<svg class="ico" viewBox="0 0 16 16"><path d="M1.5 3.5h4.5l1.2 1.5h7.3v8H1.5z" fill="#a9c6ea" stroke="#33608f"/><path d="M1.5 6.5h13" fill="none" stroke="#33608f"/></svg>';
 
   // ---- Contents tree ----
   // Reveal the current page: expand the folders on its path (adding them to the
@@ -806,7 +833,11 @@ function start(
     const open = forceOpen || expanded.has(n.pageId);
     row.innerHTML =
       `<span class="twisty ${kids ? "" : "leaf"}">${kids ? (open ? "−" : "+") : ""}</span>` +
-      (n.group ? groupIcon() : pageIcon(kids)) +
+      (n.group
+        ? n.pageId.startsWith(SHELF_PREFIX)
+          ? shelfIcon()
+          : groupIcon()
+        : pageIcon(kids)) +
       `<span class="label">${esc(n.title)}</span>`;
     // A switchable product folder shows its current version/language in parens and a
     // ⋯ button that opens a small menu to change either — right where you see the
@@ -967,7 +998,7 @@ function start(
       verByCol = new Map(versionInfo.map((v) => [v.collection, v]));
       langByCol = new Map(langInfo.map((l) => [l.collection, l]));
       switchableCols = new Set([...verByCol.keys(), ...langByCol.keys()]);
-      toc = collection.tocTree(switchableCols);
+      toc = computeToc();
       deriveMaps();
       fillFilters();
 
