@@ -120,10 +120,8 @@ fn sized_img_tag(tag: &str) -> Option<String> {
 fn size_hint_style(hint: &str) -> Option<String> {
     let (prop, raw) = if let Some(w) = hint.strip_prefix("w=") {
         ("max-width", w)
-    } else if let Some(h) = hint.strip_prefix("h=") {
-        ("max-height", h)
     } else {
-        return None;
+        ("max-height", hint.strip_prefix("h=")?)
     };
     // The Markdown renderer percent-encodes `%` in URLs, so `#w=50%` arrives
     // as `#w=50%25`.
