@@ -1387,6 +1387,53 @@ textarea {
 .lightbox-close:hover {
   background: rgba(0, 0, 0, 0.6);
 }
+/* Prev/next arrows + counter for a gallery strip (hidden for a lone image). */
+.lightbox-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  font-size: 30px;
+  line-height: 1;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 50%;
+  cursor: pointer;
+}
+.lightbox-nav:hover {
+  background: rgba(0, 0, 0, 0.6);
+}
+.lightbox-nav:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.lightbox-nav:disabled:hover {
+  background: rgba(0, 0, 0, 0.35);
+}
+.lightbox-prev {
+  left: calc(10px + env(safe-area-inset-left, 0px));
+}
+.lightbox-next {
+  right: calc(10px + env(safe-area-inset-right, 0px));
+}
+.lightbox-count {
+  position: absolute;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 3px 10px;
+  font-size: 13px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 10px;
+  user-select: none;
+}
+.lightbox-nav[hidden],
+.lightbox-count[hidden] {
+  display: none;
+}
 
 /* ---- Touch devices: larger tap targets + press feedback (no hover) ---- */
 @media (pointer: coarse) {

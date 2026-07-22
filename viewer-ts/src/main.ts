@@ -126,7 +126,19 @@ function img(e){var el=e.target;if(!el||el.tagName!=='IMG')return false;
  if(el.closest&&el.closest('a'))return false;
  var src=el.currentSrc||el.getAttribute('src')||'';
  if(src.indexOf('data:image/')!==0)return false;
- e.preventDefault();post({t:'khb',a:'img',src:src,alt:el.getAttribute('alt')||''});return true}
+ e.preventDefault();
+ var msg={t:'khb',a:'img',src:src,alt:el.getAttribute('alt')||''};
+ // A tile inside a gallery hands the app the whole strip (+ the clicked index) so
+ // the lightbox can step prev/next; a standalone image opens just itself. Only
+ // inline data: images are forwarded — never an arbitrary URL.
+ var g=el.closest&&el.closest('.gallery');
+ if(g){var gi=g.querySelectorAll('img'),items=[],idx=0;
+  for(var k=0;k<gi.length;k++){var gs=gi[k].currentSrc||gi[k].getAttribute('src')||'';
+   if(gs.indexOf('data:image/')!==0)continue;
+   if(gi[k]===el)idx=items.length;
+   items.push({src:gs,alt:gi[k].getAttribute('alt')||''})}
+  if(items.length>1){msg.items=items;msg.index=idx}}
+ post(msg);return true}
 // A tap/click on a display equation enlarges it in an in-frame overlay (the math
 // "lightbox"); a click anywhere on the overlay — the enlarged formula OR its backdrop
 // — or Esc dismisses it. Handled here, not by the app: we never pass content markup to
@@ -2528,12 +2540,16 @@ function start(
   // The content frame posts a tapped image's data: URL; we show it in a fullscreen
   // overlay that zooms (wheel on desktop, pinch on touch, double-tap/-click) and
   // pans when zoomed. Built lazily, once, and reused for every image.
-  let lightbox: { show: (src: string, alt: string) => void } | null = null;
-  function openLightbox(src: string, alt: string): void {
+  type LightItem = { src: string; alt: string };
+  let lightbox: { show: (items: LightItem[], index: number) => void } | null =
+    null;
+  function openLightbox(items: LightItem[], index: number): void {
     lightbox ??= buildLightbox();
-    lightbox.show(src, alt);
+    lightbox.show(items, index);
   }
-  function buildLightbox(): { show: (src: string, alt: string) => void } {
+  function buildLightbox(): {
+    show: (items: LightItem[], index: number) => void;
+  } {
     const overlay = document.createElement("div");
     overlay.className = "lightbox";
     overlay.hidden = true;
@@ -2545,7 +2561,20 @@ function start(
     closeBtn.className = "lightbox-close";
     closeBtn.textContent = "×";
     closeBtn.setAttribute("aria-label", s.close);
-    overlay.append(img, closeBtn);
+    // Prev/next + counter for a gallery strip; all hidden for a lone image.
+    const prevBtn = document.createElement("button");
+    prevBtn.type = "button";
+    prevBtn.className = "lightbox-nav lightbox-prev";
+    prevBtn.innerHTML = "&#8249;";
+    prevBtn.setAttribute("aria-label", s.prevImage);
+    const nextBtn = document.createElement("button");
+    nextBtn.type = "button";
+    nextBtn.className = "lightbox-nav lightbox-next";
+    nextBtn.innerHTML = "&#8250;";
+    nextBtn.setAttribute("aria-label", s.nextImage);
+    const count = document.createElement("div");
+    count.className = "lightbox-count";
+    overlay.append(img, prevBtn, nextBtn, closeBtn, count);
     document.body.appendChild(overlay);
 
     const MIN = 1;
@@ -2568,6 +2597,44 @@ function start(
       img.removeAttribute("src");
       reset();
     };
+
+    // Gallery navigation: the current strip and the index shown. A standalone
+    // image is a one-item strip, so the nav chrome stays hidden.
+    let list: LightItem[] = [];
+    let cur = 0;
+    const render = (): void => {
+      const it = list[cur];
+      if (!it) return;
+      img.src = it.src;
+      img.alt = it.alt;
+      // SVG is vector: let it scale up to fill the overlay (crisp at any size);
+      // raster stays capped so it isn't upscaled into a blur.
+      img.classList.toggle("svg", it.src.startsWith("data:image/svg+xml"));
+      reset();
+      const many = list.length > 1;
+      prevBtn.hidden = !many;
+      nextBtn.hidden = !many;
+      // No wrap-around: dim + disable the arrow that would run off the end.
+      prevBtn.disabled = cur === 0;
+      nextBtn.disabled = cur === list.length - 1;
+      count.hidden = !many;
+      if (many) count.textContent = `${cur + 1} / ${list.length}`;
+    };
+    const go = (delta: number): void => {
+      // Clamp at the ends — no wrap-around from last back to first.
+      const next = Math.min(list.length - 1, Math.max(0, cur + delta));
+      if (next === cur) return;
+      cur = next;
+      render();
+    };
+    prevBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      go(-1);
+    });
+    nextBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      go(1);
+    });
     // Zoom to `factor` around a viewport point, keeping that point stationary.
     const zoomAt = (cx: number, cy: number, factor: number): void => {
       const next = Math.min(MAX, Math.max(MIN, scale * factor));
@@ -2589,7 +2656,10 @@ function start(
       if (e.target === overlay) close();
     });
     document.addEventListener("keydown", (e) => {
-      if (!overlay.hidden && e.key === "Escape") close();
+      if (overlay.hidden) return;
+      if (e.key === "Escape") close();
+      else if (e.key === "ArrowLeft") go(-1);
+      else if (e.key === "ArrowRight") go(1);
     });
     overlay.addEventListener(
       "wheel",
@@ -2615,7 +2685,7 @@ function start(
     let lastX = 0;
     let lastY = 0;
     overlay.addEventListener("pointerdown", (e) => {
-      if (e.target === closeBtn) return;
+      if ((e.target as HTMLElement).closest("button")) return;
       overlay.setPointerCapture(e.pointerId);
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (pts.size === 2) {
@@ -2658,14 +2728,10 @@ function start(
     overlay.addEventListener("pointercancel", release);
 
     return {
-      show: (src, alt) => {
-        img.src = src;
-        img.alt = alt;
-        // SVG is vector: let it scale up to fill the overlay (crisp at any size)
-        // rather than sit at its small intrinsic width. Raster stays capped so it
-        // isn't upscaled into a blur.
-        img.classList.toggle("svg", src.startsWith("data:image/svg+xml"));
-        reset();
+      show: (items, index) => {
+        list = items;
+        cur = Math.min(Math.max(0, index | 0), items.length - 1);
+        render();
         overlay.hidden = false;
       },
     };
@@ -2684,6 +2750,8 @@ function start(
       url?: unknown;
       src?: unknown;
       alt?: unknown;
+      items?: unknown;
+      index?: unknown;
       newTab?: unknown;
     };
     if (!d || d.t !== "khb") return;
@@ -2700,8 +2768,29 @@ function start(
       typeof d.src === "string" &&
       d.src.startsWith("data:image/")
     ) {
-      // Untrusted source, but constrained to an inline image — safe to display.
-      openLightbox(d.src, typeof d.alt === "string" ? d.alt : "");
+      // Untrusted source, but constrained to inline images — safe to display. A
+      // gallery tile also sends the strip (`items`) + the clicked `index` so the
+      // lightbox can page prev/next; re-validate every entry as an inline image
+      // (never trust the array shape) before using it.
+      const items = (Array.isArray(d.items) ? d.items : [])
+        .filter(
+          (it): it is { src: string; alt?: unknown } =>
+            !!it &&
+            typeof (it as { src?: unknown }).src === "string" &&
+            (it as { src: string }).src.startsWith("data:image/"),
+        )
+        .map((it) => ({
+          src: it.src,
+          alt: typeof it.alt === "string" ? it.alt : "",
+        }));
+      if (items.length > 1) {
+        openLightbox(items, typeof d.index === "number" ? d.index : 0);
+      } else {
+        openLightbox(
+          [{ src: d.src, alt: typeof d.alt === "string" ? d.alt : "" }],
+          0,
+        );
+      }
     } else if (d.a === "pull" && getRemotes().length) {
       // Pull-to-refresh from the content — only meaningful with remote docsets
       // (a reload re-fetches them on bootstrap; the session is restored).
