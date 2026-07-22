@@ -50,6 +50,26 @@ pub struct SourceDocset {
     pub categories: Vec<Category>,
     /// Binary attachments (images, downloadable files) collected from `assets/`.
     pub assets: Vec<Asset>,
+    /// Declared external block transformers (see [`Extension`]). Consumed entirely by
+    /// [`crate::render`]; not carried onto [`RenderedDocset`].
+    pub extensions: Vec<Extension>,
+}
+
+/// A declared external block transformer. An ` ```ext:<name> ` fenced block in a page has
+/// its verbatim body handed to `command` (a subprocess), which returns Markdown — and
+/// optionally generated image files — spliced back into the page. Declared per docset in
+/// `docset.toml` and only run under the compiler's `--allow-extensions` opt-in; see
+/// `docs/authoring/extensions.md`.
+#[derive(Debug, Clone)]
+pub struct Extension {
+    /// The `<name>` that triggers this extension (matched against an ` ```ext:<name> `
+    /// fence). Free of `:` and whitespace.
+    pub name: String,
+    /// The executable to run — a bare name resolved on `PATH`, or a path made absolute
+    /// against the source directory.
+    pub command: String,
+    /// Fixed CLI arguments passed to `command` on every invocation.
+    pub args: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------

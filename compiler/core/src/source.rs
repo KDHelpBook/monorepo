@@ -18,7 +18,7 @@ use anyhow::{bail, Context, Result};
 use serde::Deserialize;
 use walkdir::WalkDir;
 
-use crate::model::{Asset, Category, Product, SourceDocset, SourcePage, TocNode};
+use crate::model::{Asset, Category, Extension, Product, SourceDocset, SourcePage, TocNode};
 use crate::{assets, markdown};
 
 #[derive(Deserialize)]
@@ -39,6 +39,21 @@ struct DocsetToml {
     /// with `id`/`title`). Defaults to a single product named after the collection.
     #[serde(default)]
     products: Vec<Product>,
+    /// Optional external block transformers, keyed by the `<name>` that triggers them
+    /// (`[extensions.<name>]` tables). Absence is a no-op. See [`Extension`].
+    #[serde(default)]
+    extensions: std::collections::BTreeMap<String, ExtensionToml>,
+}
+
+/// One `[extensions.<name>]` table in `docset.toml`.
+#[derive(Deserialize)]
+struct ExtensionToml {
+    /// Executable to run: a bare name (resolved on `PATH`) or a path (made absolute
+    /// against the source dir).
+    command: String,
+    /// Fixed CLI arguments passed on every invocation.
+    #[serde(default)]
+    args: Vec<String>,
 }
 fn default_version() -> String {
     "0.1.0".to_string()
@@ -129,6 +144,8 @@ pub fn load_dir(dir: &Path) -> Result<SourceDocset> {
     }
     let assets = load_assets(dir)?;
 
+    let extensions = load_extensions(dir, manifest.extensions)?;
+
     let collection = manifest.collection.unwrap_or_else(|| manifest.id.clone());
     let collection_title = manifest
         .collection_title
@@ -155,7 +172,39 @@ pub fn load_dir(dir: &Path) -> Result<SourceDocset> {
         toc,
         categories,
         assets,
+        extensions,
     })
+}
+
+/// Turn the `[extensions.*]` tables into validated [`Extension`]s. Each name must be
+/// non-empty and free of `:` / whitespace (it lives in the ` ```ext:<name> ` fence and is
+/// matched by exact string). A `command` that looks like a path (contains a separator or
+/// starts with `.`) is resolved against the source dir so a docset can ship its own tool;
+/// a bare name is left for `PATH` lookup at spawn time.
+fn load_extensions(dir: &Path, tables: BTreeMap<String, ExtensionToml>) -> Result<Vec<Extension>> {
+    let mut extensions = Vec::with_capacity(tables.len());
+    for (name, table) in tables {
+        if name.is_empty() || name.contains(':') || name.chars().any(char::is_whitespace) {
+            bail!("invalid extension name `{name}` (must be non-empty, no `:` or whitespace)");
+        }
+        if table.command.is_empty() {
+            bail!("extension `{name}` has an empty `command`");
+        }
+        let looks_like_path = table.command.contains('/')
+            || table.command.contains('\\')
+            || table.command.starts_with('.');
+        let command = if looks_like_path {
+            dir.join(&table.command).to_string_lossy().into_owned()
+        } else {
+            table.command
+        };
+        extensions.push(Extension {
+            name,
+            command,
+            args: table.args,
+        });
+    }
+    Ok(extensions)
 }
 
 /// Collect every file under `assets/` into an [`Asset`], keyed by its docset-relative
@@ -389,5 +438,48 @@ mod tests {
         write_source(dir.path(), Some("- children:\n    - page: a\n"));
         let err = load_dir(dir.path()).unwrap_err().to_string();
         assert!(err.contains("needs a `title`"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn parses_extension_tables() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("docset.toml"),
+            "id = \"t\"\ntitle = \"T\"\n\n\
+             [extensions.label]\ncommand = \"khb-label\"\nargs = [\"--theme\", \"dark\"]\n\
+             [extensions.chart]\ncommand = \"./tools/chart\"\n",
+        )
+        .unwrap();
+        let pages = dir.path().join("pages");
+        fs::create_dir(&pages).unwrap();
+        fs::write(pages.join("a.md"), "# A\n\nbody").unwrap();
+        let src = load_dir(dir.path()).unwrap();
+
+        let label = src.extensions.iter().find(|e| e.name == "label").unwrap();
+        assert_eq!(label.command, "khb-label"); // bare name → left for PATH lookup
+        assert_eq!(label.args, vec!["--theme", "dark"]);
+
+        // A path-like command is resolved against the source dir.
+        let chart = src.extensions.iter().find(|e| e.name == "chart").unwrap();
+        assert!(chart.command.ends_with("tools/chart"));
+        assert!(Path::new(&chart.command).is_absolute());
+    }
+
+    #[test]
+    fn rejects_extension_name_with_colon() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("docset.toml"),
+            "id = \"t\"\ntitle = \"T\"\n\n[extensions.\"ext:label\"]\ncommand = \"x\"\n",
+        )
+        .unwrap();
+        let pages = dir.path().join("pages");
+        fs::create_dir(&pages).unwrap();
+        fs::write(pages.join("a.md"), "# A\n\nbody").unwrap();
+        let err = load_dir(dir.path()).unwrap_err().to_string();
+        assert!(
+            err.contains("invalid extension name"),
+            "unexpected error: {err}"
+        );
     }
 }

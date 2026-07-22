@@ -2,74 +2,103 @@
 //!
 //! This is where Markdown is turned into HTML, **once**, at build time.
 
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use anyhow::{Context, Result};
 use comrak::plugins::syntect::SyntectAdapter;
+use serde::Deserialize;
 
-use crate::model::{RenderedDocset, RenderedPage, SourceDocset};
+use crate::model::{Asset, Extension, RenderedDocset, RenderedPage, SourceDocset};
 use crate::{assets, markdown};
+
+/// Options controlling optional, non-hermetic render behaviour. Defaults to a fully
+/// hermetic render (no extensions).
+#[derive(Default)]
+pub struct RenderOptions<'a> {
+    /// Gate for running declared extension processes (the CLI `--allow-extensions`
+    /// flag). When false, `ext:` blocks are left as plain code blocks with a note.
+    pub allow_extensions: bool,
+    /// The source directory, used as the working directory for extension subprocesses
+    /// (so a docset-relative tool and relative paths resolve).
+    pub source_dir: Option<&'a Path>,
+}
 
 /// Render every page's Markdown to HTML and derive its plain-text form. Fails if a
 /// page contains math the LaTeX→MathML converter can't parse (a build error beats a
-/// silently broken formula).
-pub fn render(src: &SourceDocset) -> Result<RenderedDocset> {
+/// silently broken formula), or if a declared extension process fails.
+pub fn render(src: &SourceDocset, opts: &RenderOptions) -> Result<RenderedDocset> {
     // One highlighter for the whole docset — building it loads syntect's syntax +
     // theme sets, which we don't want to repeat per page.
     let highlighter = markdown::highlighter();
-    let pages = src
-        .pages
-        .iter()
-        .map(|p| -> Result<RenderedPage> {
-            // Render Markdown, expand `~~~code-group` (tabs) and `~~~code-preview`
-            // (command + terminal output) blocks, rewrite `assets/…` targets to the
-            // `asset:` scheme, and finally render `$…$` LaTeX spans to MathML.
-            // The closure only captures `&p.id`, so it is `Copy` — passed by value
-            // each time (clippy: needless_borrows_for_generic_args).
-            let ctx = || format!("page `{}`", p.id);
-            let html = markdown::render_html(&p.markdown, Some(&highlighter));
-            let html = render_code_groups(&html, &highlighter).with_context(ctx)?;
-            let html = render_code_preview(&html, &highlighter).with_context(ctx)?;
-            let html = render_code_tree(&html, &highlighter).with_context(ctx)?;
-            // `~~~gallery` → a uniform-tile captioned image strip. Runs before the asset
-            // URL rewrite so each tile's `assets/…` image resolves like any other.
-            let html = render_gallery(&html, &highlighter).with_context(ctx)?;
-            // ` ```dot ` / ` ```graphviz ` → a Graphviz graph laid out to inline SVG at
-            // build time (pure-Rust `layout`). Fails the build on unparseable DOT.
-            let html = render_diagrams(&html).with_context(ctx)?;
-            let html = render_line_highlight(&html);
-            // `` `x`{:lang} `` → inline-highlighted code; `` `x`{.badge} `` → a badge.
-            let html = render_inline_attrs(&html);
-            // Size hints (`#w=…`) bake into inline styles before the URL rewrite
-            // strips fragments from asset paths.
-            let html = assets::apply_image_size_hints(&html);
-            let html = assets::rewrite_asset_urls(&html);
-            let html = render_math(&html).with_context(ctx)?;
-            // `:::tabs` / `:::tab` → an interactive tabbed panel. Runs last so each tab's
-            // body already has its code blocks, math, and callouts rendered.
-            let rendered = render_tabs(&html);
-            // Prepend an "On this page" nav built from the heading anchors, honouring
-            // the page's `toc` frontmatter (auto when unset). It floats top-right, so
-            // sitting before the H1 keeps the viewer's subtitle handling intact.
-            let body_html = match build_page_toc(&rendered, p.toc, &src.language) {
-                Some(nav) => format!("{nav}{rendered}"),
-                None => rendered,
-            };
-            // Plain text comes from an *unhighlighted* render — syntect's per-token
-            // spans would otherwise splatter the search text with stray spaces.
-            let plain = markdown::html_to_plain(&markdown::render_html(&p.markdown, None));
-            Ok(RenderedPage {
-                id: p.id.clone(),
-                title: p.title.clone(),
-                body_html,
-                plain,
-                keywords: p.keywords.clone(),
-                categories: p.categories.clone(),
-                related: p.related.clone(),
-                // Carry the clean source Markdown (post-frontmatter) for llms.txt / MCP.
-                md: Some(p.markdown.clone()),
-            })
-        })
-        .collect::<Result<Vec<_>>>()?;
+    // Assets generated by extension subprocesses, appended to the docset's own below.
+    let mut extra_assets: Vec<Asset> = Vec::new();
+    let mut pages = Vec::with_capacity(src.pages.len());
+    for p in &src.pages {
+        // Render Markdown, expand `~~~code-group` (tabs) and `~~~code-preview`
+        // (command + terminal output) blocks, rewrite `assets/…` targets to the
+        // `asset:` scheme, and finally render `$…$` LaTeX spans to MathML.
+        let ctx = || format!("page `{}`", p.id);
+        let html = markdown::render_html(&p.markdown, Some(&highlighter));
+        let html = render_code_groups(&html, &highlighter).with_context(ctx)?;
+        let html = render_code_preview(&html, &highlighter).with_context(ctx)?;
+        let html = render_code_tree(&html, &highlighter).with_context(ctx)?;
+        // `~~~gallery` → a uniform-tile captioned image strip. Runs before the asset
+        // URL rewrite so each tile's `assets/…` image resolves like any other.
+        let html = render_gallery(&html, &highlighter).with_context(ctx)?;
+        // ` ```dot ` / ` ```graphviz ` → a Graphviz graph laid out to inline SVG at
+        // build time (pure-Rust `layout`). Fails the build on unparseable DOT.
+        let html = render_diagrams(&html).with_context(ctx)?;
+        // ` ```ext:<name> ` → an external block transformer. Runs after the built-in
+        // widgets (so their languages can't collide) and before the asset-URL rewrite,
+        // so any `assets/ext/…` the tool emits resolves like any other asset. Only
+        // spawns a process under `--allow-extensions`.
+        let html = render_extensions(
+            &html,
+            &highlighter,
+            &p.id,
+            &src.extensions,
+            opts,
+            &mut extra_assets,
+        )
+        .with_context(ctx)?;
+        let html = render_line_highlight(&html);
+        // `` `x`{:lang} `` → inline-highlighted code; `` `x`{.badge} `` → a badge.
+        let html = render_inline_attrs(&html);
+        // Size hints (`#w=…`) bake into inline styles before the URL rewrite
+        // strips fragments from asset paths.
+        let html = assets::apply_image_size_hints(&html);
+        let html = assets::rewrite_asset_urls(&html);
+        let html = render_math(&html).with_context(ctx)?;
+        // `:::tabs` / `:::tab` → an interactive tabbed panel. Runs last so each tab's
+        // body already has its code blocks, math, and callouts rendered.
+        let rendered = render_tabs(&html);
+        // Prepend an "On this page" nav built from the heading anchors, honouring
+        // the page's `toc` frontmatter (auto when unset). It floats top-right, so
+        // sitting before the H1 keeps the viewer's subtitle handling intact.
+        let body_html = match build_page_toc(&rendered, p.toc, &src.language) {
+            Some(nav) => format!("{nav}{rendered}"),
+            None => rendered,
+        };
+        // Plain text comes from an *unhighlighted* render — syntect's per-token
+        // spans would otherwise splatter the search text with stray spaces.
+        let plain = markdown::html_to_plain(&markdown::render_html(&p.markdown, None));
+        pages.push(RenderedPage {
+            id: p.id.clone(),
+            title: p.title.clone(),
+            body_html,
+            plain,
+            keywords: p.keywords.clone(),
+            categories: p.categories.clone(),
+            related: p.related.clone(),
+            // Carry the clean source Markdown (post-frontmatter) for llms.txt / MCP.
+            md: Some(p.markdown.clone()),
+        });
+    }
 
+    let mut assets = src.assets.clone();
+    assets.extend(extra_assets);
     Ok(RenderedDocset {
         id: src.id.clone(),
         title: src.title.clone(),
@@ -81,7 +110,7 @@ pub fn render(src: &SourceDocset) -> Result<RenderedDocset> {
         pages,
         toc: src.toc.clone(),
         categories: src.categories.clone(),
-        assets: src.assets.clone(),
+        assets,
     })
 }
 
@@ -703,6 +732,243 @@ fn render_dot(dot: &str) -> Result<String> {
     Ok(svg[svg.find("<svg").unwrap_or(0)..].to_string())
 }
 
+/// The JSON response an extension writes to stdout: the replacement Markdown, plus any
+/// generated asset files (each written by bare name into the scratch `assets_dir` we
+/// handed the process, and referenced in `markdown` as `asset_prefix + file`).
+#[derive(Deserialize)]
+struct ExtResponse {
+    markdown: String,
+    #[serde(default)]
+    assets: Vec<ExtAsset>,
+}
+
+/// One generated asset declared in an [`ExtResponse`].
+#[derive(Deserialize)]
+struct ExtAsset {
+    file: String,
+}
+
+/// Expand ` ```ext:<name> ` fenced blocks by handing each block's verbatim body to the
+/// external `command` declared for `<name>` in `docset.toml`, then splicing back the
+/// Markdown it returns (rendered to HTML) and injecting any image files it generated as
+/// assets. Mirrors [`render_diagrams`]' opaque-fence scanner.
+///
+/// Only spawns a process under `opts.allow_extensions`; otherwise an `ext:` block is left
+/// as a plain code block with a one-line stderr note, so a docset that uses extensions
+/// still compiles (degraded) in the default hermetic build. When extensions *are* enabled,
+/// an `ext:<name>` with no matching declaration is a build error (a likely typo).
+fn render_extensions(
+    html: &str,
+    highlighter: &SyntectAdapter,
+    page_id: &str,
+    exts: &[Extension],
+    opts: &RenderOptions,
+    assets: &mut Vec<Asset>,
+) -> Result<String> {
+    // No declarations → the feature is unused for this docset; leave every block alone.
+    if exts.is_empty() {
+        return Ok(html.to_string());
+    }
+    const PRE: &str = "<pre class=\"syntax-highlighting\"><code ";
+    const CLOSE: &str = "</code></pre>";
+    let mut out = String::with_capacity(html.len());
+    let mut i = 0;
+    let mut n = 0u32; // per-page block counter → unique asset prefixes
+    while let Some(rel) = html[i..].find(PRE) {
+        let block_start = i + rel;
+        let attrs_start = block_start + PRE.len();
+        let Some(gtrel) = html[attrs_start..].find('>') else {
+            break;
+        };
+        let inner_start = attrs_start + gtrel + 1;
+        let Some(crel) = html[inner_start..].find(CLOSE) else {
+            break;
+        };
+        let block_end = inner_start + crel + CLOSE.len();
+        let code_attrs = &html[attrs_start..inner_start];
+        let lang = attr_value(code_attrs, "class")
+            .and_then(|c| c.strip_prefix("language-").map(str::to_string));
+
+        out.push_str(&html[i..block_start]);
+        match lang.as_deref().and_then(|l| l.strip_prefix("ext:")) {
+            Some(name) => {
+                if !opts.allow_extensions {
+                    eprintln!(
+                        "note: extension block `ext:{name}` on page `{page_id}` left as a \
+                         code block (pass --allow-extensions to run it)"
+                    );
+                    out.push_str(&html[block_start..block_end]);
+                } else {
+                    let Some(ext) = exts.iter().find(|e| e.name == name) else {
+                        anyhow::bail!(
+                            "page `{page_id}` uses undeclared extension `ext:{name}` \
+                             (add [extensions.{name}] to docset.toml)"
+                        );
+                    };
+                    let meta = attr_value(code_attrs, "data-meta").unwrap_or_default();
+                    let body = unescape_html(&strip_tags(&html[inner_start..inner_start + crel]));
+                    let asset_prefix = format!("assets/ext/{name}/{page_id}/{n}/");
+                    n += 1;
+                    // Run in a scratch dir removed even on error (the OS reclaims temp
+                    // dirs anyway; never fail the build on cleanup).
+                    let dir = unique_ext_dir()?;
+                    let outcome = spawn_extension(
+                        ext,
+                        &meta,
+                        &body,
+                        page_id,
+                        &dir,
+                        &asset_prefix,
+                        opts.source_dir,
+                    )
+                    .and_then(|resp| {
+                        splice_extension_output(&resp, highlighter, &dir, &asset_prefix, assets)
+                    });
+                    let _ = std::fs::remove_dir_all(&dir);
+                    out.push_str(&outcome?);
+                }
+            }
+            // A normal (or built-in-widget) highlighted block — copy through untouched.
+            _ => out.push_str(&html[block_start..block_end]),
+        }
+        i = block_end;
+    }
+    out.push_str(&html[i..]);
+    Ok(out)
+}
+
+/// Spawn one extension process, feed it the JSON request on stdin (on a writer thread, so
+/// a large request can't deadlock against the child's stdout pipe), and parse the JSON
+/// response from stdout. A non-zero exit or unparseable output is a build error carrying
+/// the child's (truncated) stderr.
+fn spawn_extension(
+    ext: &Extension,
+    meta: &str,
+    body: &str,
+    page_id: &str,
+    assets_dir: &Path,
+    asset_prefix: &str,
+    source_dir: Option<&Path>,
+) -> Result<ExtResponse> {
+    let request = serde_json::json!({
+        "khb_extension_protocol": 1,
+        "lang": ext.name,
+        "meta": meta,
+        "args": ext.args,
+        "body": body,
+        "page_id": page_id,
+        "assets_dir": assets_dir.to_string_lossy(),
+        "asset_prefix": asset_prefix,
+    });
+    let mut child = Command::new(&ext.command)
+        .args(&ext.args)
+        .current_dir(source_dir.unwrap_or_else(|| Path::new(".")))
+        .env("KHB_EXTENSION", "1")
+        .env("KHB_PAGE_ID", page_id)
+        .env("KHB_LANG", &ext.name)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .with_context(|| {
+            format!(
+                "spawning extension `{}` (command `{}`)",
+                ext.name, ext.command
+            )
+        })?;
+    // Write the request on a separate thread so a full stdout pipe can't block our write
+    // (a classic parent/child pipe deadlock).
+    let mut stdin = child.stdin.take().expect("stdin was piped");
+    let request_bytes = request.to_string().into_bytes();
+    let writer = std::thread::spawn(move || {
+        use std::io::Write;
+        let _ = stdin.write_all(&request_bytes);
+        // Dropping `stdin` closes the pipe → the child sees EOF.
+    });
+    let output = child
+        .wait_with_output()
+        .with_context(|| format!("running extension `{}`", ext.name))?;
+    let _ = writer.join();
+    if !output.status.success() {
+        anyhow::bail!(
+            "extension `{}` failed ({}): {}",
+            ext.name,
+            output.status,
+            truncate_stderr(&String::from_utf8_lossy(&output.stderr))
+        );
+    }
+    serde_json::from_slice(&output.stdout).with_context(|| {
+        format!(
+            "parsing JSON response from extension `{}` (stderr: {})",
+            ext.name,
+            truncate_stderr(&String::from_utf8_lossy(&output.stderr))
+        )
+    })
+}
+
+/// Render an extension's returned Markdown to HTML and pull its generated files into the
+/// asset sink. Split from [`spawn_extension`] so it can be unit-tested with a hand-built
+/// response and no subprocess.
+fn splice_extension_output(
+    resp: &ExtResponse,
+    highlighter: &SyntectAdapter,
+    assets_dir: &Path,
+    asset_prefix: &str,
+    sink: &mut Vec<Asset>,
+) -> Result<String> {
+    for a in &resp.assets {
+        let file = a.file.as_str();
+        // Only bare relative filenames — never let a tool write outside the scratch dir
+        // or forge an asset key with `/`, `\` or `..`.
+        if file.is_empty()
+            || file.contains('/')
+            || file.contains('\\')
+            || file.contains("..")
+            || Path::new(file).is_absolute()
+        {
+            anyhow::bail!("extension returned an unsafe asset filename `{file}` (bare names only)");
+        }
+        let on_disk = assets_dir.join(file);
+        let data = std::fs::read(&on_disk).with_context(|| {
+            format!(
+                "reading generated asset `{file}` from {}",
+                on_disk.display()
+            )
+        })?;
+        sink.push(Asset {
+            path: format!("{asset_prefix}{file}"),
+            mime: assets::guess_mime(file).to_string(),
+            data,
+        });
+    }
+    Ok(markdown::render_html(&resp.markdown, Some(highlighter)))
+}
+
+/// A fresh, empty scratch directory for one extension invocation, namespaced by pid + an
+/// atomic counter so repeated blocks and parallel builds never collide.
+fn unique_ext_dir() -> Result<PathBuf> {
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let dir = std::env::temp_dir().join(format!("khb-ext-{}-{}", std::process::id(), n));
+    std::fs::create_dir_all(&dir)
+        .with_context(|| format!("creating extension scratch dir {}", dir.display()))?;
+    Ok(dir)
+}
+
+/// Trim a child's stderr for a build-error message so a chatty tool can't flood the output.
+fn truncate_stderr(stderr: &str) -> String {
+    const MAX: usize = 2000;
+    let s = stderr.trim();
+    if s.len() <= MAX {
+        return s.to_string();
+    }
+    let mut end = MAX;
+    while !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}… (truncated)", &s[..end])
+}
+
 /// Apply the `{2,4-6}` line-highlight flag: for each highlighted code block whose
 /// `data-meta` carries a `{…}` range, recover the raw code (strip syntect's spans +
 /// decode entities) and re-highlight it line by line so the flagged lines can be tinted.
@@ -1180,6 +1446,94 @@ mod tests {
         // Garbage that isn't a graph fails the build rather than rendering nothing.
         let bad = markdown::render_html("```dot\n@@@ not a graph @@@\n```\n", Some(&h));
         assert!(render_diagrams(&bad).is_err());
+    }
+
+    #[test]
+    fn splice_renders_markdown_and_injects_assets() {
+        let h = markdown::highlighter();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("out.svg"), b"<svg/>").unwrap();
+        let resp = ExtResponse {
+            markdown: "**Label:** Fragile\n\n![label](assets/ext/label/intro/0/out.svg)\n".into(),
+            assets: vec![ExtAsset {
+                file: "out.svg".into(),
+            }],
+        };
+        let mut sink = Vec::new();
+        let html = splice_extension_output(
+            &resp,
+            &h,
+            dir.path(),
+            "assets/ext/label/intro/0/",
+            &mut sink,
+        )
+        .unwrap();
+        // Markdown was rendered to HTML …
+        assert!(html.contains("<strong>Label:</strong>"));
+        assert!(html.contains("assets/ext/label/intro/0/out.svg"));
+        // … and the generated file was pulled in as one namespaced asset.
+        assert_eq!(sink.len(), 1);
+        assert_eq!(sink[0].path, "assets/ext/label/intro/0/out.svg");
+        assert_eq!(sink[0].mime, "image/svg+xml");
+        assert_eq!(sink[0].data, b"<svg/>");
+    }
+
+    #[test]
+    fn splice_rejects_unsafe_asset_filenames() {
+        let h = markdown::highlighter();
+        let dir = tempfile::tempdir().unwrap();
+        for bad in ["../escape.svg", "sub/x.svg", "/abs.svg"] {
+            let resp = ExtResponse {
+                markdown: "hi".into(),
+                assets: vec![ExtAsset { file: bad.into() }],
+            };
+            let mut sink = Vec::new();
+            assert!(
+                splice_extension_output(&resp, &h, dir.path(), "assets/ext/x/p/0/", &mut sink)
+                    .is_err(),
+                "expected `{bad}` to be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn render_extensions_off_leaves_block_as_code() {
+        let h = markdown::highlighter();
+        let exts = vec![Extension {
+            name: "label".into(),
+            command: "khb-label".into(),
+            args: vec![],
+        }];
+        let opts = RenderOptions::default(); // allow_extensions = false
+        let html = markdown::render_html("```ext:label\nname: Fragile\n```\n", Some(&h));
+        let mut sink = Vec::new();
+        let out = render_extensions(&html, &h, "intro", &exts, &opts, &mut sink).unwrap();
+        // Nothing spawned: the block is copied through, no assets injected.
+        assert!(out.contains("language-ext:label"));
+        assert!(sink.is_empty());
+    }
+
+    #[test]
+    fn render_extensions_on_bails_on_undeclared() {
+        let h = markdown::highlighter();
+        let exts = vec![Extension {
+            name: "label".into(),
+            command: "khb-label".into(),
+            args: vec![],
+        }];
+        let opts = RenderOptions {
+            allow_extensions: true,
+            source_dir: None,
+        };
+        let html = markdown::render_html("```ext:typo\nx\n```\n", Some(&h));
+        let mut sink = Vec::new();
+        let err = render_extensions(&html, &h, "intro", &exts, &opts, &mut sink)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("undeclared extension `ext:typo`"),
+            "unexpected: {err}"
+        );
     }
 
     #[test]

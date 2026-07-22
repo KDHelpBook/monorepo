@@ -171,6 +171,12 @@ security boundary:
 
 App-generated UI (the Search page) renders in the normal document, not the frame.
 
+Compile-time is guarded too: the bundled compiler runs a docset's declared external
+[extensions](authoring/extensions) only under the opt-in `--allow-extensions` flag, so
+compiling an untrusted `docset.toml` never executes its commands by default. Assets an
+extension generates are stored under the reserved `assets/ext/…` path prefix, keeping them
+from colliding with a book's own attachments.
+
 ## `.khbb` (binary)
 
 `.khbb` is a compact [postcard](https://docs.rs/postcard) encoding of the rendered
