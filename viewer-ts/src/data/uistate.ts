@@ -7,6 +7,7 @@ const K = {
   expanded: "khb.expanded",
   tabs: "khb.tabs",
   fontSize: "khb.fontSize",
+  theme: "khb.theme",
   docsetLangs: "khb.docsetLangs",
   docsetVersions: "khb.docsetVersions",
   seenVersions: "khb.seenVersions",
@@ -99,6 +100,27 @@ export function loadFontSize(fallback: number): number {
 }
 export function saveFontSize(px: number): void {
   write(K.fontSize, px);
+}
+
+// ---- colour theme ----
+// "system" (default) follows the OS `prefers-color-scheme`; "light"/"dark" pin it.
+export type ThemeMode = "light" | "dark" | "system";
+export function loadTheme(): ThemeMode {
+  try {
+    const v = localStorage.getItem(K.theme);
+    return v === "light" || v === "dark" || v === "system" ? v : "system";
+  } catch {
+    return "system";
+  }
+}
+export function saveTheme(mode: ThemeMode): void {
+  // Stored raw (not JSON) so loadTheme() and the pre-paint inline script in
+  // index.html can read it with a plain string compare — same as `khb.lang`.
+  try {
+    localStorage.setItem(K.theme, mode);
+  } catch {
+    /* storage unavailable / quota — the choice just won't persist */
+  }
 }
 
 // ---- open tabs ----
