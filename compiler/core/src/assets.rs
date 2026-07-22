@@ -121,7 +121,8 @@ fn size_hint_style(hint: &str) -> Option<String> {
     let (prop, raw) = if let Some(w) = hint.strip_prefix("w=") {
         ("max-width", w)
     } else {
-        ("max-height", hint.strip_prefix("h=")?)
+        let h = hint.strip_prefix("h=")?;
+        ("max-height", h)
     };
     // The Markdown renderer percent-encodes `%` in URLs, so `#w=50%` arrives
     // as `#w=50%25`.
