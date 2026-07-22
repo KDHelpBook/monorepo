@@ -2,7 +2,7 @@
 title: Differences from GitHub Markdown
 keywords: [GFM, differences, compatibility, extensions, unsupported, HTML, directives]
 categories: [authoring, markdown]
-related: [getting-started, links, code-extensions, callouts]
+related: [getting-started, links, code-blocks, blockquotes]
 ---
 
 # Differences from GitHub Markdown
@@ -17,10 +17,10 @@ adds book-aware constructs — and deliberately refuses a few things GFM tolerat
 |----------|------------|-----------|
 | In-book & cross-book page links | `[label](page-id)`, `[label](book:page)` | [Links](links) |
 | Bundled images & downloads | `![alt](assets/pic.svg)` | [Images & assets](images) |
-| Callouts | `> [!NOTE]` | [Callouts](callouts) |
+| Callouts | `> [!NOTE]` | [Blockquotes](blockquotes) |
 | Math, rendered to MathML at build time | `$E = mc^2$`, `$$…$$` | [Math](math) |
-| Code: `[filename]` bar, copy button, `collapse` / `open` flags | `` ```rust [main.rs] collapse `` | [Code extensions](code-extensions) |
-| Code groups (tabs), command+output panels, file trees | `~~~code-group`, `~~~code-preview`, `~~~code-tree` | [Code extensions](code-extensions) |
+| Code: `[filename]` bar, copy button, `collapse` / `open` flags | `` ```rust [main.rs] collapse `` | [Code blocks](code-blocks) |
+| Code groups (tabs), command+output panels, file trees | `~~~code-group`, `~~~code-preview`, `~~~code-tree` | [Code blocks](code-blocks) |
 | Emoji shortcodes | `:tada:` | [Emoji](emoji) |
 | Highlight, underline, insert, super-/subscript | `==x==`, `__x__`, `++x++`, `^x^`, `~x~` | [Text formatting](text-formatting) |
 | Page metadata: keyword index, category facet, See-also footer | YAML frontmatter | [Frontmatter](frontmatter) |
@@ -32,7 +32,7 @@ adds book-aware constructs — and deliberately refuses a few things GFM tolerat
 |--------------|-------------|
 | **Raw inline HTML** — escaped to literal text (`<b>x</b>` shows as-is) | Markdown + the extensions above — see [Text formatting](text-formatting) |
 | Attribute syntax (`{.class}` on a span or block) | nothing — there are no inline components |
-| MDC / `:::` directive blocks | fence flags and `~~~` blocks — see [Code extensions](code-extensions) |
+| MDC / `:::` directive blocks | fence flags and `~~~` blocks — see [Code blocks](code-blocks) |
 | Remote images (`![…](https://…)`) — never fetched | bundle the file under `assets/` — see [Images & assets](images) |
 | `__x__` as bold, single-tilde `~x~` as strikethrough | those marks mean **underline** / **subscript** here — bold is `**x**`, strikethrough `~~x~~` — see [Text formatting](text-formatting) |
 

@@ -32,7 +32,7 @@ A broken book fails the compile instead of shipping broken:
   separately);
 - every [math](math) formula must parse — the error names the page and the offending
   LaTeX;
-- the [code extension](code-extensions) containers must be well-formed: a
+- the [code](code-blocks) containers must be well-formed: a
   `~~~code-group` or `~~~code-tree` with no inner blocks, or a `~~~code-preview`
   missing its command or output block, is a build error;
 - the YAML [frontmatter](frontmatter) block must parse (and be terminated).

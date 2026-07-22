@@ -30,9 +30,10 @@ each piece does in the viewer.
     [text formatting](text-formatting), [lists](lists), [links](links),
     [images & assets](images), [tables](tables), [blockquotes](blockquotes),
     [code blocks](code-blocks), [footnotes](footnotes), [emoji](emoji).
-  - **Markdown Extensions** — the KD Help Book additions: [callouts](callouts),
-    [math](math), [links](links), and the
-    [code extensions](code-extensions).
+  - **Markdown extensions** — the KD Help Book additions sit with their base
+    construct: [galleries](images) (in Images & assets), [callouts](blockquotes)
+    (in Blockquotes), and the [code extensions](code-blocks) (in Code blocks);
+    plus [math](math), [diagrams](diagrams), and [directives](directives).
   - **[Frontmatter](frontmatter)** — the per-page metadata fields.
   - **[docset.toml](docset-toml)** — the book manifest.
   - **[toc.yaml](toc-yaml)** — the table-of-contents file.
@@ -44,7 +45,7 @@ each piece does in the viewer.
 | Build my first book | [Getting started](getting-started) |
 | Link between pages and books | [Links](links) |
 | Bundle images or downloadable files | [Images & assets](images) |
-| Put tabs, terminals, or file trees around code | [Code extensions](code-extensions) |
+| Put tabs, terminals, or file trees around code | [Code blocks](code-blocks) |
 | Get a page into the keyword index | [keywords (frontmatter)](frontmatter-keywords) |
 | Shape the table of contents | [toc.yaml](toc-yaml) |
 | Publish the compiled book as a site | [Getting published](khb-publishing:getting-published) |

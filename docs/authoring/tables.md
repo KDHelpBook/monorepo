@@ -11,19 +11,20 @@ Pipe tables work exactly as on GitHub. The header row is
 separated from the body by a row of dashes; colons in that separator set column
 alignment.
 
+~~~code-preview example
 ```md
 | Prop  | Default | Type   |
 |-------|:-------:|-------:|
 | name  |         | string |
 | size  | md      | string |
 ```
-
-Renders as:
-
+```md
 | Prop  | Default | Type   |
 |-------|:-------:|-------:|
 | name  |         | string |
 | size  | md      | string |
+```
+~~~
 
 - `:---` left-aligns, `:--:` centres, `---:` right-aligns.
 - Cells are inline Markdown, so `**bold**`, `` `code` `` and links work inside them.

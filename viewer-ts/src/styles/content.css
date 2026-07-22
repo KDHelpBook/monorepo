@@ -377,6 +377,50 @@ body {
   border-radius: 0;
   overflow-x: auto;
 }
+/* Example preview: ~~~code-preview example → a construct's source paired with its
+   rendered result in one frame (`split` puts them side by side). */
+.content .code-preview-example {
+  margin: 0.9em 0;
+  border: 1px solid var(--code-border);
+  border-radius: 5px;
+  overflow: hidden;
+  background: #fff;
+}
+.content .code-preview-example .code-preview-src .code-block {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+.content .code-preview-example .code-preview-result {
+  padding: 12px 14px;
+  border-top: 1px solid var(--code-border);
+}
+/* The rendered result sits flush in its cell — drop the outer block margins. */
+.content .code-preview-result > :first-child {
+  margin-top: 0;
+}
+.content .code-preview-result > :last-child {
+  margin-bottom: 0;
+}
+/* `split`: source and result side by side, stacking on a narrow pane. */
+.content .code-preview-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: stretch;
+}
+.content .code-preview-split .code-preview-result {
+  border-top: 0;
+  border-left: 1px solid var(--code-border);
+}
+@media (max-width: 640px) {
+  .content .code-preview-split {
+    grid-template-columns: 1fr;
+  }
+  .content .code-preview-split .code-preview-result {
+    border-left: 0;
+    border-top: 1px solid var(--code-border);
+  }
+}
 /* CodeTree: ~~~code-tree → a file-tree aside (built from each block's `[path]`) beside
    the selected file's code. Compiler-emitted; the frame bridge switches files. */
 .content .code-tree {

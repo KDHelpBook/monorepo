@@ -10,9 +10,9 @@
     - page: compiling
     - title: Reference
       children:
-        # One Markdown section: each base construct sits next to its KD Help
-        # Book extension (code-blocks/
-        # code-extensions).
+        # One Markdown section: each base construct carries its KD Help Book
+        # extensions inline (galleries live in images, callouts in blockquotes,
+        # the code-group / collapse / filename extensions in code-blocks).
         - title: Markdown
           children:
             - page: headings
@@ -20,13 +20,10 @@
             - page: lists
             - page: links
             - page: images
-            - page: galleries
             - page: tables
             - page: blockquotes
-            - page: callouts
             - page: directives
             - page: code-blocks
-            - page: code-extensions
             - page: diagrams
             - page: footnotes
             - page: emoji

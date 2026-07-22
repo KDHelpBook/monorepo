@@ -24,6 +24,8 @@ export interface Strings {
   refreshing: string;
   textSize: string;
   close: string;
+  prevImage: string;
+  nextImage: string;
   updateReady: string;
   updateReload: string;
   docsetUpdated: (title: string, from: string, to: string) => string;
@@ -132,6 +134,8 @@ const en: Strings = {
   refreshing: "Refreshing…",
   textSize: "Text size",
   close: "Close",
+  prevImage: "Previous image",
+  nextImage: "Next image",
   updateReady: "A new version is available.",
   updateReload: "Reload",
   docsetUpdated: (title, from, to) => `${title} updated: ${from} → ${to}`,
@@ -232,6 +236,8 @@ const pl: Strings = {
   refreshing: "Odświeżanie…",
   textSize: "Rozmiar tekstu",
   close: "Zamknij",
+  prevImage: "Poprzedni obraz",
+  nextImage: "Następny obraz",
   updateReady: "Dostępna jest nowa wersja.",
   updateReload: "Odśwież",
   docsetUpdated: (title, from, to) =>
