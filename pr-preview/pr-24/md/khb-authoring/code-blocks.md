@@ -212,6 +212,11 @@ it falls back to stacked on a narrow pane.
 ```
 ~~~
 
+> [!TIP]
+> Writing the snippet twice gets tedious. This guide writes it **once** with the
+> [`ext:example`](extensions.md) extension — the tool emits this widget for you (compile the
+> book with `--allow-extensions`).
+
 ### File tree (`code-tree`)
 
 A **`~~~code-tree … ~~~`** fence turns each block's `[path]` label into a **file tree**

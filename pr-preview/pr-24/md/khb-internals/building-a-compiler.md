@@ -23,8 +23,8 @@ anything. This page is the checklist. The bundled Markdown compiler
    format, both must be produced at compile time. Two rendering rules worth
    copying from the bundled compiler: emit syntax highlighting as **CSS
    classes**, not inline colours — the viewer injects a theme stylesheet into
-   the content frame, so class-tagged code follows the app theme (including a
-   future dark mode) while hard-coded colours would not; and derive `plain`
+   the content frame, so class-tagged code follows the app theme (including
+   dark mode) while hard-coded colours would not; and derive `plain`
    from an **unhighlighted** render, so per-token markup never leaks into
    full-text search.
 4. **Optionally fill `pages.md`** with a clean Markdown rendition (nullable). The viewer ignores it; it feeds AI-facing surfaces such as the
