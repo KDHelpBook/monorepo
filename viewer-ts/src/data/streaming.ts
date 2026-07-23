@@ -44,11 +44,17 @@ export interface BlockReader {
   read(start: number, end: number): Promise<Uint8Array>;
 }
 
+let httpSeq = 0;
 /** Reads a remote file over HTTP `Range` (the host must return 206). */
 export class HttpRangeReader implements BlockReader {
+  // A clean synthetic SQLite filename — NOT the URL. `sqlite3_open_v2` treats the
+  // name as a path/URI, and a real URL (with `://` and a `?v=` query) makes it
+  // fail with SQLITE_CANTOPEN before the VFS's xOpen is even called. The VFS is
+  // single-file (the URL is fixed at construction), so the name is just an id.
+  private readonly label = `stream-${httpSeq++}.khb`;
   constructor(private readonly url: string) {}
   name(): string {
-    return this.url;
+    return this.label;
   }
   async probeSize(): Promise<number> {
     const res = await fetch(this.url, {
@@ -60,8 +66,6 @@ export class HttpRangeReader implements BlockReader {
       // fresh and can't poison the whole-fetch fallback's cache.
       cache: "no-store",
     });
-    const buf = new Uint8Array(await res.arrayBuffer());
-    dbgRange("probe", this.url, "bytes=0-0", res, buf); // TEMP diagnostic
     if (res.status !== 206) {
       throw new Error(
         `range not honoured (status ${res.status}); host must return 206`,
@@ -70,6 +74,7 @@ export class HttpRangeReader implements BlockReader {
     const cr = res.headers.get("Content-Range"); // "bytes 0-0/618496"
     const total = cr && cr.split("/")[1];
     if (!total) throw new Error("no Content-Range total in probe response");
+    await res.arrayBuffer(); // drain
     return Number(total);
   }
   async read(start: number, end: number): Promise<Uint8Array> {
@@ -77,34 +82,10 @@ export class HttpRangeReader implements BlockReader {
       headers: { Range: `bytes=${start}-${end}` },
       cache: "no-store", // see probeSize: don't let a 206 pollute the HTTP cache
     });
-    const bytes = new Uint8Array(await res.arrayBuffer());
-    dbgRange("read", this.url, `bytes=${start}-${end}`, res, bytes); // TEMP diagnostic
     if (res.status !== 206)
       throw new Error(`range read failed (${res.status})`);
-    return bytes;
+    return new Uint8Array(await res.arrayBuffer());
   }
-}
-
-// TEMP diagnostic (remove after debugging the Chrome streaming failure): log each
-// Range response's status, the range asked vs the Content-Range returned, any
-// Content-Encoding, the actual byte length, and the first 16 bytes as hex — so a
-// truncated / gzip'd / wrong-range / HTML body is obvious in the console.
-function dbgRange(
-  kind: string,
-  url: string,
-  asked: string,
-  res: Response,
-  bytes: Uint8Array,
-): void {
-  const hex = Array.from(bytes.slice(0, 16))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join(" ");
-  // eslint-disable-next-line no-console
-  console.warn(
-    `[khb][range:${kind}] ${url.split("/").pop()} asked=${asked} → ${res.status}` +
-      ` cr="${res.headers.get("Content-Range")}" ce="${res.headers.get("Content-Encoding") ?? ""}"` +
-      ` len=${bytes.byteLength} head=[${hex}]`,
-  );
 }
 
 let bytesSeq = 0;

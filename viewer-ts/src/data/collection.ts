@@ -264,10 +264,7 @@ export class Collection {
             docsets.push(
               await StreamingDocset.open(src.url, src.attachments ?? []),
             );
-          } catch (streamErr) {
-            // TEMP diagnostic (remove after debugging the Chrome streaming issue).
-            // eslint-disable-next-line no-console
-            console.warn(`[khb][open] streaming open failed for ${src.url}:`, streamErr);
+          } catch {
             // A host can advertise Range yet mangle the actual range reads —
             // some mobile-carrier proxies transcode or mis-serve 206 bodies — so
             // a streamed open that passed the cheap peek still reads a malformed
