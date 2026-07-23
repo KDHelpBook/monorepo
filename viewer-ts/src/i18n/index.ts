@@ -22,6 +22,8 @@ export interface Strings {
   themeDark: string;
   themeDarkShell: string;
   themeSystem: string;
+  /** View-menu toggle: cache streamed books whole for offline / faster reuse. */
+  prefetchToggle: string;
   back: string;
   forward: string;
   about: string;
@@ -152,6 +154,7 @@ const en: Strings = {
   themeDark: "Dark",
   themeDarkShell: "Dark shell, light pages",
   themeSystem: "Use system setting",
+  prefetchToggle: "Keep books offline",
   back: "Back",
   forward: "Forward",
   about: "About KD Help Book",
@@ -282,6 +285,7 @@ const pl: Strings = {
   themeDark: "Ciemny",
   themeDarkShell: "Ciemny interfejs, jasne strony",
   themeSystem: "Ustawienie systemu",
+  prefetchToggle: "Trzymaj książki offline",
   back: "Wstecz",
   forward: "Dalej",
   about: "O programie KD Help Book",

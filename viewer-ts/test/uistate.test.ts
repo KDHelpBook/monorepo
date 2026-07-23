@@ -3,12 +3,14 @@ import {
   loadExpanded,
   loadFavorites,
   loadFontSize,
+  loadPrefetch,
   loadTabs,
   loadTheme,
   parseTabs,
   saveExpanded,
   saveFavorites,
   saveFontSize,
+  savePrefetch,
   saveTabs,
   saveTheme,
 } from "../src/data/uistate";
@@ -58,6 +60,19 @@ describe("parseTabs", () => {
   it("drops entries without a string id and defaults active to 0", () => {
     const raw = JSON.stringify({ tabs: [{ id: "ok" }, { nope: true }, 5] });
     expect(parseTabs(raw)).toEqual({ tabs: [{ id: "ok" }], active: 0 });
+  });
+});
+
+describe("prefetch toggle persistence", () => {
+  it("falls back to the config default when unset", () => {
+    expect(loadPrefetch(false)).toBe(false);
+    expect(loadPrefetch(true)).toBe(true);
+  });
+  it("a saved choice overrides the config default either way", () => {
+    savePrefetch(true);
+    expect(loadPrefetch(false)).toBe(true); // user on, config off
+    savePrefetch(false);
+    expect(loadPrefetch(true)).toBe(false); // user off, config on
   });
 });
 

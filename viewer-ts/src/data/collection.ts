@@ -214,6 +214,22 @@ export class Collection {
     for (const d of this.docsets) d.close();
   }
 
+  /** The open docset with this id, if loaded. */
+  docsetById(id: string): IDocset | undefined {
+    return this.docsets.find((d) => d.id === id);
+  }
+
+  /** A new collection with the docset `id` replaced by `replacement` — the other
+   *  docsets are shared (NOT closed), so the caller closes only the one it
+   *  replaced. Used to hot-swap a streamed book for its cached whole-file copy of
+   *  identical content, without re-opening the rest. */
+  withDocset(id: string, replacement: IDocset): Collection {
+    return new Collection(
+      this.language,
+      this.docsets.map((d) => (d.id === id ? replacement : d)),
+    );
+  }
+
   static async load(
     sources: DocsetSource[],
     language: string,

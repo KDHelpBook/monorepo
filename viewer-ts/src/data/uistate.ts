@@ -11,6 +11,7 @@ const K = {
   docsetLangs: "khb.docsetLangs",
   docsetVersions: "khb.docsetVersions",
   seenVersions: "khb.seenVersions",
+  prefetch: "khb.prefetch",
 } as const;
 
 /** Read a `{ key: string }` map from storage, dropping non-string values. */
@@ -100,6 +101,26 @@ export function loadFontSize(fallback: number): number {
 }
 export function saveFontSize(px: number): void {
   write(K.fontSize, px);
+}
+
+// ---- prefetch to cache (keep streamed books offline) ----
+// A per-device opt-in: when on, a streamed book is also downloaded whole in the
+// background and cached (IndexedDB) so later loads open it from cache/offline.
+// Unset → follow the `fallback` (the config.json default the site ships with).
+export function loadPrefetch(fallback: boolean): boolean {
+  try {
+    const v = localStorage.getItem(K.prefetch);
+    return v === "1" ? true : v === "0" ? false : fallback;
+  } catch {
+    return fallback;
+  }
+}
+export function savePrefetch(on: boolean): void {
+  try {
+    localStorage.setItem(K.prefetch, on ? "1" : "0");
+  } catch {
+    /* storage unavailable / quota — the choice just won't persist */
+  }
 }
 
 // ---- colour theme ----
