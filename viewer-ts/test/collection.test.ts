@@ -407,3 +407,84 @@ describe("Collection.load streaming fallback", () => {
     expect(errors[0]!.kind).toBe("not-a-khb");
   });
 });
+
+describe("Collection.load attachment packs", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  const sqlite = (): Uint8Array => new TextEncoder().encode("SQLite format 3 x");
+
+  const bufRes = (bytes: Uint8Array, init: Partial<Response> = {}): Response =>
+    ({
+      ok: init.ok ?? true,
+      status: init.status ?? 200,
+      statusText: init.statusText ?? "OK",
+      headers: new Headers(),
+      body: null, // no onProgress → arrayBuffer() path
+      arrayBuffer: async () => bytes.buffer,
+    }) as unknown as Response;
+
+  // A one-chunk streamed body so fetchDocsetBytes takes its progress-reporting path.
+  const streamRes = (bytes: Uint8Array): Response => {
+    let sent = false;
+    return {
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      headers: new Headers({ "Content-Length": String(bytes.length) }),
+      body: {
+        getReader: () => ({
+          read: async () =>
+            sent
+              ? { done: true, value: undefined }
+              : ((sent = true), { done: false, value: bytes }),
+        }),
+      },
+      arrayBuffer: async () => bytes.buffer,
+    } as unknown as Response;
+  };
+
+  it("tags an attachment-pack failure as the pack, not the book", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        String(url).includes(".khba")
+          ? bufRes(new Uint8Array(), {
+              ok: false,
+              status: 404,
+              statusText: "Not Found",
+            })
+          : bufRes(sqlite()),
+      ),
+    );
+    const errors: DocsetLoadError[] = [];
+    const col = await Collection.load(
+      [{ file: "docsets/x.khb", attachments: [{ file: "docsets/x.khba" }] }],
+      "en",
+      { labels: ["Book X"], onError: (e) => errors.push(e) },
+    );
+
+    expect(col.books()).toHaveLength(0);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.source).toBe("docsets/x.khba"); // names the pack, not the book
+    expect(errors[0]!.detail).toMatch(/attachment pack/i);
+    expect(errors[0]!.title).toBe("Book X"); // still tied to its book
+  });
+
+  it("reports download progress for a pack with its `part` set", async () => {
+    streamOpenBytes.mockResolvedValue(stub({ id: "khb-x", title: "X" }));
+    vi.stubGlobal("fetch", vi.fn(async () => streamRes(sqlite())));
+
+    const parts: (string | undefined)[] = [];
+    await Collection.load(
+      [{ file: "docsets/x.khb", attachments: [{ file: "docsets/x.khba" }] }],
+      "en",
+      { onProgress: (_l, _t, _i, _n, part) => parts.push(part) },
+    );
+
+    expect(parts).toContain(undefined); // the docset itself
+    expect(parts).toContain("docsets/x.khba"); // the pack, labelled by its path
+  });
+});

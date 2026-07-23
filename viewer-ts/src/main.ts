@@ -239,7 +239,8 @@ function fmtBytes(n: number): string {
   return `${n} B`;
 }
 
-/** Drive the cold-start panel from a whole-file download's byte counts. */
+/** Drive the cold-start panel from a whole-file download's byte counts. `part` is
+ *  set while an attachment pack (not the docset itself) is downloading. */
 function setDownloadProgress(
   loaded: number,
   total: number | null,
@@ -247,6 +248,7 @@ function setDownloadProgress(
   index: number,
   count: number,
   lang: string,
+  part?: string,
 ): void {
   const box = document.getElementById("loading");
   if (!box || box.classList.contains("done")) return;
@@ -255,7 +257,8 @@ function setDownloadProgress(
   if (titleEl) titleEl.textContent = s.downloadingHelp;
   const nameEl = document.getElementById("loading-name");
   if (nameEl) {
-    nameEl.textContent = count > 1 ? `${title} (${index + 1}/${count})` : title;
+    const base = count > 1 ? `${title} (${index + 1}/${count})` : title;
+    nameEl.textContent = part ? `${base} — ${s.packLabel}` : base;
   }
   const prog = document.getElementById("loading-progress");
   const bar = document.getElementById("loading-bar");
@@ -596,8 +599,8 @@ async function bootstrap(): Promise<void> {
   // chosen edition) and keep loading the rest. Only an empty result blocks the app.
   const failed: FailedBook[] = [];
   const collection = await Collection.load(sources, lang, {
-    onProgress: (l, t, i, n) =>
-      setDownloadProgress(l, t, titles[i] ?? "", i, n, lang),
+    onProgress: (l, t, i, n, part) =>
+      setDownloadProgress(l, t, titles[i] ?? "", i, n, lang, part),
     labels: titles,
     onError: (e, i) => {
       const variant = books[i];
@@ -2409,11 +2412,17 @@ function start(
       "position:fixed;inset:0;background:var(--backdrop);display:grid;place-items:center;z-index:50";
     // Loaded docsets with their versions (language shown too, since a fallback book
     // may differ from the UI language).
+    // Whether a loaded book is actually being streamed — matched from the chosen
+    // editions (same "· streaming" marker the Manage page shows).
+    const streamed = (id: string, language: string): boolean =>
+      variants.some(
+        (v) => v.id === id && v.language === language && v.origin.streaming,
+      );
     const bookLines = collection
       .books()
       .map(
         (b) =>
-          `<div>${esc(b.title)} <span style="color:var(--muted)">· ${esc(b.language)}${b.version ? ` · ${esc(s.versionLabel)} ${esc(b.version)}` : ""}</span></div>`,
+          `<div>${esc(b.title)} <span style="color:var(--muted)">· ${esc(b.language)}${b.version ? ` · ${esc(s.versionLabel)} ${esc(b.version)}` : ""}${streamed(b.id, b.language) ? ` ${esc(s.streamingBadge)}` : ""}</span></div>`,
       )
       .join("");
     // List books that failed to load too, so they aren't silently missing here.

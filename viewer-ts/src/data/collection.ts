@@ -58,13 +58,17 @@ export type DownloadProgress = (loaded: number, total: number | null) => void;
 /**
  * Collection-load progress: the current whole-file download's byte counts, plus
  * which source it is (`index`) and how many sources load in all (`count`) — so a
- * UI can name the book and show `(2/3)`. Streaming sources report nothing.
+ * UI can name the book and show `(2/3)`. `part` names a sub-download: `undefined`
+ * for the docset itself, else the attachment pack's URL/path (so the UI can label
+ * it). A pure streaming open reports nothing; a streamed book that falls back to a
+ * whole fetch reports like any whole-file source.
  */
 export type LoadProgress = (
   loaded: number,
   total: number | null,
   index: number,
   count: number,
+  part?: string,
 ) => void;
 
 /** Coarse classification of why a docset failed to load, for a clear UI message. */
@@ -222,10 +226,27 @@ export class Collection {
     const { StreamingDocset } = await import("./streaming-docset");
     for (let index = 0; index < sources.length; index++) {
       const src = sources[index]!;
+      // A progress reporter for one sub-download (the docset, or a named pack).
       // Only a whole-file fetch has bytes to count; in-memory sources are instant.
-      const report: DownloadProgress | undefined = onProgress
-        ? (loaded, total) => onProgress(loaded, total, index, count)
-        : undefined;
+      const reportFor = (part?: string): DownloadProgress | undefined =>
+        onProgress
+          ? (loaded, total) => onProgress(loaded, total, index, count, part)
+          : undefined;
+      // Fetch an attachment pack whole, re-tagging a failure as the *pack's* — so
+      // the UI names the offending pack (with its book), not just the book.
+      const fetchPack = async (url: string): Promise<Uint8Array> => {
+        try {
+          return await fetchDocsetBytes(url, reportFor(url));
+        } catch (cause) {
+          const { kind, detail } = classifyLoadError(cause);
+          throw new DocsetLoadError(
+            url,
+            kind,
+            `attachment pack — ${detail}`,
+            labels?.[index],
+          );
+        }
+      };
       try {
         if (isStreaming(src)) {
           try {
@@ -239,34 +260,35 @@ export class Collection {
             // image. Whole-file GETs are unaffected (the app shell itself loads
             // that way), so fall back to fetching the book and its packs whole
             // before giving up. If that also fails, the outer catch surfaces it.
-            const bytes = await fetchDocsetBytes(src.url, report);
+            const bytes = await fetchDocsetBytes(src.url, reportFor());
             const packBytes: Uint8Array[] = [];
-            for (const a of src.attachments ?? []) {
-              packBytes.push(await fetchDocsetBytes(a));
-            }
+            for (const a of src.attachments ?? []) packBytes.push(await fetchPack(a));
             docsets.push(await StreamingDocset.openBytes(bytes, packBytes));
           }
           continue;
         }
         const bytes =
-          "bytes" in src ? src.bytes : await fetchDocsetBytes(src.file, report);
+          "bytes" in src ? src.bytes : await fetchDocsetBytes(src.file, reportFor());
         const attachmentBytes: Uint8Array[] = [];
         for (const a of src.attachments ?? []) {
           attachmentBytes.push(
-            "bytes" in a ? a.bytes : await fetchDocsetBytes(a.file),
+            "bytes" in a ? a.bytes : await fetchPack(a.file),
           );
         }
         docsets.push(await StreamingDocset.openBytes(bytes, attachmentBytes));
       } catch (cause) {
-        // Classify + tag with the source (and title) so the UI can explain which
-        // book failed and why, instead of a raw SQLite/fetch message.
-        const { kind, detail } = classifyLoadError(cause);
-        const err = new DocsetLoadError(
-          sourceLabel(src),
-          kind,
-          detail,
-          labels?.[index],
-        );
+        // A pack failure already arrives as a DocsetLoadError naming the pack;
+        // reuse it. Otherwise classify + tag with the docset source (and title) so
+        // the UI can explain which book failed and why, not a raw SQLite message.
+        const err =
+          cause instanceof DocsetLoadError
+            ? cause
+            : new DocsetLoadError(
+                sourceLabel(src),
+                classifyLoadError(cause).kind,
+                classifyLoadError(cause).detail,
+                labels?.[index],
+              );
         // Skip a bad book and keep loading the rest when the caller handles errors.
         if (onError) onError(err, index);
         else throw err;
