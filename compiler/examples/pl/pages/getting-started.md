@@ -10,7 +10,8 @@ categories: [basics]
 KD Help Book kompiluje Twoją dokumentację do samowystarczalnego pliku **`.khb`** — bazy
 SQLite z gotowym indeksem pełnotekstowym — i wyświetla ją w szybkiej przeglądarce
 z interfejsem w stylu klasycznego czytnika pomocy: drzewem spisu treści, indeksem słów kluczowych
-(F1), wyszukiwarką offline, ulubionymi i kartami.
+(F1), wyszukiwarką offline, ulubionymi i kartami — a do tego jasnym lub ciemnym
+motywem (domyślnie zgodnym z systemem) i regulowanym rozmiarem tekstu.
 
 ## Od czego zacząć
 
