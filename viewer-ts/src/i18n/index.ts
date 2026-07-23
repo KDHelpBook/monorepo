@@ -8,6 +8,8 @@ export interface Strings {
   menuFile: string;
   menuEdit: string;
   menuView: string;
+  menuSearch: string;
+  menuGo: string;
   menuHelp: string;
   openDocset: string;
   print: string;
@@ -155,6 +157,8 @@ const en: Strings = {
   menuFile: "File",
   menuEdit: "Edit",
   menuView: "View",
+  menuSearch: "Search",
+  menuGo: "Go",
   menuHelp: "Help",
   openDocset: "Open docset…",
   print: "Print…",
@@ -293,6 +297,8 @@ const pl: Strings = {
   menuFile: "Plik",
   menuEdit: "Edycja",
   menuView: "Widok",
+  menuSearch: "Szukaj",
+  menuGo: "Przejdź",
   menuHelp: "Pomoc",
   openDocset: "Otwórz docset…",
   print: "Drukuj…",
