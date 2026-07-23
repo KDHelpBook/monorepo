@@ -2992,9 +2992,21 @@ function start(
   // Language switcher: persist + reload (the content docset changes with the UI).
   // Language selectors — the toolbar one and the mobile ⋯-menu one behave alike.
   const langNames: Record<string, string> = { en: "English", pl: "Polski" };
+  // Fewer than two selectable languages means there's nothing to switch to —
+  // hide the selector (and its toolbar separator) instead of showing a
+  // dropdown with every other option greyed out.
   document
     .querySelectorAll<HTMLSelectElement>(".lang-select")
     .forEach((sel) => {
+      if (available.length < 2) {
+        sel.hidden = true;
+        if (sel.previousElementSibling?.classList.contains("tsep")) {
+          (sel.previousElementSibling as HTMLElement).hidden = true;
+        }
+        const label = sel.closest("label.more-lang");
+        if (label) (label as HTMLElement).hidden = true;
+        return;
+      }
       for (const l of available) {
         if (![...sel.options].some((o) => o.value === l)) {
           const opt = document.createElement("option");
