@@ -40,7 +40,7 @@ A plain blockquote stays neutral. For a coloured, labelled box (note / tip / war
 alert marker. (A **[directive](directives)** like `:::tip` is an interchangeable
 alternative.)
 
-```md
+```ext:example
 > [!NOTE]
 > Useful information the reader should know.
 

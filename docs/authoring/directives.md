@@ -10,7 +10,7 @@ related: [blockquotes, code-blocks]
 A **directive** is a fenced container that wraps other Markdown in a labelled box.
 Open with three or more colons and a name, then close with a matching row of colons:
 
-```md
+```ext:example
 :::tip
 You can nest **Markdown**, lists, and `code` inside a directive.
 :::
@@ -106,7 +106,7 @@ connector line, with room for rich content under each step:
 To put a directive inside another, give the **outer** fence more colons than the inner
 one:
 
-```md
+```ext:example
 ::::card
 A card with a callout inside it:
 
