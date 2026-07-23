@@ -43,8 +43,8 @@
     <link rel="llms-txt" href="llms.txt" />
     <link rel="sitemap" type="application/xml" href="sitemap.xml" />
     <title>KD Help Book</title>
-    <script type="module" crossorigin src="./assets/index-MJLuIkIq.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-B7i5kExn.css">
+    <script type="module" crossorigin src="./assets/index-C6lBOSmr.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-BLwO8wdL.css">
   </head>
   <body>
     <!-- A JS-less <noscript> landing block (title + links to the static exports
@@ -778,12 +778,38 @@
             ></iframe>
             <!-- App-generated UI (the Search results page) — not untrusted. -->
             <div class="content" id="content" style="display: none"></div>
+            <!-- Cold-start loading panel: shown from first paint until the docset
+                 is ready, so the empty shell never looks hung while the help file
+                 downloads. Indeterminate by default; becomes a determinate % bar
+                 when a whole-file download reports bytes (main.ts). -->
+            <div class="loading" id="loading">
+              <div class="loading-box">
+                <div
+                  class="loading-title"
+                  id="loading-title"
+                  data-i18n="loadingHelp"
+                >
+                  Loading help…
+                </div>
+                <div class="loading-name" id="loading-name"></div>
+                <div class="progress indeterminate" id="loading-progress">
+                  <div class="progress-bar" id="loading-bar"></div>
+                </div>
+                <div class="loading-pct" id="loading-pct"></div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
       <div class="statusbar">
         <span id="status">Ready</span>
+        <!-- Activity bar for in-flight background fetches (streamed page loads,
+             assets, search) — shown by beginBusy()/endBusy() in main.ts so slow
+             navigation/search doesn't look frozen. Hidden (out of layout) idle. -->
+        <span class="status-progress" id="status-progress" hidden>
+          <span class="status-progress-bar" id="status-progress-bar"></span>
+        </span>
         <span class="grow"></span>
         <span id="status-count"></span>
       </div>
