@@ -942,6 +942,18 @@ function start(
       )
       .forEach((el) => (el.style.display = "none"));
   }
+  // "Copy links for LLMs" only makes sense when the llms.txt export exists —
+  // `khb pack --llms` advertises it with a <link rel="llms-txt"> in the head (see
+  // compiler/cli/src/publish.rs). Absent it (dev server / non-llms pack), llms.txt
+  // and the md/ files don't exist, so hide the menu item on every surface.
+  const llmsLink = document.querySelector<HTMLLinkElement>(
+    'link[rel="llms-txt"]',
+  );
+  if (!llmsLink) {
+    document
+      .querySelectorAll<HTMLElement>('[data-action="copy-llm-links"]')
+      .forEach((el) => (el.style.display = "none"));
+  }
   const leftBody = $("#left-body");
   const leftTitle = $("#left-title");
   const content = $("#content"); // app UI (Search page)
@@ -2520,6 +2532,9 @@ function start(
       case "share":
         void shareCurrent();
         break;
+      case "copy-llm-links":
+        void copyLlmLinks();
+        break;
     }
   }
 
@@ -2587,6 +2602,34 @@ function start(
       }
     } catch {
       /* user dismissed the share sheet */
+    }
+  }
+
+  // Copy an LLM-oriented block for the current page: its title, the per-page
+  // Markdown export URL (md/<docset>/<page>.md — the same file `khb pack --llms`
+  // writes) plus the viewer deep-link, and a pointer to the full llms.txt index.
+  // Only reachable when the export exists (the menu item is hidden otherwise), and
+  // only meaningful on a real content page.
+  async function copyLlmLinks(): Promise<void> {
+    if (!llmsLink || !navigator.clipboard) return;
+    if (!pages.has(currentId)) return; // not a real page (search/manage/failed view)
+    const { docsetId, localId } = collection.split(currentId);
+    const title = pages.get(currentId)?.title ?? document.title;
+    // Mirror Rust core::llms::sanitize() exactly (compiler/core/src/llms.rs): any
+    // char outside [A-Za-z0-9._-] maps to '_'. Ids are slugs, but be defensive.
+    const san = (x: string): string => x.replace(/[^A-Za-z0-9._-]/g, "_");
+    // llmsLink.href is the absolute, authoritative location of llms.txt; resolve
+    // md/ against it so the link is right even when index.html isn't at the root.
+    const indexUrl = llmsLink.href;
+    const mdUrl = new URL(`md/${san(docsetId)}/${san(localId)}.md`, indexUrl).href;
+    const pageUrl = location.href; // viewer deep-link (#<currentId>)
+    try {
+      await navigator.clipboard.writeText(
+        s.llmClipboard(title, mdUrl, pageUrl, indexUrl),
+      );
+      status.textContent = s.llmLinksCopied;
+    } catch {
+      /* clipboard denied */
     }
   }
 
