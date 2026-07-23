@@ -222,17 +222,32 @@ export class Collection {
     const { StreamingDocset } = await import("./streaming-docset");
     for (let index = 0; index < sources.length; index++) {
       const src = sources[index]!;
+      // Only a whole-file fetch has bytes to count; in-memory sources are instant.
+      const report: DownloadProgress | undefined = onProgress
+        ? (loaded, total) => onProgress(loaded, total, index, count)
+        : undefined;
       try {
         if (isStreaming(src)) {
-          docsets.push(
-            await StreamingDocset.open(src.url, src.attachments ?? []),
-          );
+          try {
+            docsets.push(
+              await StreamingDocset.open(src.url, src.attachments ?? []),
+            );
+          } catch {
+            // A host can advertise Range yet mangle the actual range reads —
+            // some mobile-carrier proxies transcode or mis-serve 206 bodies — so
+            // a streamed open that passed the cheap peek still reads a malformed
+            // image. Whole-file GETs are unaffected (the app shell itself loads
+            // that way), so fall back to fetching the book and its packs whole
+            // before giving up. If that also fails, the outer catch surfaces it.
+            const bytes = await fetchDocsetBytes(src.url, report);
+            const packBytes: Uint8Array[] = [];
+            for (const a of src.attachments ?? []) {
+              packBytes.push(await fetchDocsetBytes(a));
+            }
+            docsets.push(await StreamingDocset.openBytes(bytes, packBytes));
+          }
           continue;
         }
-        // Only a whole-file fetch has bytes to count; in-memory sources are instant.
-        const report: DownloadProgress | undefined = onProgress
-          ? (loaded, total) => onProgress(loaded, total, index, count)
-          : undefined;
         const bytes =
           "bytes" in src ? src.bytes : await fetchDocsetBytes(src.file, report);
         const attachmentBytes: Uint8Array[] = [];
