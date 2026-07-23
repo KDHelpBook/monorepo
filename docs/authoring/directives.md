@@ -25,8 +25,7 @@ content can't inject markup.
 Five names render as coloured, self-labelling callouts — a portable alternative to the
 `> [!NOTE]` [callout](blockquotes) syntax:
 
-~~~code-preview example
-```md
+```ext:example
 :::note
 Background a reader can skip.
 :::
@@ -47,28 +46,6 @@ Something that can bite you.
 A destructive or irreversible action.
 :::
 ```
-```md
-:::note
-Background a reader can skip.
-:::
-
-:::tip
-A shortcut worth knowing.
-:::
-
-:::info
-A neutral aside.
-:::
-
-:::warning
-Something that can bite you.
-:::
-
-:::caution
-A destructive or irreversible action.
-:::
-```
-~~~
 
 The available kinds are `note`, `tip`, `info`, `warning`, and `caution` (`danger` is an
 alias for `caution`). Each supplies its own heading — the type *is* the label.
@@ -78,18 +55,11 @@ alias for `caution`). Each supplies its own heading — the type *is* the label.
 `:::card` is a plain framed box with no accent bar and no auto-heading — reach for it
 when you want to set a block apart without implying note/warning semantics:
 
-~~~code-preview example
-```md
+```ext:example
 :::card
 A self-contained block: a summary, a definition, a call-out box of your own making.
 :::
 ```
-```md
-:::card
-A self-contained block: a summary, a definition, a call-out box of your own making.
-:::
-```
-~~~
 
 ## Tabs
 
@@ -97,8 +67,7 @@ A self-contained block: a summary, a definition, a call-out box of your own maki
 label. The words after `tab` are the label; a panel holds any Markdown (prose, code,
 even another directive). Give the outer `tabs` fence more colons than the inner `tab`s:
 
-~~~code-preview example
-```md
+```ext:example
 ::::tabs
 :::tab macOS
 Install with Homebrew:
@@ -110,19 +79,6 @@ Install with Homebrew:
 :::
 ::::
 ```
-```md
-::::tabs
-:::tab macOS
-Install with Homebrew:
-
-`brew install foo`{:bash}
-:::
-:::tab Linux
-`apt install foo`{:bash}
-:::
-::::
-```
-~~~
 
 Tabs are the one directive that needs the viewer's frame bridge (a tiny click handler);
 everything else on this page is pure CSS. A `tab` with no label falls back to `Tab 1`,
@@ -133,8 +89,7 @@ everything else on this page is pure CSS. A `tab` with no label falls back to `T
 `:::steps` turns an **ordered list** into a numbered walkthrough — big numerals down a
 connector line, with room for rich content under each step:
 
-~~~code-preview example
-```md
+```ext:example
 :::steps
 1. **Install** the CLI.
 
@@ -145,18 +100,6 @@ connector line, with room for rich content under each step:
 3. **Open** it in the viewer.
 :::
 ```
-```md
-:::steps
-1. **Install** the CLI.
-
-   `cargo install khb`{:bash}
-
-2. **Compile** your sources into a `.khb`.
-
-3. **Open** it in the viewer.
-:::
-```
-~~~
 
 ## Nesting
 

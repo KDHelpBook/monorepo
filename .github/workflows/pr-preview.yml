@@ -74,7 +74,7 @@ jobs:
           for T in docs/*/docset.toml; do
             DIR=$(dirname "$T")
             ID=$(sed -n 's/^id = "\(.*\)"$/\1/p' "$T" | head -n1)
-            "$BIN" compile "$DIR" -o "out/${ID}.khb"
+            "$BIN" compile "$DIR" -o "out/${ID}.khb" --allow-extensions
             DOCSETS+=(--docset "out/${ID}.khb")
           done
           "$BIN" pack --profile bundled --viewer viewer-ts/dist \
