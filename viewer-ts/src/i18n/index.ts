@@ -30,6 +30,13 @@ export interface Strings {
   /** Cold-start loading panel: indeterminate title, and the determinate-download title. */
   loadingHelp: string;
   downloadingHelp: string;
+  /** Load-failure panel: the headline, and a classified reason per LoadErrorKind. */
+  loadFailed: string;
+  loadErrorReason: (kind: string, detail: string) => string;
+  /** "(+N more)" appended when several books failed at once. */
+  loadErrorMore: (n: number) => string;
+  /** Non-blocking toast naming books that failed while others loaded. */
+  loadWarnSome: (names: string[]) => string;
   textSize: string;
   close: string;
   prevImage: string;
@@ -146,6 +153,24 @@ const en: Strings = {
   refreshing: "Refreshing…",
   loadingHelp: "Loading help…",
   downloadingHelp: "Downloading help…",
+  loadFailed: "Couldn't load this help book",
+  loadErrorReason: (kind, detail) => {
+    switch (kind) {
+      case "web-page":
+        return "The server returned a web page instead of a help file — the file may be missing or the address is wrong.";
+      case "not-a-khb":
+        return "This file isn't a valid KD Help Book (.khb) — it may be damaged or the wrong file.";
+      case "http":
+        return `The server reported an error (${detail}).`;
+      case "network":
+        return "Couldn't reach the server — check your connection (it may also be blocked by CORS).";
+      default:
+        return detail;
+    }
+  },
+  loadErrorMore: (n) => `(+${n} more)`,
+  loadWarnSome: (names) =>
+    `Some help books couldn't be loaded: ${names.join(", ")}`,
   textSize: "Text size",
   close: "Close",
   prevImage: "Previous image",
@@ -254,6 +279,24 @@ const pl: Strings = {
   refreshing: "Odświeżanie…",
   loadingHelp: "Wczytywanie pomocy…",
   downloadingHelp: "Pobieranie pomocy…",
+  loadFailed: "Nie udało się wczytać tej książki pomocy",
+  loadErrorReason: (kind, detail) => {
+    switch (kind) {
+      case "web-page":
+        return "Serwer zwrócił stronę WWW zamiast pliku pomocy — plik może nie istnieć lub adres jest błędny.";
+      case "not-a-khb":
+        return "To nie jest prawidłowy plik pomocy (.khb) — może być uszkodzony lub to niewłaściwy plik.";
+      case "http":
+        return `Serwer zgłosił błąd (${detail}).`;
+      case "network":
+        return "Nie można połączyć się z serwerem — sprawdź połączenie (może to też blokować CORS).";
+      default:
+        return detail;
+    }
+  },
+  loadErrorMore: (n) => `(+${n} więcej)`,
+  loadWarnSome: (names) =>
+    `Nie udało się wczytać niektórych książek pomocy: ${names.join(", ")}`,
   textSize: "Rozmiar tekstu",
   close: "Zamknij",
   prevImage: "Poprzedni obraz",

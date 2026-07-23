@@ -4,6 +4,7 @@ import contentCss from "./styles/content.css?inline";
 import syntaxCss from "./styles/syntax.css?inline";
 import {
   Collection,
+  DocsetLoadError,
   fetchDocsetBytes,
   rangeSupported,
   type DocsetSource,
@@ -268,19 +269,73 @@ function hideLoading(): void {
   document.getElementById("loading")?.classList.add("done");
 }
 
+// The UI language, captured as soon as bootstrap resolves it, so a failure that
+// happens deep in loading can still be reported in the right language (the bottom
+// catch has no `lang` in scope). Defaults to "en" for failures before that point.
+let bootLang = "en";
+
+/** The book a failed source names — its title if known, else the URL/label. */
+function errorName(e: DocsetLoadError): string {
+  return e.title || e.source;
+}
+
+/** Split a load failure into a headline, a human reason, and the source it hit. */
+function formatLoadError(
+  err: unknown,
+  s: Strings,
+): { headline: string; reason: string; source: string } {
+  if (err instanceof DocsetLoadError) {
+    return {
+      headline: s.loadFailed,
+      reason: s.loadErrorReason(err.kind, err.detail),
+      // Name the offending book: its title (if known) and the file/URL.
+      source: err.title ? `${err.title} — ${err.source}` : err.source,
+    };
+  }
+  const detail = err instanceof Error ? err.message : String(err);
+  return { headline: s.loadFailed, reason: detail, source: "" };
+}
+
 /** Surface a load failure in the (visible) cold-start panel, not the hidden #content. */
-function showLoadError(message: string): void {
+function showLoadError(err: unknown, opts: { more?: number } = {}): void {
   const box = document.getElementById("loading");
   if (!box) return;
   box.classList.remove("done");
+  box.classList.add("error");
   box.removeAttribute("hidden");
+  const s = strings(bootLang);
+  const { headline, reason, source } = formatLoadError(err, s);
   const titleEl = document.getElementById("loading-title");
-  if (titleEl) titleEl.textContent = "Failed to load";
+  if (titleEl) titleEl.textContent = headline;
   const nameEl = document.getElementById("loading-name");
-  if (nameEl) nameEl.textContent = message;
+  if (nameEl) {
+    nameEl.textContent =
+      opts.more && opts.more > 0
+        ? `${reason} ${s.loadErrorMore(opts.more)}`
+        : reason;
+  }
+  // Reuse the (now-freed) progress row's slot for the offending file/URL, muted.
   document.getElementById("loading-progress")?.remove();
   const pct = document.getElementById("loading-pct");
-  if (pct) pct.textContent = "";
+  if (pct) pct.textContent = source;
+}
+
+/** A non-blocking toast naming books that failed to load while others succeeded. */
+function showLoadWarnings(errors: DocsetLoadError[], s: Strings): void {
+  if (!errors.length) return;
+  const toast = document.createElement("div");
+  toast.className = "update-toast";
+  const msg = document.createElement("span");
+  msg.textContent = s.loadWarnSome(errors.map(errorName));
+  const dismiss = document.createElement("button");
+  dismiss.type = "button";
+  dismiss.className = "update-dismiss";
+  dismiss.setAttribute("aria-label", s.close);
+  dismiss.textContent = "×";
+  dismiss.addEventListener("click", () => toast.remove());
+  toast.append(msg, dismiss);
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 12000);
 }
 
 // Status-bar activity bar: reference-counted so overlapping fetches (a page body
@@ -510,6 +565,7 @@ async function bootstrap(): Promise<void> {
 
   const available = [...new Set(variants.map((v) => v.language))];
   const lang = chooseLang(available);
+  bootLang = lang; // so a later load failure reports in the chosen language
   document.documentElement.lang = lang;
   applyStatic(lang);
 
@@ -521,9 +577,22 @@ async function bootstrap(): Promise<void> {
 
   if (config.pwa) registerServiceWorker(strings(lang));
   else unregisterServiceWorker();
-  const collection = await Collection.load(sources, lang, (l, t, i, n) =>
-    setDownloadProgress(l, t, titles[i] ?? "", i, n, lang),
-  );
+  // A bad book is skipped, not fatal: collect per-source failures and keep loading
+  // the rest. Only an empty result (every book failed) blocks the app.
+  const loadErrors: DocsetLoadError[] = [];
+  const collection = await Collection.load(sources, lang, {
+    onProgress: (l, t, i, n) =>
+      setDownloadProgress(l, t, titles[i] ?? "", i, n, lang),
+    labels: titles,
+    onError: (e) => loadErrors.push(e),
+  });
+  if (!collection.books().length) {
+    // Nothing loaded — show the full error panel (naming the first failure).
+    showLoadError(loadErrors[0] ?? new Error("no docsets to show"), {
+      more: Math.max(0, loadErrors.length - 1),
+    });
+    return;
+  }
   start(
     collection,
     lang,
@@ -534,6 +603,8 @@ async function bootstrap(): Promise<void> {
     updates,
     variants,
   );
+  // Some books loaded but others failed — a non-blocking notice naming the bad ones.
+  if (loadErrors.length) showLoadWarnings(loadErrors, strings(lang));
 }
 
 /** Where a book came from + its packs — for the Manage docsets page. */
@@ -1138,10 +1209,22 @@ function start(
         collection.books().map((b) => [b.id, b.collection]),
       );
       const r = resolveVariants(variants, lang);
-      const next = await Collection.load(r.sources, lang);
+      // Switching version/language: a book that fails to load is skipped, not
+      // fatal. If the whole new set is unloadable, keep the current collection.
+      const rebuildErrors: DocsetLoadError[] = [];
+      const next = await Collection.load(r.sources, lang, {
+        labels: r.titles,
+        onError: (e) => rebuildErrors.push(e),
+      });
+      if (!next.books().length) {
+        next.close();
+        if (rebuildErrors.length) showLoadWarnings(rebuildErrors, s);
+        return;
+      }
       const prev = collection;
       collection = next;
       prev.close();
+      if (rebuildErrors.length) showLoadWarnings(rebuildErrors, s);
       langInfo = r.langInfo;
       versionInfo = r.versionInfo;
       verByCol = new Map(versionInfo.map((v) => [v.collection, v]));
@@ -3128,7 +3211,7 @@ function start(
 bootstrap().catch((err: unknown) => {
   // Show the failure in the (visible) cold-start panel — the #content overlay is
   // display:none until start() runs, which never happens on a bootstrap failure.
-  showLoadError(String(err));
+  showLoadError(err);
   // eslint-disable-next-line no-console
   console.error(err);
 });

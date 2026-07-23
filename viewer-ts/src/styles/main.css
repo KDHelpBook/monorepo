@@ -753,6 +753,19 @@ textarea {
   min-height: 14px;
   font-variant-numeric: tabular-nums;
 }
+/* Error state: red headline, and let the reason + offending URL wrap (the name
+   row is single-line/ellipsis for a book title, which a sentence would clip). */
+.loading.error .loading-title {
+  color: var(--danger);
+}
+.loading.error .loading-name {
+  white-space: normal;
+  max-width: 380px;
+}
+.loading.error .loading-pct {
+  max-width: 380px;
+  word-break: break-all;
+}
 
 /* Progress track + fill (early-2010s IDE look: inset track, glossy blue fill). */
 .progress {
@@ -1829,6 +1842,9 @@ textarea {
 :root[data-theme="dark"] .loading-name,
 :root[data-theme="dark"] .loading-pct {
   color: #8b98a9;
+}
+:root[data-theme="dark"] .loading.error .loading-title {
+  color: #ff9b9b;
 }
 :root[data-theme="dark"] .progress,
 :root[data-theme="dark"] .status-progress {
