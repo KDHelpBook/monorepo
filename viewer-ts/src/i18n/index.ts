@@ -27,6 +27,9 @@ export interface Strings {
   share: string;
   linkCopied: string;
   refreshing: string;
+  /** Cold-start loading panel: indeterminate title, and the determinate-download title. */
+  loadingHelp: string;
+  downloadingHelp: string;
   textSize: string;
   close: string;
   prevImage: string;
@@ -141,6 +144,8 @@ const en: Strings = {
   share: "Share…",
   linkCopied: "Link copied",
   refreshing: "Refreshing…",
+  loadingHelp: "Loading help…",
+  downloadingHelp: "Downloading help…",
   textSize: "Text size",
   close: "Close",
   prevImage: "Previous image",
@@ -247,6 +252,8 @@ const pl: Strings = {
   share: "Udostępnij…",
   linkCopied: "Skopiowano link",
   refreshing: "Odświeżanie…",
+  loadingHelp: "Wczytywanie pomocy…",
+  downloadingHelp: "Pobieranie pomocy…",
   textSize: "Rozmiar tekstu",
   close: "Zamknij",
   prevImage: "Poprzedni obraz",

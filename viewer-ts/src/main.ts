@@ -216,6 +216,112 @@ async function loadConfig(): Promise<Config> {
   return { externalSources: true, pwa: true };
 }
 
+// --- Loading / progress UI ------------------------------------------------
+// The #loading panel and #status-progress bar live in the static shell, so these
+// helpers run at module scope (before start() wires up the app) and address the
+// nodes directly. The cold-start panel covers the empty content area during the
+// initial docset download; the status bar shows a small activity bar while a
+// later background fetch (streamed page/asset/search) is in flight.
+
+/** A short human byte label ("1.4 MB" / "820 KB"), for downloads with no total. */
+function fmtBytes(n: number): string {
+  if (n >= 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  if (n >= 1024) return `${Math.round(n / 1024)} KB`;
+  return `${n} B`;
+}
+
+/** Drive the cold-start panel from a whole-file download's byte counts. */
+function setDownloadProgress(
+  loaded: number,
+  total: number | null,
+  title: string,
+  index: number,
+  count: number,
+  lang: string,
+): void {
+  const box = document.getElementById("loading");
+  if (!box || box.classList.contains("done")) return;
+  const s = strings(lang);
+  const titleEl = document.getElementById("loading-title");
+  if (titleEl) titleEl.textContent = s.downloadingHelp;
+  const nameEl = document.getElementById("loading-name");
+  if (nameEl) {
+    nameEl.textContent = count > 1 ? `${title} (${index + 1}/${count})` : title;
+  }
+  const prog = document.getElementById("loading-progress");
+  const bar = document.getElementById("loading-bar");
+  const pct = document.getElementById("loading-pct");
+  if (total != null && total > 0) {
+    const p = Math.min(100, Math.round((loaded / total) * 100));
+    prog?.classList.remove("indeterminate");
+    if (bar) bar.style.width = `${p}%`;
+    if (pct) pct.textContent = `${p}%`;
+  } else {
+    // No Content-Length (chunked/compressed): keep the animation, show bytes so far.
+    prog?.classList.add("indeterminate");
+    if (pct) pct.textContent = fmtBytes(loaded);
+  }
+}
+
+/** Hide the cold-start panel once the collection is ready to render. */
+function hideLoading(): void {
+  document.getElementById("loading")?.classList.add("done");
+}
+
+/** Surface a load failure in the (visible) cold-start panel, not the hidden #content. */
+function showLoadError(message: string): void {
+  const box = document.getElementById("loading");
+  if (!box) return;
+  box.classList.remove("done");
+  box.removeAttribute("hidden");
+  const titleEl = document.getElementById("loading-title");
+  if (titleEl) titleEl.textContent = "Failed to load";
+  const nameEl = document.getElementById("loading-name");
+  if (nameEl) nameEl.textContent = message;
+  document.getElementById("loading-progress")?.remove();
+  const pct = document.getElementById("loading-pct");
+  if (pct) pct.textContent = "";
+}
+
+// Status-bar activity bar: reference-counted so overlapping fetches (a page body
+// plus its assets) keep it up until the last finishes. A 150 ms reveal delay
+// means an instant in-memory read on a whole-file book never flashes it.
+let busyCount = 0;
+let busyTimer: ReturnType<typeof setTimeout> | null = null;
+
+function beginBusy(): void {
+  busyCount++;
+  if (busyCount === 1 && busyTimer == null) {
+    busyTimer = setTimeout(() => {
+      busyTimer = null;
+      if (busyCount > 0) {
+        document.getElementById("status-progress")?.removeAttribute("hidden");
+      }
+    }, 150);
+  }
+}
+
+function endBusy(): void {
+  busyCount = Math.max(0, busyCount - 1);
+  if (busyCount === 0) {
+    if (busyTimer != null) {
+      clearTimeout(busyTimer);
+      busyTimer = null;
+    }
+    document.getElementById("status-progress")?.setAttribute("hidden", "");
+  }
+}
+
+/** Run an async op with the status-bar activity bar flagged for its duration. */
+async function withBusy<T>(fn: () => Promise<T>): Promise<T> {
+  beginBusy();
+  try {
+    return await fn();
+  } finally {
+    endBusy();
+  }
+}
+
 async function bootstrap(): Promise<void> {
   const manifestRes = await fetch(fresh("docsets.json"));
   const manifest = (await manifestRes.json()) as Manifest;
@@ -407,13 +513,19 @@ async function bootstrap(): Promise<void> {
   document.documentElement.lang = lang;
   applyStatic(lang);
 
-  const { sources, langInfo, versionInfo } = resolveVariants(variants, lang);
+  const { sources, titles, langInfo, versionInfo } = resolveVariants(
+    variants,
+    lang,
+  );
   if (!sources.length) throw new Error("no docsets to show");
 
   if (config.pwa) registerServiceWorker(strings(lang));
   else unregisterServiceWorker();
+  const collection = await Collection.load(sources, lang, (l, t, i, n) =>
+    setDownloadProgress(l, t, titles[i] ?? "", i, n, lang),
+  );
   start(
-    await Collection.load(sources, lang),
+    collection,
     lang,
     available,
     config,
@@ -466,6 +578,8 @@ function resolveVariants(
   uiLang: string,
 ): {
   sources: DocsetSource[];
+  /** Book titles, index-aligned with `sources` — for the download progress panel. */
+  titles: string[];
   langInfo: CollectionLangInfo[];
   versionInfo: CollectionVersionInfo[];
 } {
@@ -501,7 +615,12 @@ function resolveVariants(
       versions,
       chosen: chosenByCol.get(collection)?.version ?? versions[0]!,
     }));
-  return { sources: shown.map((v) => v.source), langInfo, versionInfo };
+  return {
+    sources: shown.map((v) => v.source),
+    titles: shown.map((v) => v.title),
+    langInfo,
+    versionInfo,
+  };
 }
 
 /** Per-collection version availability for the Version switcher + Manage docsets. */
@@ -640,6 +759,9 @@ function start(
   variants: DocVariant[],
 ): void {
   const s: Strings = strings(lang);
+  // The collection is loaded and the UI is about to render — drop the cold-start
+  // download panel so the frame/TOC show through.
+  hideLoading();
   // Locked (bundled) builds hide the "open other docsets" affordances.
   if (!config.externalSources) {
     document
@@ -1201,38 +1323,45 @@ function start(
       return;
     }
     const token = ++searchSeq;
-    const results = await collection.search(q, 40);
-    if (token !== searchSeq) return; // superseded by a newer keystroke
-    if (!results.length) {
-      leftBody.innerHTML = `<div class="empty">${esc(s.noResults)}<br><b>${esc(q)}</b></div>`;
-      statusCount.textContent = s.searchResults(0);
-      return;
+    // Search reads FTS index pages — a streamed book fetches them over the
+    // network, so flag the status-bar activity bar while the query runs.
+    beginBusy();
+    try {
+      const results = await collection.search(q, 40);
+      if (token !== searchSeq) return; // superseded by a newer keystroke
+      if (!results.length) {
+        leftBody.innerHTML = `<div class="empty">${esc(s.noResults)}<br><b>${esc(q)}</b></div>`;
+        statusCount.textContent = s.searchResults(0);
+        return;
+      }
+      const terms = queryTerms(q);
+      const frag = document.createDocumentFragment();
+      for (const hit of results) {
+        const div = document.createElement("div");
+        div.className = "result";
+        div.innerHTML =
+          `<div class="r-title">${esc(hit.title)}</div>` +
+          `<div class="r-crumb">${crumb(hit.pageId)}</div>` +
+          `<div class="r-snip">${hit.snippet}</div>`;
+        // Opening a result highlights the query terms on the destination page.
+        div.addEventListener("click", (e) => {
+          highlightTerms = terms;
+          openPage(hit.pageId, wantNew(e));
+        });
+        div.addEventListener("auxclick", (e) => {
+          if (e.button !== 1) return;
+          e.preventDefault();
+          highlightTerms = terms;
+          openPage(hit.pageId, true);
+        });
+        frag.appendChild(div);
+      }
+      leftBody.innerHTML = "";
+      leftBody.appendChild(frag);
+      statusCount.textContent = s.searchResults(results.length);
+    } finally {
+      endBusy();
     }
-    const terms = queryTerms(q);
-    const frag = document.createDocumentFragment();
-    for (const hit of results) {
-      const div = document.createElement("div");
-      div.className = "result";
-      div.innerHTML =
-        `<div class="r-title">${esc(hit.title)}</div>` +
-        `<div class="r-crumb">${crumb(hit.pageId)}</div>` +
-        `<div class="r-snip">${hit.snippet}</div>`;
-      // Opening a result highlights the query terms on the destination page.
-      div.addEventListener("click", (e) => {
-        highlightTerms = terms;
-        openPage(hit.pageId, wantNew(e));
-      });
-      div.addEventListener("auxclick", (e) => {
-        if (e.button !== 1) return;
-        e.preventDefault();
-        highlightTerms = terms;
-        openPage(hit.pageId, true);
-      });
-      frag.appendChild(div);
-    }
-    leftBody.innerHTML = "";
-    leftBody.appendChild(frag);
-    statusCount.textContent = s.searchResults(results.length);
   }
 
   // ---- Full Search page (roomy results in the document area, help-viewer style) ----
@@ -1266,7 +1395,8 @@ function start(
 
   // Apply the scope/sort controls to a raw search over the whole collection.
   async function searchPageResults(query: string): Promise<SearchHit[]> {
-    let hits = await collection.search(query, 200);
+    // Streamed books fetch FTS index pages here — show the status-bar activity bar.
+    let hits = await withBusy(() => collection.search(query, 200));
     if (searchScope.category) {
       const allowed = new Set(collection.pagesByCategory(searchScope.category));
       hits = hits.filter((h) => allowed.has(h.pageId));
@@ -1897,43 +2027,51 @@ function start(
     const info = pages.get(id);
     // A streamed page body may take a round-trip; show the intended title now.
     status.textContent = s.ready;
-    const page = await collection.page(id);
-    if (token !== loadSeq) return; // a newer navigation superseded this one
-    const title = page?.title ?? info?.title ?? id;
-    if (page) {
-      // Build in a detached container (parent origin — full DOM access), then hand
-      // the serialized HTML to the sandboxed frame, which isolates the untrusted
-      // docset markup from the app's origin.
-      const holder = document.createElement("div");
-      holder.innerHTML = decorate(parkAssetUrls(page.bodyHtml), id);
-      stripDangerous(holder);
-      await resolveAssets(holder, id); // parked asset: → data: (may stream)
-      if (token !== loadSeq) return;
-      applyHighlight(holder);
-      enhanceCodeBlocks(holder); // filename bar + copy button
-      // The "On this page" nav is compiled into body_html; its `#slug` links route
-      // through rewriteFrameLinks like any in-page anchor.
-      rewriteFrameLinks(holder, id);
-      frame.srcdoc = frameDoc(holder.innerHTML);
-    } else {
-      frame.srcdoc = frameDoc(
-        `<h1>${esc(s.notFoundTitle)}</h1><p>${s.notFoundBody(esc(id))}</p>`,
-      );
+    // The page body (and its assets) may stream over the network — show the
+    // status-bar activity bar so a slow fetch doesn't look frozen.
+    beginBusy();
+    try {
+      const page = await collection.page(id);
+      if (token !== loadSeq) return; // a newer navigation superseded this one
+      const title = page?.title ?? info?.title ?? id;
+      if (page) {
+        // Build in a detached container (parent origin — full DOM access), then hand
+        // the serialized HTML to the sandboxed frame, which isolates the untrusted
+        // docset markup from the app's origin.
+        const holder = document.createElement("div");
+        holder.innerHTML = decorate(parkAssetUrls(page.bodyHtml), id);
+        stripDangerous(holder);
+        await resolveAssets(holder, id); // parked asset: → data: (may stream)
+        if (token !== loadSeq) return;
+        applyHighlight(holder);
+        enhanceCodeBlocks(holder); // filename bar + copy button
+        // The "On this page" nav is compiled into body_html; its `#slug` links route
+        // through rewriteFrameLinks like any in-page anchor.
+        rewriteFrameLinks(holder, id);
+        frame.srcdoc = frameDoc(holder.innerHTML);
+      } else {
+        frame.srcdoc = frameDoc(
+          `<h1>${esc(s.notFoundTitle)}</h1><p>${s.notFoundBody(esc(id))}</p>`,
+        );
+      }
+      // Hide the app-UI overlay so the (always-visible) frame shows through.
+      content.style.display = "none";
+      document.title = `${title} — KD Help Book`;
+      const { docsetId, localId } = collection.split(id);
+      address.value = `khb://${docsetId}/${localId}.htm`;
+      renderTabs();
+      updateFavBtn();
+      if (mode === "contents") revealCurrent();
+      else highlightTree();
+      // Reflect the current page in the URL for deep-linking/bookmarking, but with
+      // replaceState so it doesn't build a *browser* history that would fight the
+      // per-tab Back/Forward (the toolbar buttons own navigation now).
+      if (location.hash.slice(1) !== id)
+        history.replaceState(null, "", `#${id}`);
+      status.textContent = s.ready;
+    } finally {
+      endBusy();
     }
-    // Hide the app-UI overlay so the (always-visible) frame shows through.
-    content.style.display = "none";
-    document.title = `${title} — KD Help Book`;
-    const { docsetId, localId } = collection.split(id);
-    address.value = `khb://${docsetId}/${localId}.htm`;
-    renderTabs();
-    updateFavBtn();
-    if (mode === "contents") revealCurrent();
-    else highlightTree();
-    // Reflect the current page in the URL for deep-linking/bookmarking, but with
-    // replaceState so it doesn't build a *browser* history that would fight the
-    // per-tab Back/Forward (the toolbar buttons own navigation now).
-    if (location.hash.slice(1) !== id) history.replaceState(null, "", `#${id}`);
-    status.textContent = s.ready;
   }
 
   function openPage(id: string, newTab = false): void {
@@ -2988,9 +3126,9 @@ function start(
 
 // ---------------------------------------------------------------------------
 bootstrap().catch((err: unknown) => {
-  const content = document.querySelector("#content");
-  if (content)
-    content.innerHTML = `<h1>Failed to load</h1><pre>${String(err)}</pre>`;
+  // Show the failure in the (visible) cold-start panel — the #content overlay is
+  // display:none until start() runs, which never happens on a bootstrap failure.
+  showLoadError(String(err));
   // eslint-disable-next-line no-console
   console.error(err);
 });

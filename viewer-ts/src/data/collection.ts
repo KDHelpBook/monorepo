@@ -47,9 +47,56 @@ function isStreaming(s: DocsetSource): s is StreamingSource {
   return "mode" in s && s.mode === "streaming";
 }
 
-export async function fetchDocsetBytes(url: string): Promise<Uint8Array> {
+/**
+ * Report download progress: `loaded` bytes received so far, `total` from the
+ * `Content-Length` header (null when the server omits it — chunked/compressed).
+ * For a gzip'd docset the counts are the *compressed* size, so the percentage is
+ * against the transferred bytes — still a monotonic 0→100 %.
+ */
+export type DownloadProgress = (loaded: number, total: number | null) => void;
+
+/**
+ * Collection-load progress: the current whole-file download's byte counts, plus
+ * which source it is (`index`) and how many sources load in all (`count`) — so a
+ * UI can name the book and show `(2/3)`. Streaming sources report nothing.
+ */
+export type LoadProgress = (
+  loaded: number,
+  total: number | null,
+  index: number,
+  count: number,
+) => void;
+
+export async function fetchDocsetBytes(
+  url: string,
+  onProgress?: DownloadProgress,
+): Promise<Uint8Array> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  // With a progress callback, stream the body so we can count bytes as they
+  // arrive; without one (or without a readable body), the one-shot buffer is fine.
+  if (onProgress && res.body) {
+    const header = res.headers.get("Content-Length");
+    const total = header ? Number(header) : null;
+    const reader = res.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let loaded = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      loaded += value.length;
+      // A server may under-report Content-Length vs the real body; never show >total.
+      onProgress(loaded, total != null && total >= loaded ? total : null);
+    }
+    const bytes = new Uint8Array(loaded);
+    let at = 0;
+    for (const c of chunks) {
+      bytes.set(c, at);
+      at += c.length;
+    }
+    return bytes[0] === 0x1f && bytes[1] === 0x8b ? await gunzip(bytes) : bytes;
+  }
   const bytes = new Uint8Array(await res.arrayBuffer());
   return bytes[0] === 0x1f && bytes[1] === 0x8b ? await gunzip(bytes) : bytes;
 }
@@ -97,20 +144,27 @@ export class Collection {
   static async load(
     sources: DocsetSource[],
     language: string,
+    onProgress?: LoadProgress,
   ): Promise<Collection> {
     const docsets: IDocset[] = [];
+    const count = sources.length;
     // One wa-sqlite engine backs every book — streamed over Range or whole-file from
     // memory. Code-split so it loads once, on first docset open, not in the app shell.
     const { StreamingDocset } = await import("./streaming-docset");
-    for (const src of sources) {
+    for (let index = 0; index < sources.length; index++) {
+      const src = sources[index]!;
       if (isStreaming(src)) {
         docsets.push(
           await StreamingDocset.open(src.url, src.attachments ?? []),
         );
         continue;
       }
+      // Only a whole-file fetch has bytes to count; in-memory sources are instant.
+      const report: DownloadProgress | undefined = onProgress
+        ? (loaded, total) => onProgress(loaded, total, index, count)
+        : undefined;
       const bytes =
-        "bytes" in src ? src.bytes : await fetchDocsetBytes(src.file);
+        "bytes" in src ? src.bytes : await fetchDocsetBytes(src.file, report);
       const attachmentBytes: Uint8Array[] = [];
       for (const a of src.attachments ?? []) {
         attachmentBytes.push(
