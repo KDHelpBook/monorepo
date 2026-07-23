@@ -8,7 +8,7 @@
       "collection": "khb-docs",
       "version": "0.1.0",
       "streaming": true,
-      "hash": "12c1a5bd4e3c1464"
+      "hash": "d0c7f8319265e1d1"
     },
     {
       "file": "docsets/khb-internals.khb",
@@ -28,7 +28,7 @@
       "collection": "khb-docs",
       "version": "0.1.0",
       "streaming": true,
-      "hash": "770726fd5fe8ab63"
+      "hash": "079711d4e1332103"
     }
   ]
 }

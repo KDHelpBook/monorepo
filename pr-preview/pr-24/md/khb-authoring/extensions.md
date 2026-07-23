@@ -189,6 +189,61 @@ Compile with `khb compile examples/ext-swatch -o swatch.khb --allow-extensions`,
 block becomes a three-row table — each row a colour name, its rendered swatch, and its hex —
 with the SVGs stored in the book under `assets/ext/swatch/…`.
 
+## A second example: the widget this guide runs on
+
+The built-in `~~~code-preview example` widget shows a snippet's **source** next to its
+**rendered result** — but as two separate blocks, so authors write the snippet twice. This
+very guide avoids that with an `ext:example` extension (`docs/authoring/tools/example.py`):
+you write the snippet **once** and the tool emits the widget with both halves filled in.
+
+It's a nice illustration of *when* extensions run — **before** the built-in widgets. The
+Markdown it returns is a `~~~code-preview example` block, which the widget chain then expands
+exactly as if you'd hand-written it. `meta` carries an optional source language (default
+`md`) and/or `split` (source and result side by side).
+
+```python [tools/example.py]
+#!/usr/bin/env python3
+import json, re, sys
+
+def fence(ch, text, minimum=3):
+    longest = max((len(m.group()) for m in re.finditer(re.escape(ch) + "+", text)), default=0)
+    return ch * max(minimum, longest + 1)
+
+req  = json.load(sys.stdin)
+body = req["body"].rstrip("\n")
+opts = req["meta"].split()
+skin = "example split" if "split" in opts else "example"
+lang = next((o for o in opts if o != "split"), "md")
+
+bt = fence("`", body)        # inner code fences, sized to the body
+td = fence("~", bt + body)   # outer fence, longer than any tilde run inside
+json.dump({"markdown":
+    f"{td}code-preview {skin}\n"
+    f"{bt}{lang}\n{body}\n{bt}\n"   # source, shown as code
+    f"{bt}md\n{body}\n{bt}\n"       # result, rendered as Markdown
+    f"{td}\n"}, sys.stdout)
+```
+
+Declared in this guide's manifest:
+
+```toml [docset.toml]
+[extensions.example]
+command = "./tools/example.py"
+```
+
+So every source-plus-result box in these pages is written as just:
+
+````md
+```ext:example
+> [!TIP]
+> Written once — shown as source *and* rendered.
+```
+````
+
+Unlike `swatch`, it generates no assets — it only rewrites Markdown. (This is also why
+`code-blocks.md`, which *documents* the raw `~~~code-preview` syntax, keeps writing it by
+hand: an extension that emits that widget can't also show its literal source.)
+
 ## Referencing files
 
 A block often points the tool at another file — say a source file to compile:
