@@ -2208,7 +2208,9 @@ function start(
   // script-stripped and can't know the nonce, so no untrusted JS can run. `for-print`
   // bakes in the paper adaptations (styles/content.css). The snippet prints from inside
   // the document's own load — mobile-friendly, since a programmatic print from the
-  // *opener* trips iOS Safari's "did not finish loading" prompt — then closes the tab.
+  // *opener* trips iOS Safari's "did not finish loading" prompt. It deliberately does NOT
+  // auto-close the tab: Android Chrome fires `afterprint` before the print UI finishes
+  // loading, so closing on it tore the tab down mid-print; the user closes it instead.
   const buildPrintDoc = (bodyHtml: string, title: string): string => {
     const nonce = Array.from(
       crypto.getRandomValues(new Uint8Array(16)),
@@ -2216,7 +2218,6 @@ function start(
     ).join("");
     const selfPrint =
       `addEventListener('load',function(){` +
-      `addEventListener('afterprint',function(){try{close()}catch(e){}});` +
       `setTimeout(function(){try{print()}catch(e){}},200)});`;
     return (
       `<!doctype html><html class="for-print"><head><meta charset="utf-8">` +
