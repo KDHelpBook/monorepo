@@ -4315,6 +4315,59 @@ A generated file at `assets_dir/out.svg` becomes the asset
 `assets/` files or with other blocks. Reference it in the returned Markdown exactly as
 `asset_prefix` + `out.svg`, and it resolves like any other image.
 
+## A complete example
+
+`swatch` is a real, runnable extension: it turns a block of `Name: #hex` lines into a table
+with a generated SVG colour swatch per entry — the "example plus visualization" pattern in
+miniature. The full example docset (tool, manifest, page) is in `compiler/examples/ext-swatch/`.
+
+The tool — any executable in any language works; this one is a ~25-line Python script:
+
+```python [swatch.py]
+#!/usr/bin/env python3
+import json, os, re, sys
+
+req = json.load(sys.stdin)
+rows, assets = [], []
+for i, line in enumerate(l for l in req["body"].splitlines() if l.strip()):
+    m = re.match(r"\s*(.+?)\s*[:=]\s*(#[0-9a-fA-F]{3,8})\s*$", line)
+    if not m:
+        sys.exit(f"swatch: cannot parse line {line!r}")
+    name, color = m.group(1), m.group(2)
+    file = f"swatch-{i}.svg"
+    with open(os.path.join(req["assets_dir"], file), "w") as f:
+        f.write(f"<svg xmlns='http://www.w3.org/2000/svg' width='48' height='24'>"
+                f"<rect width='48' height='24' rx='4' fill='{color}'/></svg>")
+    assets.append({"file": file})
+    rows.append(f"| {name} | ![{name}]({req['asset_prefix']}{file}) | `{color}` |")
+
+json.dump({
+    "markdown": "| Colour | Swatch | Hex |\n|---|---|---|\n" + "\n".join(rows) + "\n",
+    "assets": assets,
+}, sys.stdout)
+```
+
+Declare it (a source-relative command, so the docset ships its own tool):
+
+```toml [docset.toml]
+[extensions.swatch]
+command = "./swatch.py"
+```
+
+Use it on a page:
+
+````md
+```ext:swatch
+Coral: #ff7f50
+Teal: #008080
+Slate: #334155
+```
+````
+
+Compile with `khb compile examples/ext-swatch -o swatch.khb --allow-extensions`, and the
+block becomes a three-row table — each row a colour name, its rendered swatch, and its hex —
+with the SVGs stored in the book under `assets/ext/swatch/…`.
+
 ## Referencing files
 
 A block often points the tool at another file — say a source file to compile:
