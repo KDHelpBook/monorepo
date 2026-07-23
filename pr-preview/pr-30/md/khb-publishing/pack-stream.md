@@ -63,6 +63,16 @@ When the toggle is on, a streamed book is used immediately **and** downloaded
 whole in the background; the whole copy is cached in the browser (IndexedDB,
 keyed by content hash) and the open book is **hot-swapped** to it with no reload.
 Later visits open straight from that cache — instant and offline — until a new
-build changes the content hash. It's a per-device user choice: `--prefetch` only
-sets the **default**, and a reader can flip it either way. Off (the default
-without the flag) keeps the pure page-by-page streaming behaviour.
+build changes the content hash. It caches the **whole book and all its attachment
+packs**, so images and downloads come with it — a prefetched book is fully
+offline. It's a per-device user choice: `--prefetch` only sets the **default**,
+and a reader can flip it either way. Off (the default without the flag) keeps the
+pure page-by-page streaming behaviour.
+
+To turn the feature off entirely — hide the toggle and never prefetch, whatever a
+reader chose — pack with `--no-prefetch` (for sites that don't want the offline
+cache, e.g. metered bandwidth):
+
+```bash
+khb pack … --stream --no-prefetch
+```
