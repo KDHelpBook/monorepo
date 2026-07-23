@@ -2863,10 +2863,18 @@ function start(
   })();
 
   // Panel wiring
-  // ☰ (mobile) toggles the drawer.
-  $("#btn-pane").addEventListener("click", () =>
-    win.classList.contains("flyout") ? retract() : flyout(),
-  );
+  // ☰ toggles the panel. Compact (phones/short screens): the slide-in drawer.
+  // Non-compact touch tablets: collapse the docked sidebar in place (content fills
+  // the width) — a touch-usable substitute for the hover-only pushpin auto-hide.
+  const btnPane = $("#btn-pane");
+  btnPane.addEventListener("click", () => {
+    if (narrow()) {
+      win.classList.contains("flyout") ? retract() : flyout();
+    } else {
+      const collapsed = win.classList.toggle("nav-collapsed");
+      btnPane.setAttribute("aria-expanded", String(!collapsed));
+    }
+  });
   // 📌 toggles dock <-> auto-hide.
   pinBtn.addEventListener("click", () => {
     pinned = !pinned;
