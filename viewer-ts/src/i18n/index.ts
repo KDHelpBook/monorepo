@@ -29,6 +29,17 @@ export interface Strings {
   about: string;
   share: string;
   linkCopied: string;
+  /** File-menu label for copying the current page's LLM-oriented links. */
+  copyLlmLinks: string;
+  /** Status-bar confirmation after the LLM links are copied. */
+  llmLinksCopied: string;
+  /** The multi-line block placed on the clipboard, localized to the UI language. */
+  llmClipboard: (
+    title: string,
+    mdUrl: string,
+    pageUrl: string,
+    indexUrl: string,
+  ) => string;
   refreshing: string;
   /** Cold-start loading panel: indeterminate title, and the determinate-download title. */
   loadingHelp: string;
@@ -162,6 +173,11 @@ const en: Strings = {
   about: "About KD Help Book",
   share: "Share…",
   linkCopied: "Link copied",
+  copyLlmLinks: "Copy links for LLMs",
+  llmLinksCopied: "LLM links copied",
+  llmClipboard: (title, mdUrl, pageUrl, indexUrl) =>
+    `${title}\n\nMarkdown: ${mdUrl}\nPage: ${pageUrl}\n\n` +
+    `The full documentation index is available at ${indexUrl}\n`,
   refreshing: "Refreshing…",
   loadingHelp: "Loading help…",
   downloadingHelp: "Downloading help…",
@@ -294,6 +310,11 @@ const pl: Strings = {
   about: "O programie KD Help Book",
   share: "Udostępnij…",
   linkCopied: "Skopiowano link",
+  copyLlmLinks: "Kopiuj linki dla LLM",
+  llmLinksCopied: "Skopiowano linki dla LLM",
+  llmClipboard: (title, mdUrl, pageUrl, indexUrl) =>
+    `${title}\n\nMarkdown: ${mdUrl}\nStrona: ${pageUrl}\n\n` +
+    `Pełny indeks dokumentacji dostępny jest pod adresem ${indexUrl}\n`,
   refreshing: "Odświeżanie…",
   loadingHelp: "Wczytywanie pomocy…",
   downloadingHelp: "Pobieranie pomocy…",
