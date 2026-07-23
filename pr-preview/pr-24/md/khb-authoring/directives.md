@@ -4,11 +4,18 @@
 A **directive** is a fenced container that wraps other Markdown in a labelled box.
 Open with three or more colons and a name, then close with a matching row of colons:
 
+~~~code-preview example
 ```md
 :::tip
 You can nest **Markdown**, lists, and `code` inside a directive.
 :::
 ```
+```md
+:::tip
+You can nest **Markdown**, lists, and `code` inside a directive.
+:::
+```
+~~~
 
 The compiler turns `:::name … :::` into `<div class="name">`, and the viewer styles a
 curated set of names. The name is HTML-escaped when it becomes the class, so directive
@@ -157,6 +164,7 @@ connector line, with room for rich content under each step:
 To put a directive inside another, give the **outer** fence more colons than the inner
 one:
 
+~~~code-preview example
 ```md
 ::::card
 A card with a callout inside it:
@@ -166,6 +174,16 @@ Nested with three colons; the card uses four.
 :::
 ::::
 ```
+```md
+::::card
+A card with a callout inside it:
+
+:::tip
+Nested with three colons; the card uses four.
+:::
+::::
+```
+~~~
 
 ## Notes for KD Help Book
 

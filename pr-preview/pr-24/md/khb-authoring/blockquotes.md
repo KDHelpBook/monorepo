@@ -52,6 +52,7 @@ A plain blockquote stays neutral. For a coloured, labelled box (note / tip / war
 alert marker. (A **[directive](directives.md)** like `:::tip` is an interchangeable
 alternative.)
 
+~~~code-preview example
 ```md
 > [!NOTE]
 > Useful information the reader should know.
@@ -59,6 +60,14 @@ alternative.)
 > [!WARNING]
 > Something that needs attention.
 ```
+```md
+> [!NOTE]
+> Useful information the reader should know.
+
+> [!WARNING]
+> Something that needs attention.
+```
+~~~
 
 The `[!TYPE]` marker must be **uppercase and alone on the first line**; anything else
 renders as a plain blockquote. A callout can hold multiple paragraphs, lists, and code

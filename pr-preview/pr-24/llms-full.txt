@@ -981,6 +981,7 @@ A plain blockquote stays neutral. For a coloured, labelled box (note / tip / war
 alert marker. (A **[directive](md/khb-authoring/directives.md)** like `:::tip` is an interchangeable
 alternative.)
 
+~~~code-preview example
 ```md
 > [!NOTE]
 > Useful information the reader should know.
@@ -988,6 +989,14 @@ alternative.)
 > [!WARNING]
 > Something that needs attention.
 ```
+```md
+> [!NOTE]
+> Useful information the reader should know.
+
+> [!WARNING]
+> Something that needs attention.
+```
+~~~
 
 The `[!TYPE]` marker must be **uppercase and alone on the first line**; anything else
 renders as a plain blockquote. A callout can hold multiple paragraphs, lists, and code
@@ -1087,11 +1096,18 @@ strongest signal — save it for cases where acting wrongly does real damage.
 A **directive** is a fenced container that wraps other Markdown in a labelled box.
 Open with three or more colons and a name, then close with a matching row of colons:
 
+~~~code-preview example
 ```md
 :::tip
 You can nest **Markdown**, lists, and `code` inside a directive.
 :::
 ```
+```md
+:::tip
+You can nest **Markdown**, lists, and `code` inside a directive.
+:::
+```
+~~~
 
 The compiler turns `:::name … :::` into `<div class="name">`, and the viewer styles a
 curated set of names. The name is HTML-escaped when it becomes the class, so directive
@@ -1240,6 +1256,7 @@ connector line, with room for rich content under each step:
 To put a directive inside another, give the **outer** fence more colons than the inner
 one:
 
+~~~code-preview example
 ```md
 ::::card
 A card with a callout inside it:
@@ -1249,6 +1266,16 @@ Nested with three colons; the card uses four.
 :::
 ::::
 ```
+```md
+::::card
+A card with a callout inside it:
+
+:::tip
+Nested with three colons; the card uses four.
+:::
+::::
+```
+~~~
 
 ## Notes for KD Help Book
 
@@ -1589,11 +1616,18 @@ pure-Rust engine bundled into the compiler, so no Graphviz install is needed.
 Footnotes work exactly as on GitHub. Place a reference
 `[^id]` in the text and define it anywhere in the page.
 
+~~~code-preview example
 ```md
 KD Help Book stores rendered HTML, never the source Markdown[^format].
 
 [^format]: The optional `md` column is an enrichment for AI export, not the render.
 ```
+```md
+KD Help Book stores rendered HTML, never the source Markdown[^format].
+
+[^format]: The optional `md` column is an enrichment for AI export, not the render.
+```
+~~~
 
 Renders with a numbered marker[^demo] and a collected list of notes at the foot of the
 page — definitions are gathered into that footnotes section regardless of where you
