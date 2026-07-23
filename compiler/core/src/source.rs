@@ -190,14 +190,7 @@ fn load_extensions(dir: &Path, tables: BTreeMap<String, ExtensionToml>) -> Resul
         if table.command.is_empty() {
             bail!("extension `{name}` has an empty `command`");
         }
-        let looks_like_path = table.command.contains('/')
-            || table.command.contains('\\')
-            || table.command.starts_with('.');
-        let command = if looks_like_path {
-            dir.join(&table.command).to_string_lossy().into_owned()
-        } else {
-            table.command
-        };
+        let command = resolve_extension_command(dir, &table.command);
         extensions.push(Extension {
             name,
             command,
@@ -205,6 +198,26 @@ fn load_extensions(dir: &Path, tables: BTreeMap<String, ExtensionToml>) -> Resul
         });
     }
     Ok(extensions)
+}
+
+/// Resolve an extension's `command`. A bare name (`khb-label`) is left for `PATH` lookup. A
+/// path (contains a separator or starts with `.`) is made **absolute** against the source
+/// dir — so it runs no matter the child's working directory, which is the page's own folder
+/// (a relative program path would otherwise resolve against that folder and be missed).
+fn resolve_extension_command(dir: &Path, command: &str) -> String {
+    let looks_like_path =
+        command.contains('/') || command.contains('\\') || command.starts_with('.');
+    if !looks_like_path {
+        return command.to_string();
+    }
+    let rel = command.strip_prefix("./").unwrap_or(command);
+    let joined = dir.join(rel);
+    let abs = if joined.is_absolute() {
+        joined
+    } else {
+        std::env::current_dir().unwrap_or_default().join(joined)
+    };
+    abs.to_string_lossy().into_owned()
 }
 
 /// Collect every file under `assets/` into an [`Asset`], keyed by its docset-relative
@@ -473,6 +486,28 @@ mod tests {
         let chart = src.extensions.iter().find(|e| e.name == "chart").unwrap();
         assert!(chart.command.ends_with("tools/chart"));
         assert!(Path::new(&chart.command).is_absolute());
+    }
+
+    #[test]
+    fn extension_command_resolves_to_absolute() {
+        // A bare name is left for PATH lookup.
+        assert_eq!(
+            resolve_extension_command(Path::new("some/dir"), "khb-label"),
+            "khb-label"
+        );
+        // A *relative* source dir + a relative command → an absolute path, so the tool runs
+        // even though the child's cwd is the page folder (the bug the swatch example hit).
+        let out = resolve_extension_command(Path::new("examples/demo"), "./tool.sh");
+        assert!(
+            Path::new(&out).is_absolute(),
+            "expected absolute, got {out}"
+        );
+        assert!(out.ends_with("examples/demo/tool.sh"), "got {out}");
+        // An absolute source dir is used as-is.
+        assert_eq!(
+            resolve_extension_command(Path::new("/opt/docs"), "./bin/gen"),
+            "/opt/docs/bin/gen"
+        );
     }
 
     #[test]
