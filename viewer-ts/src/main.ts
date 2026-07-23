@@ -2597,23 +2597,33 @@ function start(
       return;
     }
     if (!printSourceHtml) return;
-    // Open the page as a standalone print document. window.open runs synchronously in the
-    // click gesture so it isn't pop-up-blocked. The document self-prints and closes itself
-    // via its own CSP-nonce'd script (see buildPrintDoc) — this works on desktop and on
-    // mobile, where driving print from the opener trips iOS Safari's "did not finish
-    // loading" prompt.
-    const url = URL.createObjectURL(
-      new Blob([buildPrintDoc(printSourceHtml, document.title)], {
-        type: "text/html",
-      }),
-    );
-    const w = window.open(url, "_blank");
-    if (!w) {
-      URL.revokeObjectURL(url);
-      status.textContent = s.printPopupBlocked;
-      return;
+    // Open the page as a standalone print document that self-prints via its own
+    // CSP-nonce'd script (see buildPrintDoc). window.open runs synchronously in the click
+    // gesture so it isn't pop-up-blocked.
+    const html = buildPrintDoc(printSourceHtml, document.title);
+    if (/Android/i.test(navigator.userAgent)) {
+      // Android Chrome's print preview can't load a blob: URL — it fails with "a problem
+      // occurred while printing" — so write the document straight into the new tab.
+      const w = window.open("", "_blank");
+      if (!w) {
+        status.textContent = s.printPopupBlocked;
+        return;
+      }
+      w.document.open();
+      w.document.write(html);
+      w.document.close();
+    } else {
+      // iOS Safari (verified) and desktop print a blob: URL fine, and it keeps the
+      // untrusted markup out of an app-origin document.write.
+      const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+      const w = window.open(url, "_blank");
+      if (!w) {
+        URL.revokeObjectURL(url);
+        status.textContent = s.printPopupBlocked;
+        return;
+      }
+      window.setTimeout(() => URL.revokeObjectURL(url), 60000);
     }
-    window.setTimeout(() => URL.revokeObjectURL(url), 60000);
   }
 
   // Share the current page's deep link via the OS share sheet, falling back to
