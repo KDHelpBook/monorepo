@@ -2210,6 +2210,8 @@ function start(
     `<!doctype html><html class="for-print"><head><meta charset="utf-8">` +
     `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; form-action 'none'">` +
     `<meta name="referrer" content="no-referrer">` +
+    // Empty inline favicon so the tab doesn't fire a (CSP-blocked) /favicon.ico request.
+    `<link rel="icon" href="data:,">` +
     `<title>${esc(title)}</title>` +
     `<style>${contentCss}\n${syntaxCss}</style>` +
     `</head><body class="content">${bodyHtml}</body></html>`;
@@ -2581,7 +2583,7 @@ function start(
     if (!printSourceHtml) return;
     // Open the page as a standalone print document. window.open runs synchronously in the
     // click gesture so it isn't pop-up-blocked; the blob: URL is same-origin (its CSP
-    // blocks all scripts), so we can auto-print it and close the tab when done.
+    // blocks all scripts).
     const url = URL.createObjectURL(
       new Blob([buildPrintDoc(printSourceHtml, document.title)], {
         type: "text/html",
@@ -2593,22 +2595,26 @@ function start(
       status.textContent = s.printPopupBlocked;
       return;
     }
-    w.addEventListener("load", () => {
-      // Close the throwaway tab once its print dialog is dismissed (desktop). Mobile
-      // browsers may ignore auto-print and print from their own menu; the tab then stays.
-      w.addEventListener("afterprint", () => {
+    // Desktop: auto-open the print dialog, then close the throwaway tab. Touch devices are
+    // left to the browser's own Share/Print — iOS Safari shows a spurious "did not finish
+    // loading" prompt for a programmatic print on a fresh tab, and the page is already
+    // fully laid out for the user to print.
+    if (!coarsePointer) {
+      w.addEventListener("load", () => {
+        w.addEventListener("afterprint", () => {
+          try {
+            w.close();
+          } catch {
+            /* ignore */
+          }
+        });
         try {
-          w.close();
+          w.print();
         } catch {
-          /* ignore */
+          /* let the user print from the browser menu */
         }
       });
-      try {
-        w.print();
-      } catch {
-        /* let the user print from the browser menu */
-      }
-    });
+    }
     window.setTimeout(() => URL.revokeObjectURL(url), 60000);
   }
 
