@@ -1,0 +1,23 @@
+{
+  "name": "khb-registry",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Central .khb docs registry: OIDC publish from GitHub Actions, Range streaming from R2, dynamic docsets.json.",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "jose": "^5.9.6"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.8.19",
+    "@cloudflare/workers-types": "^4.20250906.0",
+    "typescript": "^5.6.3",
+    "vitest": "~3.0.9",
+    "wrangler": "~4.35.0"
+  }
+}

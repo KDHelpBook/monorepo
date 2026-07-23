@@ -54,6 +54,12 @@ A `.khbm` describes **what** the docsets are, not **how** to fetch them: there i
 no `streaming` field. Whether an imported book streams page-by-page or fetches
 whole is the reader's auto-negotiated choice (host `Range` support, file size).
 
+There is also deliberately **no `folders` field** (the nested TOC grouping a
+`docsets.json` may carry): a `.khbm` lists URLs, and the collection ids folders
+group by are only known after each book is fetched — besides, imported books are
+*remote* sources, which render at the TOC root by rule. Folders belong to the
+site shipping the manifest, not to an import.
+
 > [!NOTE]
 > The docsets a `.khbm` points at are fetched by the reader's **browser**, so a
 > manifest hosted on another origin needs CORS on the files it names — see

@@ -40,10 +40,17 @@ import {
   saveTheme,
   type ThemeMode,
 } from "./data/uistate";
+import {
+  applyFolders,
+  folderCollections,
+  sanitizeFolders,
+  SHELF_PREFIX,
+} from "./data/folders";
 import { languagesByCollection, pickLanguages } from "./data/langselect";
 import {
   resolveManifestUrl,
   streamEligible,
+  type FolderNode,
   type Manifest,
 } from "./data/manifest";
 import {
@@ -185,7 +192,7 @@ const LANG_KEY = "khb.lang";
 function readSavedLang(): string | null {
   try {
     return localStorage.getItem(LANG_KEY);
-  } catch {
+  } catch (e) {
     return null;
   }
 }
@@ -211,7 +218,7 @@ async function loadConfig(): Promise<Config> {
   try {
     const res = await fetch(fresh("config.json"));
     if (res.ok) return (await res.json()) as Config;
-  } catch {
+  } catch (e) {
     /* no config.json → defaults */
   }
   return { externalSources: true, pwa: true };
@@ -418,8 +425,10 @@ async function bootstrap(): Promise<void> {
               attachments: entry.attachments,
             });
             streamed = true;
-          } catch {
-            /* streaming open failed despite Range — fall back to a whole fetch */
+          } catch (e) {
+            // Fall back to a whole fetch — but say why, or a host/engine bug
+            // hides behind a silently slower load.
+            console.warn("khb: streaming open failed, fetching whole", e);
           }
         }
         if (!streamed) {
@@ -438,7 +447,7 @@ async function bootstrap(): Promise<void> {
             attachments: entry.attachments, // fetched whole alongside the .khb
           });
         }
-      } catch {
+      } catch (e) {
         /* unreachable/invalid remote — skip; the user can remove it */
       }
     }
@@ -487,8 +496,9 @@ async function bootstrap(): Promise<void> {
             resolveManifestUrl(p, document.baseURI),
           ),
         };
-      } catch {
-        /* streaming open failed despite Range — fall back to a whole fetch */
+      } catch (e) {
+        // Same fallback as remotes: whole fetch, with the reason logged.
+        console.warn("khb: streaming open failed, fetching whole", e);
       }
     }
     bundled.push({
@@ -605,6 +615,7 @@ async function bootstrap(): Promise<void> {
     versionInfo,
     updates,
     variants,
+    sanitizeFolders(manifest.folders),
     failed,
   );
   // Some books loaded but others failed — a non-blocking notice naming the bad ones.
@@ -843,6 +854,7 @@ function start(
   versionInfo: CollectionVersionInfo[],
   updates: { title: string; from: string; to: string }[],
   variants: DocVariant[],
+  folders: FolderNode[],
   failed: FailedBook[],
 ): void {
   const s: Strings = strings(lang);
@@ -1004,6 +1016,20 @@ function start(
   let verByCol = new Map(versionInfo.map((v) => [v.collection, v]));
   let langByCol = new Map(langInfo.map((l) => [l.collection, l]));
   let switchableCols = new Set([...verByCol.keys(), ...langByCol.keys()]);
+  // A family placed in a manifest folder must render as a folder even when it is
+  // the only family loaded — force its `@collection:` wrapper, then re-parent the
+  // family roots into `@shelf:` nodes per the manifest's folders tree.
+  const folderCols = folderCollections(folders);
+  const computeToc = (): TocNode[] => {
+    const forced = new Set([
+      ...switchableCols,
+      ...collection
+        .families()
+        .map((f) => f.id)
+        .filter((id) => folderCols.has(id)),
+    ]);
+    return applyFolders(collection.tocTree(forced), folders, lang);
+  };
   // A synthetic, clickable top-level leaf per failed book (`@failed:<id>`) — it
   // registers in `pages` like any leaf and opens a reason page (see loadContent).
   const failedTocNodes = (): TocNode[] =>
@@ -1012,7 +1038,7 @@ function start(
       title: f.variant.title,
       children: [],
     }));
-  let toc = [...collection.tocTree(switchableCols), ...failedTocNodes()];
+  let toc = [...computeToc(), ...failedTocNodes()];
 
   // (Re)build the page-info and keyword maps from the current `collection`/`toc`.
   function buildPages(nodes: TocNode[], path: string[]): void {
@@ -1051,6 +1077,10 @@ function start(
   // A stack of books for a product/family folder.
   const groupIcon = (): string =>
     '<svg class="ico" viewBox="0 0 16 16"><rect x="2.2" y="2.5" width="3.2" height="11" rx=".4" fill="#7fa8dd" stroke="#33608f"/><rect x="6.1" y="3" width="3.2" height="10.5" rx=".4" fill="#a9c6ea" stroke="#33608f"/><rect x="10" y="2.5" width="3.6" height="11" rx=".4" fill="#d6e5f7" stroke="#33608f"/></svg>';
+  // A closed folder (bookshelf) for a manifest `folders` node, in the same
+  // blue palette as the family books so the two levels read as one system.
+  const shelfIcon = (): string =>
+    '<svg class="ico" viewBox="0 0 16 16"><path d="M1.5 3.5h4.5l1.2 1.5h7.3v8H1.5z" fill="#a9c6ea" stroke="#33608f"/><path d="M1.5 6.5h13" fill="none" stroke="#33608f"/></svg>';
 
   // ---- Contents tree ----
   // Reveal the current page: expand the folders on its path (adding them to the
@@ -1091,7 +1121,9 @@ function start(
       (failedNode
         ? '<span class="ico fail-ico" aria-hidden="true">⚠</span>'
         : n.group
-          ? groupIcon()
+          ? n.pageId.startsWith(SHELF_PREFIX)
+            ? shelfIcon()
+            : groupIcon()
           : pageIcon(kids)) +
       `<span class="label">${esc(n.title)}</span>`;
     // A switchable product folder shows its current version/language in parens and a
@@ -1270,7 +1302,7 @@ function start(
       verByCol = new Map(versionInfo.map((v) => [v.collection, v]));
       langByCol = new Map(langInfo.map((l) => [l.collection, l]));
       switchableCols = new Set([...verByCol.keys(), ...langByCol.keys()]);
-      toc = [...collection.tocTree(switchableCols), ...failedTocNodes()];
+      toc = [...computeToc(), ...failedTocNodes()];
       deriveMaps();
       fillFilters();
 
@@ -2351,7 +2383,7 @@ function start(
         await navigator.clipboard.writeText(url);
         status.textContent = s.linkCopied;
       }
-    } catch {
+    } catch (e) {
       /* user dismissed the share sheet */
     }
   }
@@ -2490,7 +2522,7 @@ function start(
             const { StreamingDocset } = await import("./data/streaming-docset");
             await StreamingDocset.peek(url);
             validated = true;
-          } catch {
+          } catch (e) {
             /* not Range-streamable after all — validate by fetching it whole */
           }
         }
@@ -2500,7 +2532,7 @@ function start(
         }
         addRemote(url, streaming, packs);
         location.reload();
-      } catch {
+      } catch (e) {
         err.style.color = "#a33";
         err.textContent = s.openUrlError;
         add.disabled = false;
@@ -2543,12 +2575,12 @@ function start(
       if (meta.language !== lang) {
         try {
           localStorage.setItem(LANG_KEY, meta.language);
-        } catch {
+        } catch (e) {
           /* ignore */
         }
       }
       location.reload();
-    } catch {
+    } catch (e) {
       status.textContent = s.uploadError;
     }
   }
@@ -2806,7 +2838,7 @@ function start(
       sel.addEventListener("change", () => {
         try {
           localStorage.setItem(LANG_KEY, sel.value);
-        } catch {
+        } catch (e) {
           /* ignore storage errors */
         }
         location.reload();

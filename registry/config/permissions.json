@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "audience": "https://docs.example.com",
+  "publishers": [
+    {
+      "repository": "KDHelpBook/monorepo",
+      "ref": "refs/heads/main",
+      "environment": null,
+      "docsets": ["khb-authoring", "khb-publishing"],
+      "force": false
+    }
+  ]
+}

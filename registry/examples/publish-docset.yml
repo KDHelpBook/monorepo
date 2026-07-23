@@ -1,0 +1,111 @@
+# Example: publish a docset to the KD Help Book registry from a content repo.
+#
+# Copy into .github/workflows/ of the repository that owns the documentation
+# sources and adjust the `env` block. No secrets are needed: the job authorizes
+# itself with a GitHub Actions OIDC token (audience = the registry), and the
+# registry's permission map (registry/config/permissions.json) decides which
+# docset ids this repository may write — it cannot touch any other project's.
+
+name: Publish docs
+
+on:
+  push:
+    branches: [main]
+    paths: ["docs/**"]
+  workflow_dispatch:
+
+permissions:
+  id-token: write # mint the OIDC token
+  contents: read
+
+env:
+  REGISTRY: https://docs.example.com # the worker's public origin
+  AUDIENCE: https://docs.example.com # must equal the worker's REGISTRY_AUDIENCE
+  DOCSET_ID: my-product # must be in the registry's permission map for this repo
+  DOCS_SRC: docs # the docset source directory (khb compile input)
+
+concurrency:
+  # Serialize publishes of this docset: versions are immutable on the registry,
+  # and the per-docset latest.json pointer is last-writer-wins.
+  group: publish-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get the khb CLI
+        # Release assets are named khb-v<version>-<target>.tar.gz — resolve the
+        # current one through the latest release instead of hardcoding it.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download -R KDHelpBook/monorepo \
+            --pattern '*x86_64-unknown-linux-gnu.tar.gz' -O khb.tar.gz
+          tar -xzf khb.tar.gz
+          sudo install -m 755 khb-v*/khb /usr/local/bin/khb
+          khb --help >/dev/null
+
+      - name: Compile the docset
+        run: khb compile "$DOCS_SRC" -o "$DOCSET_ID.khb"
+
+      - name: Verify docset metadata (id/version gate)
+        # The strong id check: `khb inspect` reads the real meta table. The
+        # registry only sanity-checks the SQLite header — this step is what
+        # keeps an honest misconfiguration from publishing book X as book Y.
+        run: |
+          khb inspect "$DOCSET_ID.khb" | tee inspect.txt
+          ID=$(sed -n 's/^id: *//p' inspect.txt)
+          VERSION=$(sed -n 's/^version: *//p' inspect.txt)
+          TITLE=$(sed -n 's/^title: *//p' inspect.txt)
+          LANGUAGE=$(sed -n 's/^language: *//p' inspect.txt)
+          # `inspect` prints `collection: <id> (<title>)` — keep the id only.
+          COLLECTION=$(sed -n 's/^collection: *\([^ ]*\).*/\1/p' inspect.txt)
+          if [ "$ID" != "$DOCSET_ID" ]; then
+            echo "::error::docset id '$ID' != publish target '$DOCSET_ID'"; exit 1
+          fi
+          if [ -z "$VERSION" ]; then
+            echo "::error::docset has no version (set meta.version)"; exit 1
+          fi
+          {
+            echo "VERSION=$VERSION"
+            echo "TITLE=$TITLE"
+            echo "LANGUAGE=$LANGUAGE"
+            echo "COLLECTION=$COLLECTION"
+          } >> "$GITHUB_ENV"
+
+      - name: Mint the OIDC token
+        run: |
+          TOKEN=$(curl -fsSL -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$AUDIENCE" | jq -r .value)
+          echo "::add-mask::$TOKEN"
+          echo "OIDC_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+
+      - name: Upload
+        run: |
+          curl -fsS -X PUT --data-binary "@$DOCSET_ID.khb" \
+            -H "Authorization: Bearer $OIDC_TOKEN" \
+            "$REGISTRY/publish/$DOCSET_ID/$VERSION/$DOCSET_ID.khb"
+          # Repeat per sidecar .khba pack, if any:
+          # curl -fsS -X PUT --data-binary "@$DOCSET_ID.khba" ... "$REGISTRY/publish/$DOCSET_ID/$VERSION/$DOCSET_ID.khba"
+
+      - name: Finalize (flip latest)
+        run: |
+          jq -n --arg title "$TITLE" --arg language "$LANGUAGE" \
+                --arg collection "$COLLECTION" --arg file "$DOCSET_ID.khb" \
+                '{title: $title, language: $language, collection: $collection,
+                  file: $file, attachments: []}' \
+          | curl -fsS -X POST --data-binary @- \
+              -H "Authorization: Bearer $OIDC_TOKEN" \
+              -H "Content-Type: application/json" \
+              "$REGISTRY/publish/$DOCSET_ID/$VERSION"
+
+      - name: Smoke-probe the streaming contract
+        # The viewer opens streamed books with `Range: bytes=0-0` expecting 206.
+        run: |
+          curl -fsS -D- -o /dev/null -H "Range: bytes=0-0" \
+            "$REGISTRY/d/$DOCSET_ID/$VERSION/$DOCSET_ID.khb" | tee probe.txt
+          grep -qi "^HTTP/.* 206" probe.txt
+          grep -qi "^content-range: bytes 0-0/" probe.txt

@@ -26,6 +26,16 @@ GitHub Pages **honours HTTP `Range`**, so [streamed](pack-stream) books work
 there at full effect — this site itself is packed with `--stream` and served
 from Pages.
 
+## The registry (Cloudflare Workers + R2)
+
+Beyond static hosting there is a **dynamic** option: the registry worker under
+`registry/` in the monorepo — a central docs site many projects publish to from
+their own CI (GitHub Actions OIDC; no shared secrets, and a permission map keeps
+one project from ever writing another's books). It serves the viewer, streams
+`.khb` files from R2 with full `Range` support, and generates `docsets.json`
+(including a central [`folders` tree](khb-internals:manifest-schemas)) on the
+fly. Setup and API: `registry/README.md`.
+
 ## HTTP Range (streaming)
 
 A docset marked `"streaming": true` is opened with `Range` requests. The host

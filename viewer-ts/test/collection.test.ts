@@ -5,6 +5,7 @@ import {
   classifyLoadError,
   fetchDocsetBytes,
 } from "../src/data/collection";
+import { applyFolders } from "../src/data/folders";
 import type {
   Category,
   IDocset,
@@ -162,6 +163,27 @@ describe("Collection tocTree", () => {
     expect(tree).toHaveLength(2);
     expect(tree[0]).toMatchObject({ pageId: "@collection:x", group: true });
     expect(tree[0]!.children.map((n) => n.pageId)).toEqual(["a:i"]);
+  });
+
+  it("composes with applyFolders: a lone folderized family still wraps", () => {
+    // A single family normally merges flat, but when the manifest's folders
+    // tree places it, main.ts forces its `@collection:` wrapper so applyFolders
+    // has a root to re-parent under the `@shelf:` node.
+    const c = Collection.of(
+      [stub({ id: "a", collection: "khb", toc: [leaf("i")] })],
+      "en",
+    );
+    const tree = applyFolders(
+      c.tocTree(new Set(["khb"])),
+      [{ id: "tools", title: "Tools", children: [{ collection: "khb" }] }],
+      "en",
+    );
+    expect(tree).toHaveLength(1);
+    expect(tree[0]).toMatchObject({ pageId: "@shelf:tools", group: true });
+    expect(tree[0]!.children[0]).toMatchObject({ pageId: "@collection:khb" });
+    expect(tree[0]!.children[0]!.children.map((n) => n.pageId)).toEqual([
+      "a:i",
+    ]);
   });
 });
 

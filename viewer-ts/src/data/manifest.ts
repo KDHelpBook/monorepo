@@ -24,8 +24,26 @@ export interface ManifestEntry {
   streaming?: boolean;
 }
 
+/** A leaf of the `folders` tree: places a product family inside a folder. */
+export interface FolderRef {
+  collection: string;
+}
+
+/** A node of the `folders` tree (see folders.ts for the semantics). */
+export interface FolderNode {
+  /** Stable key — TOC expansion state persists on it (`@shelf:<id>`). */
+  id: string;
+  title: string;
+  /** Per-UI-language titles; resolution is `titles[uiLang] ?? title`. */
+  titles?: Record<string, string>;
+  children?: (FolderRef | FolderNode)[];
+}
+
 export interface Manifest {
   docsets: ManifestEntry[];
+  /** Optional nested grouping of product families for the TOC (folders.ts).
+   *  Families it doesn't mention render at the root, as without it. */
+  folders?: FolderNode[];
 }
 
 /** Resolve a manifest-relative path (`docsets/foo.khb`) against the site base. */

@@ -42,10 +42,57 @@ to the dist root.
 | `attachments` | no (omitted when empty) | sidecar `.khba` pack paths (each optionally `.gz`), opened alongside the docset |
 | `streaming` | no (default `false`) | opt-in page-level streaming: open this docset (and its packs) over HTTP `Range`, falling back to a whole fetch when the host can't `Range` |
 
+Besides `docsets`, the manifest may carry one optional top-level field:
+
+| Field | Required | Meaning |
+|-------|----------|---------|
+| `folders` | no | a nested presentation tree grouping product families into TOC folders (below) |
+
 > [!NOTE]
 > `streaming` and `.gz` are mutually exclusive in practice: streamed files must be
 > served raw, so the viewer ignores the flag on `.gz` entries (see
 > [Streaming](streaming)).
+
+### `folders` — nested TOC folders (optional)
+
+Groups product **families** (`collection` ids) into arbitrarily nested folders
+rendered above the family level in the Contents tree. Written by `khb pack
+--folders <file.json>` (the file holds the bare array) and preserved verbatim by
+`khb patch`.
+
+```json [docsets.json (fragment)]
+"folders": [
+  { "id": "tools", "title": "Developer Tools", "titles": { "pl": "Narzędzia" },
+    "children": [
+      { "collection": "my-product" },
+      { "id": "legacy", "title": "Legacy",
+        "children": [ { "collection": "old-product" } ] }
+    ] }
+]
+```
+
+A child is either a **leaf ref** `{ "collection": "<id>" }` (places that family
+here) or a **nested folder** of the same shape.
+
+| Field | Required | Meaning |
+|-------|----------|---------|
+| `id` | yes | stable folder key — the viewer persists expansion state on it (`@shelf:<id>`), so renaming the title is safe, renaming the id resets its open/closed state |
+| `title` | yes | default display title |
+| `titles` | no | per-UI-language titles; the viewer picks `titles[uiLang]`, else `title` |
+| `children` | no | leaf refs and/or nested folders |
+
+Rules (enforced by the CLI; the viewer warns and ignores a broken tree rather
+than failing to boot):
+
+- a collection may be placed **once** in the whole tree, and folder `id`s must
+  be unique — duplicates are a pack error;
+- a ref to a collection that isn't among the packed docsets is only a
+  **warning** (the same folders file may serve a registry hosting more books);
+- a family the tree doesn't mention renders at the **root**, after the folders
+  — so do uploaded and remote books, whose collections a shipped manifest can't
+  know. A manifest without `folders` behaves exactly as before;
+- folders whose families aren't loaded (and refs to absent collections) are
+  dropped, never rendered empty.
 
 ## `config.json` — the distribution profile
 

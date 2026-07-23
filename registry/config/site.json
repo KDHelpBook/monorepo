@@ -1,0 +1,15 @@
+{
+  "order": ["khb-authoring", "khb-publishing"],
+  "folders": [
+    {
+      "id": "khb",
+      "title": "KD Help Book",
+      "titles": { "pl": "KD Help Book" },
+      "children": [{ "collection": "khb" }]
+    }
+  ],
+  "config": {
+    "externalSources": true,
+    "pwa": false
+  }
+}

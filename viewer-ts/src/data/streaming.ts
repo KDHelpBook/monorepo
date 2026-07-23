@@ -91,6 +91,11 @@ export class BytesReader implements BlockReader {
 
 /** A read-only SQLite VFS that reads one file through a pluggable {@link BlockReader}. */
 export class RangeVFS extends FacadeVFS {
+  // The "filename" of a streamed open is its full URL, and SQLite refuses to
+  // open anything longer than mxPathname (with headroom for the `-journal`
+  // suffix) — FacadeVFS's default of 64 silently CANTOPENs a URL of ~56+
+  // chars, e.g. a registry's versioned `/d/<id>/<version>/<file>` paths.
+  mxPathname = 1024;
   reader: BlockReader;
   block_size: number;
   size = 0;

@@ -1,0 +1,5 @@
+node_modules/
+.wrangler/
+# Filled with viewer-ts/dist at deploy time.
+public/*
+!public/.gitkeep
