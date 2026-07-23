@@ -1412,6 +1412,22 @@ textarea {
 .more-item:active {
   background: var(--hover);
 }
+/* Checkable more-item (e.g. Keep books offline): a leading ✓ shown when active.
+   updatePrefetchUI() toggles .active on every [data-action="toggle-prefetch"]. */
+.more-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.more-check-mark {
+  width: 14px;
+  flex: none;
+  color: var(--swoosh);
+  font-weight: bold;
+}
+.more-check.active .more-check-mark::before {
+  content: "✓";
+}
 .more-sep {
   height: 1px;
   margin: 4px 2px;
