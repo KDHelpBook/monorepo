@@ -45,7 +45,7 @@
     <link rel="llms-txt" href="llms.txt" />
     <link rel="sitemap" type="application/xml" href="sitemap.xml" />
     <title>KD Help Book</title>
-    <script type="module" crossorigin src="./assets/index-C9iRS7JM.js"></script>
+    <script type="module" crossorigin src="./assets/index-B41TBNNu.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-B5c9vs3z.css">
   </head>
   <body>
@@ -827,12 +827,15 @@
                  (WITHOUT allow-same-origin) keeps the frame an isolated opaque
                  origin — untrusted JS can run but can't reach the app; our trusted
                  bridge talks to the app only via postMessage (validated). No
-                 popups/modals/forms/top-nav tokens: links go through the bridge. -->
+                 popups/modals/forms/top-nav tokens: links go through the bridge.
+                 `allow-downloads` lets an asset link save its file (the docset's
+                 own bytes, resolved to a `data:` URL) — it grants no app or
+                 same-origin access, so origin isolation is untouched. -->
             <iframe
               id="content-frame"
               class="content-frame"
               title="Documentation"
-              sandbox="allow-scripts"
+              sandbox="allow-scripts allow-downloads"
               referrerpolicy="no-referrer"
             ></iframe>
             <!-- App-generated UI (the Search results page) — not untrusted. -->

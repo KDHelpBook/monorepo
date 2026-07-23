@@ -8,15 +8,18 @@ description.
 
 ## The boundary: a sandboxed frame without `allow-same-origin`
 
-Every page body renders in a sandboxed `iframe` with `sandbox="allow-scripts"` —
-crucially **without** `allow-same-origin` — so the frame is an isolated, opaque
-origin. That origin isolation (not script-blocking) is the security boundary:
+Every page body renders in a sandboxed `iframe` with
+`sandbox="allow-scripts allow-downloads"` — crucially **without**
+`allow-same-origin` — so the frame is an isolated, opaque origin. That origin
+isolation (not script-blocking) is the security boundary:
 
 - Untrusted JS **may run**, but in a different origin it cannot reach the app: no
   parent DOM, no `localStorage`, no access to the IndexedDB where other docsets
   live. Content CSS is confined to the frame and can't spoof the app chrome.
-- The frame gets **no other sandbox tokens** — no popups, modals, forms or
-  top-navigation — so hostile content can't even navigate away or open a window.
+- Beyond `allow-downloads` — which only lets an asset link save its file (the
+  book's own bytes) and grants no app or same-origin reach — the frame gets **no
+  other sandbox tokens**: no popups, modals, forms or top-navigation, so hostile
+  content can't even navigate away or open a window.
 
 > [!IMPORTANT]
 > The model deliberately does *not* rely on stripping scripts from stored HTML.
