@@ -37,6 +37,14 @@ struct ManifestEntry {
     /// when the host doesn't honour Range. Streamed files ship uncompressed.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     streaming: bool,
+    /// Short content hash of the shipped file (of the exact bytes the viewer
+    /// fetches). The viewer appends it to the docset URL as `?v=<hash>`, so a
+    /// rebuilt same-named book gets a distinct HTTP-cache key — a cached stale
+    /// byte range can't then mix with a fresh one into a malformed SQLite image
+    /// (the failure that blanks a re-deployed streamed preview) — while an
+    /// *unchanged* book keeps its key, and its cache, across deploys.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    hash: String,
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -416,14 +424,17 @@ fn add_docset(
             .with_context(|| format!("indexing assets in {}", dest_khb.display()))?;
     }
 
-    let file = if compact {
+    // Hash the *shipped* bytes (what the viewer actually fetches: the gzip'd blob
+    // when compact, else the plain `.khb`) so the cache key tracks the transferred
+    // content exactly.
+    let (file, shipped) = if compact {
         let gz = gzip(&fs::read(&dest_khb)?)?;
         let gz_name = format!("{name}.gz"); // foo.khb -> foo.khb.gz
-        fs::write(docsets_dir.join(&gz_name), gz)?;
+        fs::write(docsets_dir.join(&gz_name), &gz)?;
         fs::remove_file(&dest_khb)?;
-        format!("docsets/{gz_name}")
+        (format!("docsets/{gz_name}"), gz)
     } else {
-        format!("docsets/{name}")
+        (format!("docsets/{name}"), fs::read(&dest_khb)?)
     };
 
     Ok(ManifestEntry {
@@ -435,6 +446,7 @@ fn add_docset(
         version,
         attachments,
         streaming: stream,
+        hash: content_hash(&shipped),
     })
 }
 
@@ -503,6 +515,21 @@ fn gzip(data: &[u8]) -> Result<Vec<u8>> {
     Ok(encoder.finish()?)
 }
 
+/// A short content hash (FNV-1a, 64-bit, as 16 hex digits) of a shipped file.
+/// Not cryptographic — it only needs to change when the bytes change, giving each
+/// build of a file a stable cache key for `docsets.json`. Fully specified (unlike
+/// `DefaultHasher`), so the same bytes hash identically across platforms and
+/// toolchains: an unchanged docset keeps its key — and the viewer's cache — deploy
+/// to deploy, and only a real content change re-keys it.
+fn content_hash(bytes: &[u8]) -> String {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325; // FNV offset basis
+    for &b in bytes {
+        h ^= u64::from(b);
+        h = h.wrapping_mul(0x0000_0100_0000_01b3); // FNV prime
+    }
+    format!("{h:016x}")
+}
+
 fn copy_dir(src: &Path, dst: &Path) -> Result<()> {
     for entry in walkdir::WalkDir::new(src) {
         let entry = entry?;
@@ -531,6 +558,21 @@ fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn content_hash_is_stable_and_content_sensitive() {
+        // Fixed vectors pin the algorithm — a regression here silently re-keys
+        // every docset URL (mass cache-bust), so the constants must not drift.
+        assert_eq!(content_hash(b""), "cbf29ce484222325");
+        assert_eq!(content_hash(b"a"), "af63dc4c8601ec8c");
+        // Same bytes → same hash; a one-byte change → a different hash.
+        assert_eq!(
+            content_hash(b"SQLite format 3"),
+            content_hash(b"SQLite format 3")
+        );
+        assert_ne!(content_hash(b"khb-v1"), content_hash(b"khb-v2"));
+        assert_eq!(content_hash(b"khb").len(), 16); // always 16 hex digits
+    }
 
     #[test]
     fn normalize_base_forces_one_trailing_slash() {

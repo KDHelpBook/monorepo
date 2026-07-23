@@ -13,6 +13,17 @@ import type {
   TocNode,
 } from "../src/data/docset";
 
+// Mock the code-split streaming engine so Collection.load's streaming path can be
+// exercised without the real wa-sqlite wasm. Only Collection.load imports this
+// module, so mocking it file-wide is safe for the other (Collection.of) suites.
+const { streamOpen, streamOpenBytes } = vi.hoisted(() => ({
+  streamOpen: vi.fn(),
+  streamOpenBytes: vi.fn(),
+}));
+vi.mock("../src/data/streaming-docset", () => ({
+  StreamingDocset: { open: streamOpen, openBytes: streamOpenBytes },
+}));
+
 // A minimal in-memory IDocset so we can test Collection's merge/namespace/rank
 // logic without sql.js or a real .khb — Collection only ever calls this interface.
 function stub(cfg: {
@@ -340,5 +351,140 @@ describe("fetchDocsetBytes", () => {
     );
     const err = await fetchDocsetBytes("docsets/x.khb").catch((e: unknown) => e);
     expect(classifyLoadError(err).kind).toBe("http");
+  });
+});
+
+describe("Collection.load streaming fallback", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  const sqliteRes = (): Response =>
+    ({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      headers: new Headers(),
+      body: null, // force the arrayBuffer() path in fetchDocsetBytes
+      arrayBuffer: async () =>
+        new TextEncoder().encode("SQLite format 3 body").buffer,
+    }) as unknown as Response;
+
+  // The real device symptom: Range is advertised (peek passed) but the streamed
+  // open reads a mangled image, while whole-file GETs are fine. Collection.load
+  // must recover by fetching the book whole instead of dropping it.
+  it("falls back to a whole fetch when a streamed open fails", async () => {
+    const book = stub({ id: "khb-x", title: "X" });
+    streamOpen.mockRejectedValue(new Error("database disk image is malformed"));
+    streamOpenBytes.mockResolvedValue(book);
+    vi.stubGlobal("fetch", vi.fn(async () => sqliteRes()));
+
+    const col = await Collection.load(
+      [{ url: "docsets/khb-x.khb?v=1", mode: "streaming", attachments: [] }],
+      "en",
+    );
+
+    expect(streamOpen).toHaveBeenCalledOnce(); // tried streaming first
+    expect(streamOpenBytes).toHaveBeenCalledOnce(); // then the whole-fetch fallback
+    expect(col.books().map((b) => b.id)).toEqual(["khb-x"]); // book kept, not failed
+  });
+
+  it("reports the failure only when the whole-fetch fallback also fails", async () => {
+    streamOpen.mockRejectedValue(new Error("malformed"));
+    streamOpenBytes.mockRejectedValue(new Error("malformed"));
+    vi.stubGlobal("fetch", vi.fn(async () => sqliteRes()));
+
+    const errors: DocsetLoadError[] = [];
+    const col = await Collection.load(
+      [{ url: "docsets/khb-x.khb?v=1", mode: "streaming", attachments: [] }],
+      "en",
+      { onError: (e) => errors.push(e) },
+    );
+
+    expect(col.books()).toHaveLength(0);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.kind).toBe("not-a-khb");
+  });
+});
+
+describe("Collection.load attachment packs", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  const sqlite = (): Uint8Array => new TextEncoder().encode("SQLite format 3 x");
+
+  const bufRes = (bytes: Uint8Array, init: Partial<Response> = {}): Response =>
+    ({
+      ok: init.ok ?? true,
+      status: init.status ?? 200,
+      statusText: init.statusText ?? "OK",
+      headers: new Headers(),
+      body: null, // no onProgress → arrayBuffer() path
+      arrayBuffer: async () => bytes.buffer,
+    }) as unknown as Response;
+
+  // A one-chunk streamed body so fetchDocsetBytes takes its progress-reporting path.
+  const streamRes = (bytes: Uint8Array): Response => {
+    let sent = false;
+    return {
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      headers: new Headers({ "Content-Length": String(bytes.length) }),
+      body: {
+        getReader: () => ({
+          read: async () =>
+            sent
+              ? { done: true, value: undefined }
+              : ((sent = true), { done: false, value: bytes }),
+        }),
+      },
+      arrayBuffer: async () => bytes.buffer,
+    } as unknown as Response;
+  };
+
+  it("tags an attachment-pack failure as the pack, not the book", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        String(url).includes(".khba")
+          ? bufRes(new Uint8Array(), {
+              ok: false,
+              status: 404,
+              statusText: "Not Found",
+            })
+          : bufRes(sqlite()),
+      ),
+    );
+    const errors: DocsetLoadError[] = [];
+    const col = await Collection.load(
+      [{ file: "docsets/x.khb", attachments: [{ file: "docsets/x.khba" }] }],
+      "en",
+      { labels: ["Book X"], onError: (e) => errors.push(e) },
+    );
+
+    expect(col.books()).toHaveLength(0);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.source).toBe("docsets/x.khba"); // names the pack, not the book
+    expect(errors[0]!.detail).toMatch(/attachment pack/i);
+    expect(errors[0]!.title).toBe("Book X"); // still tied to its book
+  });
+
+  it("reports download progress for a pack with its `part` set", async () => {
+    streamOpenBytes.mockResolvedValue(stub({ id: "khb-x", title: "X" }));
+    vi.stubGlobal("fetch", vi.fn(async () => streamRes(sqlite())));
+
+    const parts: (string | undefined)[] = [];
+    await Collection.load(
+      [{ file: "docsets/x.khb", attachments: [{ file: "docsets/x.khba" }] }],
+      "en",
+      { onProgress: (_l, _t, _i, _n, part) => parts.push(part) },
+    );
+
+    expect(parts).toContain(undefined); // the docset itself
+    expect(parts).toContain("docsets/x.khba"); // the pack, labelled by its path
   });
 });

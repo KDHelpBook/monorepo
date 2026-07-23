@@ -207,6 +207,14 @@ function chooseLang(available: string[]): string {
 // bare pathname (see sw.js).
 const fresh = (file: string): string => `${file}?v=${__BUILD_ID__}`;
 
+// A docset's own cache key. Prefer the manifest's per-content hash: an unchanged
+// book then keeps its URL — and the viewer's HTTP cache — across deploys, while a
+// changed (or rebuilt same-named preview) book gets a fresh key so a stale byte
+// range can't mix with a fresh one into a malformed image. Older packs carry no
+// hash → fall back to the per-build stamp (correct, just re-fetched each deploy).
+const stampDocset = (url: string, hash?: string): string =>
+  hash ? `${url}?v=${hash}` : fresh(url);
+
 async function loadConfig(): Promise<Config> {
   try {
     const res = await fetch(fresh("config.json"));
@@ -231,7 +239,8 @@ function fmtBytes(n: number): string {
   return `${n} B`;
 }
 
-/** Drive the cold-start panel from a whole-file download's byte counts. */
+/** Drive the cold-start panel from a whole-file download's byte counts. `part` is
+ *  set while an attachment pack (not the docset itself) is downloading. */
 function setDownloadProgress(
   loaded: number,
   total: number | null,
@@ -239,6 +248,7 @@ function setDownloadProgress(
   index: number,
   count: number,
   lang: string,
+  part?: string,
 ): void {
   const box = document.getElementById("loading");
   if (!box || box.classList.contains("done")) return;
@@ -247,7 +257,8 @@ function setDownloadProgress(
   if (titleEl) titleEl.textContent = s.downloadingHelp;
   const nameEl = document.getElementById("loading-name");
   if (nameEl) {
-    nameEl.textContent = count > 1 ? `${title} (${index + 1}/${count})` : title;
+    const base = count > 1 ? `${title} (${index + 1}/${count})` : title;
+    nameEl.textContent = part ? `${base} — ${s.packLabel}` : base;
   }
   const prog = document.getElementById("loading-progress");
   const bar = document.getElementById("loading-bar");
@@ -475,7 +486,12 @@ async function bootstrap(): Promise<void> {
     let source: DocsetSource | null = null;
     // The manifest `file` is dist-relative — resolve it (and the packs) against
     // the site base so the Range probe and the streaming engine get real URLs.
-    const url = resolveManifestUrl(d.file, document.baseURI);
+    // Cache-key it by content (`d.hash`): a PR preview rebuilds the same-named
+    // `.khb` on every deploy, and a Range read that mixes a cached old range with
+    // a fresh one yields a malformed SQLite image. The per-content key makes each
+    // distinct build a distinct URL (probe/peek/reads stay consistent) while an
+    // unchanged book keeps its cache.
+    const url = stampDocset(resolveManifestUrl(d.file, document.baseURI), d.hash);
     if (streamEligible(d, extraOf(d.id)) && (await rangeSupported(url))) {
       try {
         const { StreamingDocset } = await import("./data/streaming-docset");
@@ -484,7 +500,7 @@ async function bootstrap(): Promise<void> {
           url,
           mode: "streaming",
           attachments: packs.map((p) =>
-            resolveManifestUrl(p, document.baseURI),
+            fresh(resolveManifestUrl(p, document.baseURI)),
           ),
         };
       } catch {
@@ -498,9 +514,11 @@ async function bootstrap(): Promise<void> {
       version: d.version ?? "",
       title: d.title,
       source: source ?? {
-        file: d.file,
+        // Same content-keyed cache-busting on the whole-fetch fallback; packs
+        // carry no per-content hash in the manifest, so they stay on the build stamp.
+        file: stampDocset(d.file, d.hash),
         // A `.gz` suffix (on the docset or a pack) decompresses on fetch.
-        attachments: packs.map((file) => ({ file })),
+        attachments: packs.map((file) => ({ file: fresh(file) })),
       },
       origin: { kind: "bundled", streaming: source != null, packs },
     });
@@ -581,8 +599,8 @@ async function bootstrap(): Promise<void> {
   // chosen edition) and keep loading the rest. Only an empty result blocks the app.
   const failed: FailedBook[] = [];
   const collection = await Collection.load(sources, lang, {
-    onProgress: (l, t, i, n) =>
-      setDownloadProgress(l, t, titles[i] ?? "", i, n, lang),
+    onProgress: (l, t, i, n, part) =>
+      setDownloadProgress(l, t, titles[i] ?? "", i, n, lang, part),
     labels: titles,
     onError: (e, i) => {
       const variant = books[i];
@@ -2394,11 +2412,17 @@ function start(
       "position:fixed;inset:0;background:var(--backdrop);display:grid;place-items:center;z-index:50";
     // Loaded docsets with their versions (language shown too, since a fallback book
     // may differ from the UI language).
+    // Whether a loaded book is actually being streamed — matched from the chosen
+    // editions (same "· streaming" marker the Manage page shows).
+    const streamed = (id: string, language: string): boolean =>
+      variants.some(
+        (v) => v.id === id && v.language === language && v.origin.streaming,
+      );
     const bookLines = collection
       .books()
       .map(
         (b) =>
-          `<div>${esc(b.title)} <span style="color:var(--muted)">· ${esc(b.language)}${b.version ? ` · ${esc(s.versionLabel)} ${esc(b.version)}` : ""}</span></div>`,
+          `<div>${esc(b.title)} <span style="color:var(--muted)">· ${esc(b.language)}${b.version ? ` · ${esc(s.versionLabel)} ${esc(b.version)}` : ""}${streamed(b.id, b.language) ? ` ${esc(s.streamingBadge)}` : ""}</span></div>`,
       )
       .join("");
     // List books that failed to load too, so they aren't silently missing here.
