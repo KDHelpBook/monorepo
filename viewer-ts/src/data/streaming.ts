@@ -51,7 +51,15 @@ export class HttpRangeReader implements BlockReader {
     return this.url;
   }
   async probeSize(): Promise<number> {
-    const res = await fetch(this.url, { headers: { Range: "bytes=0-0" } });
+    const res = await fetch(this.url, {
+      headers: { Range: "bytes=0-0" },
+      // Never cache a partial (206) response. GitHub Pages returns the *same*
+      // ETag for a Range and a full response, so a browser that caches a 206 can
+      // later answer a conditional *full* GET with that partial (a 304 serving
+      // truncated bytes → "not a .khb"). Skipping the cache keeps range reads
+      // fresh and can't poison the whole-fetch fallback's cache.
+      cache: "no-store",
+    });
     if (res.status !== 206) {
       throw new Error(
         `range not honoured (status ${res.status}); host must return 206`,
@@ -66,6 +74,7 @@ export class HttpRangeReader implements BlockReader {
   async read(start: number, end: number): Promise<Uint8Array> {
     const res = await fetch(this.url, {
       headers: { Range: `bytes=${start}-${end}` },
+      cache: "no-store", // see probeSize: don't let a 206 pollute the HTTP cache
     });
     if (res.status !== 206)
       throw new Error(`range read failed (${res.status})`);

@@ -23,6 +23,10 @@ export type AttachmentSource = { bytes: Uint8Array } | { file: string };
 export type DocsetSource =
   | (({ bytes: Uint8Array } | { file: string }) & {
       attachments?: AttachmentSource[];
+      /** Bypass the HTTP cache for the whole fetch (`cache: "reload"`) — set when
+       *  a streaming-eligible book falls back to a full download and the cache may
+       *  hold a Range-poisoned entry for the same URL. */
+      reload?: boolean;
     })
   | { url: string; mode: "streaming"; attachments?: string[] };
 
@@ -177,7 +181,14 @@ export async function fetchDocsetBytes(
  */
 export async function rangeSupported(url: string): Promise<boolean> {
   try {
-    const res = await fetch(url, { headers: { Range: "bytes=0-0" } });
+    // `no-store`: don't cache this 206 probe. GitHub Pages shares one ETag between
+    // Range and full responses, so a cached partial can later be served for a full
+    // GET (a 304 of truncated bytes). Keeping the probe out of the cache prevents
+    // it from poisoning the whole-fetch fallback.
+    const res = await fetch(url, {
+      headers: { Range: "bytes=0-0" },
+      cache: "no-store",
+    });
     const ok = res.status === 206;
     // Stop the body download (a server that ignored Range sent the whole file).
     await res.body?.cancel().catch(() => undefined);
@@ -279,7 +290,9 @@ export class Collection {
           continue;
         }
         const bytes =
-          "bytes" in src ? src.bytes : await fetchDocsetBytes(src.file, reportFor());
+          "bytes" in src
+            ? src.bytes
+            : await fetchDocsetBytes(src.file, reportFor(), src.reload);
         const attachmentBytes: Uint8Array[] = [];
         for (const a of src.attachments ?? []) {
           attachmentBytes.push(

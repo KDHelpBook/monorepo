@@ -4,6 +4,7 @@ import {
   DocsetLoadError,
   classifyLoadError,
   fetchDocsetBytes,
+  rangeSupported,
 } from "../src/data/collection";
 import type {
   Category,
@@ -410,6 +411,39 @@ describe("Collection.load streaming fallback", () => {
     expect(col.books()).toHaveLength(0);
     expect(errors).toHaveLength(1);
     expect(errors[0]!.kind).toBe("not-a-khb");
+  });
+
+  it("marks a whole-fetch source `reload` → fetches with cache: reload", async () => {
+    streamOpenBytes.mockResolvedValue(stub({ id: "khb-x", title: "X" }));
+    const fetchMock = vi.fn(async () => sqliteRes());
+    vi.stubGlobal("fetch", fetchMock);
+
+    await Collection.load([{ file: "docsets/x.khb?v=1", reload: true }], "en");
+
+    expect(fetchMock).toHaveBeenCalledWith("docsets/x.khb?v=1", {
+      cache: "reload",
+    });
+  });
+});
+
+describe("rangeSupported", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("probes with cache: no-store so a 206 can't poison the cache", async () => {
+    const fetchMock = vi.fn(async () => ({
+      status: 206,
+      body: null,
+      headers: new Headers(),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const ok = await rangeSupported("docsets/x.khb?v=1");
+
+    expect(ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "docsets/x.khb?v=1",
+      expect.objectContaining({ cache: "no-store" }),
+    );
   });
 });
 
