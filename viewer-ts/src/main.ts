@@ -2203,18 +2203,34 @@ function start(
   // is NOT a cross-origin iframe — mobile browsers refuse to paginate those when printing
   // (they clip to the visible area), so it opens as its own tab and the browser paginates
   // it normally. Its safety comes from a strict CSP instead of origin isolation:
-  // `default-src 'none'` blocks all script execution (defence-in-depth over stripDangerous)
-  // and all network; only inline styles and data: images/fonts are allowed. `for-print`
-  // bakes in the paper adaptations (styles/content.css); there is no bridge script.
-  const buildPrintDoc = (bodyHtml: string, title: string): string =>
-    `<!doctype html><html class="for-print"><head><meta charset="utf-8">` +
-    `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; form-action 'none'">` +
-    `<meta name="referrer" content="no-referrer">` +
-    // Empty inline favicon so the tab doesn't fire a (CSP-blocked) /favicon.ico request.
-    `<link rel="icon" href="data:,">` +
-    `<title>${esc(title)}</title>` +
-    `<style>${contentCss}\n${syntaxCss}</style>` +
-    `</head><body class="content">${bodyHtml}</body></html>`;
+  // `default-src 'none'` blocks all network and every script EXCEPT the one carrying this
+  // document's random `nonce` — our self-print snippet. Untrusted content is already
+  // script-stripped and can't know the nonce, so no untrusted JS can run. `for-print`
+  // bakes in the paper adaptations (styles/content.css). The snippet prints from inside
+  // the document's own load — mobile-friendly, since a programmatic print from the
+  // *opener* trips iOS Safari's "did not finish loading" prompt — then closes the tab.
+  const buildPrintDoc = (bodyHtml: string, title: string): string => {
+    const nonce = Array.from(
+      crypto.getRandomValues(new Uint8Array(16)),
+      (b) => b.toString(16).padStart(2, "0"),
+    ).join("");
+    const selfPrint =
+      `addEventListener('load',function(){` +
+      `addEventListener('afterprint',function(){try{close()}catch(e){}});` +
+      `setTimeout(function(){try{print()}catch(e){}},200)});`;
+    return (
+      `<!doctype html><html class="for-print"><head><meta charset="utf-8">` +
+      `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}'; img-src data:; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; form-action 'none'">` +
+      `<meta name="referrer" content="no-referrer">` +
+      // Empty inline favicon so the tab doesn't fire a (CSP-blocked) /favicon.ico request.
+      `<link rel="icon" href="data:,">` +
+      `<title>${esc(title)}</title>` +
+      `<style>${contentCss}\n${syntaxCss}</style>` +
+      `</head><body class="content">${bodyHtml}` +
+      `<script nonce="${nonce}">${selfPrint}</script>` +
+      `</body></html>`
+    );
+  };
 
   // Wrap every occurrence of the active search terms in the content in <mark>,
   // skipping script/style and our keyword footer. Runs after each page load.
@@ -2582,8 +2598,10 @@ function start(
     }
     if (!printSourceHtml) return;
     // Open the page as a standalone print document. window.open runs synchronously in the
-    // click gesture so it isn't pop-up-blocked; the blob: URL is same-origin (its CSP
-    // blocks all scripts).
+    // click gesture so it isn't pop-up-blocked. The document self-prints and closes itself
+    // via its own CSP-nonce'd script (see buildPrintDoc) — this works on desktop and on
+    // mobile, where driving print from the opener trips iOS Safari's "did not finish
+    // loading" prompt.
     const url = URL.createObjectURL(
       new Blob([buildPrintDoc(printSourceHtml, document.title)], {
         type: "text/html",
@@ -2594,26 +2612,6 @@ function start(
       URL.revokeObjectURL(url);
       status.textContent = s.printPopupBlocked;
       return;
-    }
-    // Desktop: auto-open the print dialog, then close the throwaway tab. Touch devices are
-    // left to the browser's own Share/Print — iOS Safari shows a spurious "did not finish
-    // loading" prompt for a programmatic print on a fresh tab, and the page is already
-    // fully laid out for the user to print.
-    if (!coarsePointer) {
-      w.addEventListener("load", () => {
-        w.addEventListener("afterprint", () => {
-          try {
-            w.close();
-          } catch {
-            /* ignore */
-          }
-        });
-        try {
-          w.print();
-        } catch {
-          /* let the user print from the browser menu */
-        }
-      });
     }
     window.setTimeout(() => URL.revokeObjectURL(url), 60000);
   }

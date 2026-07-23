@@ -81,9 +81,10 @@ that the TypeScript viewer reached parity; it lives in git history (commit
 - **Printing** can't use that iframe: mobile browsers refuse to paginate a cross-origin
   iframe when printing (they clip it to the visible area). So *File → Print* opens the
   page as its **own top-level tab** (`buildPrintDoc` in `main.ts`) whose safety comes from
-  a strict **CSP** (`default-src 'none'` → no scripts, no network) instead of origin
-  isolation — the body is already script-stripped, so the CSP is defence-in-depth. The
-  Search/Manage overlay (same-origin `#content`) still prints in place.
+  a strict **CSP** (`default-src 'none'`, `script-src 'nonce-…'`) instead of origin
+  isolation: no network, and the *only* script that runs is our own per-print nonce'd
+  self-print snippet — untrusted content is already script-stripped and can't know the
+  nonce. The Search/Manage overlay (same-origin `#content`) still prints in place.
 
 ## Key decisions & conventions
 - **Rust `core` is the engine for CLI + Tauri.** The browser mirrors its SQL via
