@@ -27,6 +27,7 @@ fn demo(extensions: Vec<Extension>) -> SourceDocset {
             categories: vec![],
             related: vec![],
             toc: None,
+            source_path: None,
         }],
         toc: vec![],
         categories: vec![],
@@ -67,6 +68,10 @@ fn runs_extension_and_injects_asset() {
         .assets
         .iter()
         .any(|a| a.path == "assets/ext/label/intro/0/out.svg"));
+    // The AI-facing `md` column holds the *expanded* Markdown, not the raw block.
+    let md = page.md.as_deref().unwrap();
+    assert!(md.contains("Compiled label"));
+    assert!(!md.contains("```ext:label"));
 }
 
 #[test]
@@ -76,4 +81,39 @@ fn without_flag_block_stays_code_and_no_asset() {
     let page = &out.pages[0];
     assert!(page.body_html.contains("language-ext:label"));
     assert!(out.assets.is_empty());
+    // `md` keeps the raw source (nothing was expanded).
+    assert!(page.md.as_deref().unwrap().contains("```ext:label"));
+}
+
+#[test]
+fn resolves_file_relative_to_page() {
+    use std::fs;
+    // A real source tree: the page lives in `pages/`, next to a data file it references.
+    let dir = tempfile::tempdir().unwrap();
+    let pages = dir.path().join("pages");
+    fs::create_dir(&pages).unwrap();
+    fs::write(pages.join("data.txt"), "SECRET_CODE_SAMPLE\n").unwrap();
+
+    let mut src = demo(label_ext());
+    // The block points the tool at a sibling file by a page-relative path (in `meta`).
+    src.pages[0].markdown = "# Intro\n\n```ext:label ./data.txt\nname: Fragile\n```\n".into();
+    src.pages[0].source_path = Some("pages/intro.md".into());
+
+    let out = render(
+        &src,
+        &RenderOptions {
+            allow_extensions: true,
+            source_dir: Some(dir.path()),
+        },
+    )
+    .unwrap();
+    let page = &out.pages[0];
+    // The tool read `./data.txt` relative to the page's directory (its cwd) and inlined it —
+    // both in the rendered body and in the expanded `md`.
+    assert!(
+        page.body_html.contains("SECRET_CODE_SAMPLE"),
+        "body: {}",
+        page.body_html
+    );
+    assert!(page.md.as_deref().unwrap().contains("SECRET_CODE_SAMPLE"));
 }

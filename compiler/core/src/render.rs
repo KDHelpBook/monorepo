@@ -10,7 +10,7 @@ use anyhow::{Context, Result};
 use comrak::plugins::syntect::SyntectAdapter;
 use serde::Deserialize;
 
-use crate::model::{Asset, Extension, RenderedDocset, RenderedPage, SourceDocset};
+use crate::model::{Asset, Extension, RenderedDocset, RenderedPage, SourceDocset, SourcePage};
 use crate::{assets, markdown};
 
 /// Options controlling optional, non-hermetic render behaviour. Defaults to a fully
@@ -20,8 +20,9 @@ pub struct RenderOptions<'a> {
     /// Gate for running declared extension processes (the CLI `--allow-extensions`
     /// flag). When false, `ext:` blocks are left as plain code blocks with a note.
     pub allow_extensions: bool,
-    /// The source directory, used as the working directory for extension subprocesses
-    /// (so a docset-relative tool and relative paths resolve).
+    /// The docset source directory. Used to locate each page's file (so an extension can
+    /// resolve a block's path argument relative to the page) and as a fallback working
+    /// directory; passed to extensions as `source_dir` / `KHB_SOURCE_DIR`.
     pub source_dir: Option<&'a Path>,
 }
 
@@ -36,11 +37,18 @@ pub fn render(src: &SourceDocset, opts: &RenderOptions) -> Result<RenderedDocset
     let mut extra_assets: Vec<Asset> = Vec::new();
     let mut pages = Vec::with_capacity(src.pages.len());
     for p in &src.pages {
+        let ctx = || format!("page `{}`", p.id);
+        // Expand ` ```ext:<name> ` blocks first, at the Markdown level: each block's body
+        // goes to its declared external tool, whose returned Markdown is spliced back in.
+        // Doing it before comrak means the result flows through the whole render chain and
+        // feeds `body_html`, `plain`, and the AI-facing `md` column from one expansion.
+        let expanded =
+            preprocess_extensions(&p.markdown, p, &src.extensions, opts, &mut extra_assets)
+                .with_context(ctx)?;
         // Render Markdown, expand `~~~code-group` (tabs) and `~~~code-preview`
         // (command + terminal output) blocks, rewrite `assets/…` targets to the
         // `asset:` scheme, and finally render `$…$` LaTeX spans to MathML.
-        let ctx = || format!("page `{}`", p.id);
-        let html = markdown::render_html(&p.markdown, Some(&highlighter));
+        let html = markdown::render_html(&expanded, Some(&highlighter));
         let html = render_code_groups(&html, &highlighter).with_context(ctx)?;
         let html = render_code_preview(&html, &highlighter).with_context(ctx)?;
         let html = render_code_tree(&html, &highlighter).with_context(ctx)?;
@@ -50,19 +58,6 @@ pub fn render(src: &SourceDocset, opts: &RenderOptions) -> Result<RenderedDocset
         // ` ```dot ` / ` ```graphviz ` → a Graphviz graph laid out to inline SVG at
         // build time (pure-Rust `layout`). Fails the build on unparseable DOT.
         let html = render_diagrams(&html).with_context(ctx)?;
-        // ` ```ext:<name> ` → an external block transformer. Runs after the built-in
-        // widgets (so their languages can't collide) and before the asset-URL rewrite,
-        // so any `assets/ext/…` the tool emits resolves like any other asset. Only
-        // spawns a process under `--allow-extensions`.
-        let html = render_extensions(
-            &html,
-            &highlighter,
-            &p.id,
-            &src.extensions,
-            opts,
-            &mut extra_assets,
-        )
-        .with_context(ctx)?;
         let html = render_line_highlight(&html);
         // `` `x`{:lang} `` → inline-highlighted code; `` `x`{.badge} `` → a badge.
         let html = render_inline_attrs(&html);
@@ -83,7 +78,7 @@ pub fn render(src: &SourceDocset, opts: &RenderOptions) -> Result<RenderedDocset
         };
         // Plain text comes from an *unhighlighted* render — syntect's per-token
         // spans would otherwise splatter the search text with stray spaces.
-        let plain = markdown::html_to_plain(&markdown::render_html(&p.markdown, None));
+        let plain = markdown::html_to_plain(&markdown::render_html(&expanded, None));
         pages.push(RenderedPage {
             id: p.id.clone(),
             title: p.title.clone(),
@@ -92,8 +87,8 @@ pub fn render(src: &SourceDocset, opts: &RenderOptions) -> Result<RenderedDocset
             keywords: p.keywords.clone(),
             categories: p.categories.clone(),
             related: p.related.clone(),
-            // Carry the clean source Markdown (post-frontmatter) for llms.txt / MCP.
-            md: Some(p.markdown.clone()),
+            // The post-expansion Markdown (extension blocks resolved) for llms.txt / MCP.
+            md: Some(expanded),
         });
     }
 
@@ -748,124 +743,315 @@ struct ExtAsset {
     file: String,
 }
 
-/// Expand ` ```ext:<name> ` fenced blocks by handing each block's verbatim body to the
-/// external `command` declared for `<name>` in `docset.toml`, then splicing back the
-/// Markdown it returns (rendered to HTML) and injecting any image files it generated as
-/// assets. Mirrors [`render_diagrams`]' opaque-fence scanner.
+/// Everything one extension invocation needs: the declaration, the recovered block, the
+/// scratch dir + asset prefix, and the page's location so a path in the block's info string
+/// resolves relative to the page. Bundled to keep [`spawn_extension`]'s arg list sane.
+struct ExtCtx<'a> {
+    ext: &'a Extension,
+    meta: &'a str,
+    body: &'a str,
+    page_id: &'a str,
+    assets_dir: &'a Path,
+    asset_prefix: &'a str,
+    /// Absolute directory of the page's source file — the child's working directory.
+    page_dir: Option<&'a Path>,
+    /// The page's file / directory relative to the source root (for the request + env).
+    page_path_rel: Option<&'a str>,
+    page_dir_rel: Option<&'a str>,
+    /// Absolute source root.
+    source_dir: Option<&'a Path>,
+}
+
+/// One recovered ` ```ext:<name> ` block, as byte ranges into the source Markdown.
+struct ExtBlock {
+    /// The whole fence, opening line through the closing line's newline.
+    span: std::ops::Range<usize>,
+    /// The block body between the fence lines (verbatim).
+    body: std::ops::Range<usize>,
+    /// The `<name>` after `ext:`.
+    name: String,
+    /// The info-string tail after the first token.
+    meta: String,
+}
+
+/// Expand ` ```ext:<name> ` fenced blocks in `markdown` by handing each block's body to the
+/// external `command` declared for `<name>`, splicing back the Markdown it returns and
+/// injecting any image files it generates as assets. Runs **before** comrak, so the result
+/// flows through the whole render chain (nested widgets, math, `dot` in the output all work)
+/// and one expansion feeds `body_html`, `plain`, and the AI-facing `md` column.
 ///
 /// Only spawns a process under `opts.allow_extensions`; otherwise an `ext:` block is left
-/// as a plain code block with a one-line stderr note, so a docset that uses extensions
-/// still compiles (degraded) in the default hermetic build. When extensions *are* enabled,
-/// an `ext:<name>` with no matching declaration is a build error (a likely typo).
-fn render_extensions(
-    html: &str,
-    highlighter: &SyntectAdapter,
-    page_id: &str,
+/// verbatim (a plain code block) with a one-line stderr note, so a docset that uses
+/// extensions still compiles (degraded) in the default hermetic build. When extensions are
+/// enabled, an `ext:<name>` with no matching declaration is a build error (a likely typo).
+fn preprocess_extensions(
+    markdown: &str,
+    page: &SourcePage,
     exts: &[Extension],
     opts: &RenderOptions,
     assets: &mut Vec<Asset>,
 ) -> Result<String> {
-    // No declarations → the feature is unused for this docset; leave every block alone.
+    // No declarations → the feature is unused for this docset; leave the Markdown alone.
     if exts.is_empty() {
-        return Ok(html.to_string());
+        return Ok(markdown.to_string());
     }
-    const PRE: &str = "<pre class=\"syntax-highlighting\"><code ";
-    const CLOSE: &str = "</code></pre>";
-    let mut out = String::with_capacity(html.len());
-    let mut i = 0;
-    let mut n = 0u32; // per-page block counter → unique asset prefixes
-    while let Some(rel) = html[i..].find(PRE) {
-        let block_start = i + rel;
-        let attrs_start = block_start + PRE.len();
-        let Some(gtrel) = html[attrs_start..].find('>') else {
-            break;
-        };
-        let inner_start = attrs_start + gtrel + 1;
-        let Some(crel) = html[inner_start..].find(CLOSE) else {
-            break;
-        };
-        let block_end = inner_start + crel + CLOSE.len();
-        let code_attrs = &html[attrs_start..inner_start];
-        let lang = attr_value(code_attrs, "class")
-            .and_then(|c| c.strip_prefix("language-").map(str::to_string));
+    // The page's location, for resolving a block's file argument relative to the page.
+    let page_path_rel = page.source_path.as_deref();
+    let page_dir_rel = page_path_rel.map(parent_dir);
+    let page_dir: Option<PathBuf> = match (opts.source_dir, page_dir_rel) {
+        (Some(root), Some(rel)) if !rel.is_empty() => Some(root.join(rel)),
+        (Some(root), Some(_)) => Some(root.to_path_buf()), // page at the source root
+        _ => None,
+    };
 
-        out.push_str(&html[i..block_start]);
-        match lang.as_deref().and_then(|l| l.strip_prefix("ext:")) {
-            Some(name) => {
-                if !opts.allow_extensions {
-                    eprintln!(
-                        "note: extension block `ext:{name}` on page `{page_id}` left as a \
-                         code block (pass --allow-extensions to run it)"
-                    );
-                    out.push_str(&html[block_start..block_end]);
-                } else {
-                    let Some(ext) = exts.iter().find(|e| e.name == name) else {
-                        anyhow::bail!(
-                            "page `{page_id}` uses undeclared extension `ext:{name}` \
-                             (add [extensions.{name}] to docset.toml)"
-                        );
-                    };
-                    let meta = attr_value(code_attrs, "data-meta").unwrap_or_default();
-                    let body = unescape_html(&strip_tags(&html[inner_start..inner_start + crel]));
-                    let asset_prefix = format!("assets/ext/{name}/{page_id}/{n}/");
-                    n += 1;
-                    // Run in a scratch dir removed even on error (the OS reclaims temp
-                    // dirs anyway; never fail the build on cleanup).
-                    let dir = unique_ext_dir()?;
-                    let outcome = spawn_extension(
-                        ext,
-                        &meta,
-                        &body,
-                        page_id,
-                        &dir,
-                        &asset_prefix,
-                        opts.source_dir,
-                    )
-                    .and_then(|resp| {
-                        splice_extension_output(&resp, highlighter, &dir, &asset_prefix, assets)
+    let mut out = String::with_capacity(markdown.len());
+    let mut cursor = 0;
+    let mut n = 0u32; // per-page block counter → unique asset prefixes
+    while let Some(block) = next_ext_block(markdown, cursor) {
+        out.push_str(&markdown[cursor..block.span.start]);
+        let name = block.name.as_str();
+        if !opts.allow_extensions {
+            eprintln!(
+                "note: extension block `ext:{name}` on page `{}` left as a code block \
+                 (pass --allow-extensions to run it)",
+                page.id
+            );
+            out.push_str(&markdown[block.span.clone()]);
+        } else {
+            let Some(ext) = exts.iter().find(|e| e.name == name) else {
+                anyhow::bail!(
+                    "page `{}` uses undeclared extension `ext:{name}` \
+                     (add [extensions.{name}] to docset.toml)",
+                    page.id
+                );
+            };
+            let asset_prefix = format!("assets/ext/{name}/{}/{n}/", page.id);
+            n += 1;
+            // Run in a scratch dir removed even on error (the OS reclaims temp dirs
+            // anyway; never fail the build on cleanup).
+            let dir = unique_ext_dir()?;
+            let cx = ExtCtx {
+                ext,
+                meta: &block.meta,
+                body: &markdown[block.body.clone()],
+                page_id: &page.id,
+                assets_dir: &dir,
+                asset_prefix: &asset_prefix,
+                page_dir: page_dir.as_deref(),
+                page_path_rel,
+                page_dir_rel,
+                source_dir: opts.source_dir,
+            };
+            let outcome = spawn_extension(&cx).and_then(|resp| {
+                collect_ext_assets(&resp, &dir, &asset_prefix, assets)?;
+                Ok(resp.markdown)
+            });
+            let _ = std::fs::remove_dir_all(&dir);
+            let mut replacement = outcome?;
+            // Keep block structure: the spliced Markdown must end on its own line.
+            if !replacement.ends_with('\n') {
+                replacement.push('\n');
+            }
+            out.push_str(&replacement);
+        }
+        cursor = block.span.end;
+    }
+    out.push_str(&markdown[cursor..]);
+    Ok(out)
+}
+
+/// The directory part of a forward-slashed relative path (`""` when at the root).
+fn parent_dir(path: &str) -> &str {
+    match path.rfind('/') {
+        Some(i) => &path[..i],
+        None => "",
+    }
+}
+
+/// An opening code fence on a single line: the fence char, its run length, and the byte
+/// offset (within the line) where the info string starts.
+struct Fence {
+    ch: u8,
+    len: usize,
+    info_start: usize,
+}
+
+/// Recognise an opening fence line (0–3 spaces of indent, then ≥3 `` ` `` or `~`). A
+/// 4-space indent is indented code, not a fence, so it's rejected.
+fn open_fence(line: &str) -> Option<Fence> {
+    let bytes = line.as_bytes();
+    let mut i = 0;
+    while i < 3 && bytes.get(i) == Some(&b' ') {
+        i += 1;
+    }
+    let ch = *bytes.get(i)?;
+    if ch != b'`' && ch != b'~' {
+        return None;
+    }
+    let mut run = 0;
+    while bytes.get(i + run) == Some(&ch) {
+        run += 1;
+    }
+    if run < 3 {
+        return None;
+    }
+    Some(Fence {
+        ch,
+        len: run,
+        info_start: i + run,
+    })
+}
+
+/// A closing fence for `(ch, len)`: 0–3 spaces, a run of `ch` at least `len` long, then only
+/// whitespace.
+fn is_close_fence(line: &str, ch: u8, len: usize) -> bool {
+    let bytes = line.as_bytes();
+    let mut i = 0;
+    while i < 3 && bytes.get(i) == Some(&b' ') {
+        i += 1;
+    }
+    let mut run = 0;
+    while bytes.get(i + run) == Some(&ch) {
+        run += 1;
+    }
+    run >= len && bytes[i + run..].iter().all(u8::is_ascii_whitespace)
+}
+
+/// Find the next top-level ` ```ext:<name> ` fenced block at or after byte `from`. Any other
+/// fenced block is skipped **whole** (jumped past its close), so an `ext:` block shown
+/// *inside* a larger demo fence is never expanded. Returns byte ranges into `markdown`.
+fn next_ext_block(markdown: &str, from: usize) -> Option<ExtBlock> {
+    let len = markdown.len();
+    let mut line_start = from;
+    while line_start < len {
+        let line_end = markdown[line_start..]
+            .find('\n')
+            .map_or(len, |i| line_start + i);
+        let line = &markdown[line_start..line_end];
+        if let Some(fence) = open_fence(line) {
+            let body_start = (line_end + 1).min(len);
+            // Find the closing fence, or run to EOF (CommonMark: unclosed → to end).
+            let mut body_end = len;
+            let mut block_end = len;
+            let mut ls = body_start;
+            while ls < len {
+                let le = markdown[ls..].find('\n').map_or(len, |i| ls + i);
+                if is_close_fence(&markdown[ls..le], fence.ch, fence.len) {
+                    body_end = ls;
+                    block_end = (le + 1).min(len);
+                    break;
+                }
+                ls = (le + 1).min(len);
+            }
+            // Is it an `ext:<name>` fence? (info string's first token).
+            let info = line[fence.info_start..].trim();
+            let mut toks = info.splitn(2, char::is_whitespace);
+            if let Some(name) = toks.next().and_then(|t| t.strip_prefix("ext:")) {
+                if !name.is_empty() {
+                    return Some(ExtBlock {
+                        span: line_start..block_end,
+                        body: body_start..body_end,
+                        name: name.to_string(),
+                        meta: toks.next().unwrap_or("").trim().to_string(),
                     });
-                    let _ = std::fs::remove_dir_all(&dir);
-                    out.push_str(&outcome?);
                 }
             }
-            // A normal (or built-in-widget) highlighted block — copy through untouched.
-            _ => out.push_str(&html[block_start..block_end]),
+            // Non-ext fence — skip it whole so its interior is never scanned.
+            line_start = block_end;
+        } else {
+            line_start = (line_end + 1).min(len);
         }
-        i = block_end;
     }
-    out.push_str(&html[i..]);
-    Ok(out)
+    None
+}
+
+/// Validate an extension's declared asset filenames, read them from the scratch dir, and
+/// push them into the sink under the namespaced prefix. Split out so it's unit-testable
+/// with a hand-built response and no subprocess.
+fn collect_ext_assets(
+    resp: &ExtResponse,
+    assets_dir: &Path,
+    asset_prefix: &str,
+    sink: &mut Vec<Asset>,
+) -> Result<()> {
+    for a in &resp.assets {
+        let file = a.file.as_str();
+        // Only bare relative filenames — never let a tool read outside the scratch dir
+        // or forge an asset key with `/`, `\` or `..`.
+        if file.is_empty()
+            || file.contains('/')
+            || file.contains('\\')
+            || file.contains("..")
+            || Path::new(file).is_absolute()
+        {
+            anyhow::bail!("extension returned an unsafe asset filename `{file}` (bare names only)");
+        }
+        let on_disk = assets_dir.join(file);
+        let data = std::fs::read(&on_disk).with_context(|| {
+            format!(
+                "reading generated asset `{file}` from {}",
+                on_disk.display()
+            )
+        })?;
+        sink.push(Asset {
+            path: format!("{asset_prefix}{file}"),
+            mime: assets::guess_mime(file).to_string(),
+            data,
+        });
+    }
+    Ok(())
 }
 
 /// Spawn one extension process, feed it the JSON request on stdin (on a writer thread, so
 /// a large request can't deadlock against the child's stdout pipe), and parse the JSON
 /// response from stdout. A non-zero exit or unparseable output is a build error carrying
 /// the child's (truncated) stderr.
-fn spawn_extension(
-    ext: &Extension,
-    meta: &str,
-    body: &str,
-    page_id: &str,
-    assets_dir: &Path,
-    asset_prefix: &str,
-    source_dir: Option<&Path>,
-) -> Result<ExtResponse> {
-    let request = serde_json::json!({
+fn spawn_extension(cx: &ExtCtx) -> Result<ExtResponse> {
+    let ext = cx.ext;
+    let mut request = serde_json::json!({
         "khb_extension_protocol": 1,
         "lang": ext.name,
-        "meta": meta,
+        "meta": cx.meta,
         "args": ext.args,
-        "body": body,
-        "page_id": page_id,
-        "assets_dir": assets_dir.to_string_lossy(),
-        "asset_prefix": asset_prefix,
+        "body": cx.body,
+        "page_id": cx.page_id,
+        "assets_dir": cx.assets_dir.to_string_lossy(),
+        "asset_prefix": cx.asset_prefix,
     });
-    let mut child = Command::new(&ext.command)
+    // Where this page lives — so a path in the block's info string can resolve relative to
+    // the page (also exposed via cwd + env below).
+    if let Some(sd) = cx.source_dir {
+        request["source_dir"] = serde_json::Value::from(sd.to_string_lossy().into_owned());
+    }
+    if let Some(pp) = cx.page_path_rel {
+        request["page_path"] = serde_json::Value::from(pp);
+    }
+    if let Some(pd) = cx.page_dir_rel {
+        request["page_dir"] = serde_json::Value::from(pd);
+    }
+    // The child runs in the page's own directory, so `./foo.rs` in the info string reads the
+    // file next to the page; fall back to the source root, then the current dir.
+    let cwd = cx
+        .page_dir
+        .or(cx.source_dir)
+        .unwrap_or_else(|| Path::new("."));
+    let mut command = Command::new(&ext.command);
+    command
         .args(&ext.args)
-        .current_dir(source_dir.unwrap_or_else(|| Path::new(".")))
+        .current_dir(cwd)
         .env("KHB_EXTENSION", "1")
-        .env("KHB_PAGE_ID", page_id)
-        .env("KHB_LANG", &ext.name)
+        .env("KHB_PAGE_ID", cx.page_id)
+        .env("KHB_LANG", &ext.name);
+    if let Some(sd) = cx.source_dir {
+        command.env("KHB_SOURCE_DIR", sd);
+    }
+    if let Some(pp) = cx.page_path_rel {
+        command.env("KHB_PAGE_PATH", pp);
+    }
+    if let Some(pd) = cx.page_dir_rel {
+        command.env("KHB_PAGE_DIR", pd);
+    }
+    let mut child = command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -904,44 +1090,6 @@ fn spawn_extension(
             truncate_stderr(&String::from_utf8_lossy(&output.stderr))
         )
     })
-}
-
-/// Render an extension's returned Markdown to HTML and pull its generated files into the
-/// asset sink. Split from [`spawn_extension`] so it can be unit-tested with a hand-built
-/// response and no subprocess.
-fn splice_extension_output(
-    resp: &ExtResponse,
-    highlighter: &SyntectAdapter,
-    assets_dir: &Path,
-    asset_prefix: &str,
-    sink: &mut Vec<Asset>,
-) -> Result<String> {
-    for a in &resp.assets {
-        let file = a.file.as_str();
-        // Only bare relative filenames — never let a tool write outside the scratch dir
-        // or forge an asset key with `/`, `\` or `..`.
-        if file.is_empty()
-            || file.contains('/')
-            || file.contains('\\')
-            || file.contains("..")
-            || Path::new(file).is_absolute()
-        {
-            anyhow::bail!("extension returned an unsafe asset filename `{file}` (bare names only)");
-        }
-        let on_disk = assets_dir.join(file);
-        let data = std::fs::read(&on_disk).with_context(|| {
-            format!(
-                "reading generated asset `{file}` from {}",
-                on_disk.display()
-            )
-        })?;
-        sink.push(Asset {
-            path: format!("{asset_prefix}{file}"),
-            mime: assets::guess_mime(file).to_string(),
-            data,
-        });
-    }
-    Ok(markdown::render_html(&resp.markdown, Some(highlighter)))
 }
 
 /// A fresh, empty scratch directory for one extension invocation, namespaced by pid + an
@@ -1448,30 +1596,39 @@ mod tests {
         assert!(render_diagrams(&bad).is_err());
     }
 
+    fn ext_page(markdown: &str) -> SourcePage {
+        SourcePage {
+            id: "intro".into(),
+            title: "Intro".into(),
+            markdown: markdown.into(),
+            keywords: vec![],
+            categories: vec![],
+            related: vec![],
+            toc: None,
+            source_path: None,
+        }
+    }
+
+    fn label_ext() -> Vec<Extension> {
+        vec![Extension {
+            name: "label".into(),
+            command: "khb-label".into(),
+            args: vec![],
+        }]
+    }
+
     #[test]
-    fn splice_renders_markdown_and_injects_assets() {
-        let h = markdown::highlighter();
+    fn collect_ext_assets_injects_namespaced_asset() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("out.svg"), b"<svg/>").unwrap();
         let resp = ExtResponse {
-            markdown: "**Label:** Fragile\n\n![label](assets/ext/label/intro/0/out.svg)\n".into(),
+            markdown: "ignored here".into(),
             assets: vec![ExtAsset {
                 file: "out.svg".into(),
             }],
         };
         let mut sink = Vec::new();
-        let html = splice_extension_output(
-            &resp,
-            &h,
-            dir.path(),
-            "assets/ext/label/intro/0/",
-            &mut sink,
-        )
-        .unwrap();
-        // Markdown was rendered to HTML …
-        assert!(html.contains("<strong>Label:</strong>"));
-        assert!(html.contains("assets/ext/label/intro/0/out.svg"));
-        // … and the generated file was pulled in as one namespaced asset.
+        collect_ext_assets(&resp, dir.path(), "assets/ext/label/intro/0/", &mut sink).unwrap();
         assert_eq!(sink.len(), 1);
         assert_eq!(sink[0].path, "assets/ext/label/intro/0/out.svg");
         assert_eq!(sink[0].mime, "image/svg+xml");
@@ -1479,8 +1636,7 @@ mod tests {
     }
 
     #[test]
-    fn splice_rejects_unsafe_asset_filenames() {
-        let h = markdown::highlighter();
+    fn collect_ext_assets_rejects_unsafe_filenames() {
         let dir = tempfile::tempdir().unwrap();
         for bad in ["../escape.svg", "sub/x.svg", "/abs.svg"] {
             let resp = ExtResponse {
@@ -1489,51 +1645,57 @@ mod tests {
             };
             let mut sink = Vec::new();
             assert!(
-                splice_extension_output(&resp, &h, dir.path(), "assets/ext/x/p/0/", &mut sink)
-                    .is_err(),
+                collect_ext_assets(&resp, dir.path(), "assets/ext/x/p/0/", &mut sink).is_err(),
                 "expected `{bad}` to be rejected"
             );
         }
     }
 
     #[test]
-    fn render_extensions_off_leaves_block_as_code() {
-        let h = markdown::highlighter();
-        let exts = vec![Extension {
-            name: "label".into(),
-            command: "khb-label".into(),
-            args: vec![],
-        }];
+    fn preprocess_off_leaves_block_verbatim() {
         let opts = RenderOptions::default(); // allow_extensions = false
-        let html = markdown::render_html("```ext:label\nname: Fragile\n```\n", Some(&h));
+        let page = ext_page("# Intro\n\n```ext:label\nname: Fragile\n```\n");
         let mut sink = Vec::new();
-        let out = render_extensions(&html, &h, "intro", &exts, &opts, &mut sink).unwrap();
-        // Nothing spawned: the block is copied through, no assets injected.
-        assert!(out.contains("language-ext:label"));
+        let out =
+            preprocess_extensions(&page.markdown, &page, &label_ext(), &opts, &mut sink).unwrap();
+        // Nothing spawned: the fence stays verbatim (renders later as a code block).
+        assert!(out.contains("```ext:label"));
+        assert!(out.contains("name: Fragile"));
         assert!(sink.is_empty());
     }
 
     #[test]
-    fn render_extensions_on_bails_on_undeclared() {
-        let h = markdown::highlighter();
-        let exts = vec![Extension {
-            name: "label".into(),
-            command: "khb-label".into(),
-            args: vec![],
-        }];
+    fn preprocess_on_bails_on_undeclared() {
         let opts = RenderOptions {
             allow_extensions: true,
             source_dir: None,
         };
-        let html = markdown::render_html("```ext:typo\nx\n```\n", Some(&h));
+        let page = ext_page("```ext:typo\nx\n```\n");
         let mut sink = Vec::new();
-        let err = render_extensions(&html, &h, "intro", &exts, &opts, &mut sink)
+        let err = preprocess_extensions(&page.markdown, &page, &label_ext(), &opts, &mut sink)
             .unwrap_err()
             .to_string();
         assert!(
             err.contains("undeclared extension `ext:typo`"),
             "unexpected: {err}"
         );
+    }
+
+    #[test]
+    fn preprocess_skips_ext_block_inside_larger_fence() {
+        // The `ext:label` block is *shown as an example* inside a 4-backtick demo fence, so
+        // it must not be treated as an extension — no spawn, no bail, output untouched.
+        let opts = RenderOptions {
+            allow_extensions: true,
+            source_dir: None,
+        };
+        let md = "````md\n```ext:label\nname: Fragile\n```\n````\n";
+        let page = ext_page(md);
+        let mut sink = Vec::new();
+        let out =
+            preprocess_extensions(&page.markdown, &page, &label_ext(), &opts, &mut sink).unwrap();
+        assert_eq!(out, md);
+        assert!(sink.is_empty());
     }
 
     #[test]

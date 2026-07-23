@@ -27,6 +27,10 @@ pub struct SourcePage {
     /// Force the on-page TOC on/off (`None` = auto). Emitted as a marker the viewer
     /// reads; not stored as its own column.
     pub toc: Option<bool>,
+    /// The page's source-file path relative to the docset source dir, forward-slashed
+    /// (e.g. `pages/guide/intro.md`). `None` for pages not backed by a file. Lets
+    /// extensions resolve paths (from a block's info string) relative to the page.
+    pub source_path: Option<String>,
 }
 
 /// A complete docset with Markdown pages.

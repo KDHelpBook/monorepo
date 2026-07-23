@@ -105,7 +105,10 @@ An extension is any executable that speaks this JSON-over-stdio contract.
   "body": "name: Fragile\n",
   "page_id": "intro",
   "assets_dir": "/tmp/khb-ext-1234-0",
-  "asset_prefix": "assets/ext/label/intro/0/"
+  "asset_prefix": "assets/ext/label/intro/0/",
+  "source_dir": "/abs/path/to/my-docs",
+  "page_path": "pages/guide/intro.md",
+  "page_dir": "pages/guide"
 }
 ```
 
@@ -113,9 +116,12 @@ An extension is any executable that speaks this JSON-over-stdio contract.
 - `meta` — the info-line text after the name; `args` — the `docset.toml` arguments.
 - `assets_dir` — a scratch directory the tool may write generated files into.
 - `asset_prefix` — the path prefix to reference those files by in the returned Markdown.
+- `source_dir` — the docset source root (absolute); `page_path` / `page_dir` — the page's
+  file and directory relative to it. See [Referencing files](#referencing-files).
 
-The same values are also exposed as environment variables `KHB_EXTENSION=1`, `KHB_PAGE_ID`,
-and `KHB_LANG`, and the process runs with the source folder as its working directory.
+The process runs **with the page's own directory as its working directory**, and the same
+values are exposed as environment variables: `KHB_EXTENSION=1`, `KHB_PAGE_ID`, `KHB_LANG`,
+`KHB_SOURCE_DIR`, `KHB_PAGE_PATH`, `KHB_PAGE_DIR`.
 
 **Response** — the tool writes one JSON object to **stdout**:
 
@@ -136,6 +142,22 @@ A generated file at `assets_dir/out.svg` becomes the asset
 `assets/` files or with other blocks. Reference it in the returned Markdown exactly as
 `asset_prefix` + `out.svg`, and it resolves like any other image.
 
+## Referencing files
+
+A block often points the tool at another file — say a source file to compile:
+
+````md
+```ext:codesample ./examples/label.rs
+```
+````
+
+Because the process runs **in the page's own directory**, the tool can read that path
+relative to its working directory (`std::fs::read("./examples/label.rs")` or equivalent) and
+it resolves next to the `.md` — no path juggling needed. For paths relative to the docset
+root instead, the request/env also carry `source_dir` (absolute) and `page_dir`/`page_path`
+(relative to it). The path itself is just text in the block's info line (`meta`); the
+compiler doesn't interpret it — the tool does.
+
 ## Errors
 
 A tool that **exits non-zero**, writes **unparseable JSON**, or names an **unsafe asset
@@ -147,10 +169,12 @@ message — the same "a broken block is a build error, not a blank space" policy
 
 - **Determinism** — a build is only as reproducible and offline as the tools it runs. Keep
   extensions deterministic; treat them as part of your toolchain.
-- **Nested blocks** — the Markdown a tool returns is rendered on its own, so it won't re-run
-  *other* extensions or expand built-in widgets like ` ```dot ` inside it (the same limit as
-  galleries and code-preview blocks). Emit the final form directly.
+- **The result is real Markdown** — expansion happens *before* the rest of the render, so the
+  Markdown a tool returns flows through the whole pipeline: nested built-in blocks (a
+  ` ```dot ` diagram, a `~~~gallery`, `$…$` math) inside the output render normally. One
+  `ext:` block is not re-scanned for extensions, so a tool can't recursively invoke itself.
 - **Windows** — `command` must be an executable; to run a `.bat`/`.cmd` or a script, point
   `command` at the interpreter and pass the script through `args`.
-- **AI text** — the clean-Markdown copy used by the [AI export](khb-publishing:pack-llms)
-  keeps the original `ext:` source, not the expanded output.
+- **AI text** — the [AI export](khb-publishing:pack-llms) and the `md` column store the
+  **expanded** Markdown (the tool's output), so AI-facing surfaces see the same content as
+  readers, not the raw `ext:` source.

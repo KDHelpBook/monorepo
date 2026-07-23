@@ -57,6 +57,7 @@ mod tests {
                     categories: vec!["basics".into()],
                     related: vec!["adv".into(), "other-book:page".into()],
                     toc: None,
+                    source_path: None,
                 },
                 SourcePage {
                     id: "adv".into(),
@@ -66,6 +67,7 @@ mod tests {
                     categories: vec![],
                     related: vec![],
                     toc: None,
+                    source_path: None,
                 },
             ],
             toc: vec![TocNode {

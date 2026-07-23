@@ -293,6 +293,15 @@ fn load_pages(dir: &Path) -> Result<Vec<SourcePage>> {
             .clone()
             .or_else(|| markdown::first_h1(&body))
             .unwrap_or_else(|| stem.clone());
+        // Path relative to the source root, forward-slashed (same as `load_assets`),
+        // so extensions can resolve a block's file argument relative to this page.
+        let source_path = path
+            .strip_prefix(dir)
+            .unwrap_or(&path)
+            .components()
+            .map(|c| c.as_os_str().to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("/");
         pages.push(SourcePage {
             id,
             title,
@@ -301,6 +310,7 @@ fn load_pages(dir: &Path) -> Result<Vec<SourcePage>> {
             categories: frontmatter.categories,
             related: frontmatter.related,
             toc: frontmatter.toc,
+            source_path: Some(source_path),
         });
     }
     Ok(pages)
