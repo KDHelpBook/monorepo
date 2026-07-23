@@ -181,7 +181,10 @@ so language models and agents can read the docs without scraping the SPA:
 The Markdown is the page's original source (the optional `pages.md` column, format
 v5), falling back to plain text for a docset that carries none. It's the **static**
 counterpart to a future MCP server: plain files a static host serves as-is, no
-backend. Nothing here is loaded by the viewer.
+backend. Nothing here is loaded by the viewer — though when the export is present
+the viewer offers a **File → Copy links for LLMs** menu item that copies the current
+page's `md/…` URL, its in-app link, and a pointer to `llms.txt` (hidden on
+non-`--llms` builds).
 
 ##### Making the export discoverable (`--base-url`)
 
