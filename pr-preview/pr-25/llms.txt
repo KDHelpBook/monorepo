@@ -1,0 +1,68 @@
+# Documentation
+
+> Documentation exported for language models by KD Help Book — 56 page(s) across 3 book(s). Each link points at a clean-Markdown copy; `llms-full.txt` has everything inline.
+
+## Authoring KD Help Books
+
+- [Authoring KD Help Books](md/khb-authoring/index.md): A KD Help Book is a folder of Markdown pages plus a small docset.toml manifest,
+- [Getting started](md/khb-authoring/getting-started.md): A KD Help Book starts as a plain folder. This page takes you from an empty directory
+- [Differences from GitHub Markdown](md/khb-authoring/differences.md): The baseline is GitHub-flavoured Markdown: tables, task lists, strikethrough,
+- [Compiling a book](md/khb-authoring/compiling.md): khb compile turns a source folder into a docset:
+- [Headings & paragraphs](md/khb-authoring/headings.md): Use # for headings — one to six # for levels 1–6. A blank line separates
+- [Text formatting](md/khb-authoring/text-formatting.md): Inline styling uses the usual Markdown markers — the GitHub ones work exactly as on
+- [Lists & task lists](md/khb-authoring/lists.md): All the GitHub list flavours work here: bulleted, numbered (with a chosen starting
+- [Links](md/khb-authoring/links.md): Standard Markdown label links — the target alone decides what happens.
+- [Images & assets](md/khb-authoring/images.md): Everything under the source folder's assets/ directory (any depth) is stored in
+- [Tables](md/khb-authoring/tables.md): Pipe tables work exactly as on GitHub. The header row is
+- [Blockquotes](md/khb-authoring/blockquotes.md): Prefix lines with >. Separate paragraphs inside a quote with a > on its own line.
+- [Directives](md/khb-authoring/directives.md): A directive is a fenced container that wraps other Markdown in a labelled box.
+- [Code blocks](md/khb-authoring/code-blocks.md): Fence a block with triple backticks. Declare a language after the opening fence
+- [Diagrams](md/khb-authoring/diagrams.md): A fenced  dot  (or  graphviz ) block is laid out to an SVG at build time and
+- [Footnotes](md/khb-authoring/footnotes.md): Footnotes work exactly as on GitHub. Place a reference
+- [Emoji](md/khb-authoring/emoji.md): Write emoji with :shortcode: names — the compiler replaces them with the Unicode
+- [Math](md/khb-authoring/math.md): Write LaTeX math between dollar signs. It is converted to MathML at build time, so
+- [Frontmatter](md/khb-authoring/frontmatter.md): Each page may begin with a YAML frontmatter block, fenced by ---, that sets the
+- [id (frontmatter)](md/khb-authoring/frontmatter-id.md): The page's stable identifier — the name every link uses: links in
+- [title (frontmatter)](md/khb-authoring/frontmatter-title.md): The page's display title.
+- [keywords (frontmatter)](md/khb-authoring/frontmatter-keywords.md): The terms under which the page appears in the keyword index — the classic
+- [categories (frontmatter)](md/khb-authoring/frontmatter-categories.md): Facet tags for the page. Categories are independent of the TOC hierarchy — a
+- [related (frontmatter)](md/khb-authoring/frontmatter-related.md): Curated onward reading: the page ids rendered as the page's See also footer.
+- [toc (frontmatter)](md/khb-authoring/frontmatter-toc.md): Forces the page's "On this page" box — the section navigation built from the
+- [docset.toml](md/khb-authoring/docset-toml.md): The book manifest — the one required file besides the pages. It sits at the root of
+- [id (docset.toml)](md/khb-authoring/docset-id.md): The docset's identifier. Required.
+- [title (docset.toml)](md/khb-authoring/docset-title.md): The book's display title. Required.
+- [version (docset.toml)](md/khb-authoring/docset-version.md): The edition of the book — the docs' version, usually tracking the product it
+- [language (docset.toml)](md/khb-authoring/docset-language.md): The content language of the book. Content is authored as one docset per language;
+- [collection (docset.toml)](md/khb-authoring/docset-collection.md): The merge/family key: books sharing a collection belong to one product and
+- [products (docset.toml)](md/khb-authoring/docset-products.md): The products this book belongs to — a filter facet, independent of the
+- [toc.yaml](md/khb-authoring/toc-yaml.md): An optional file next to docset.toml that defines the book's table-of-contents
+- [TOC nodes](md/khb-authoring/toc-nodes.md): A toc.yaml is a nested list of two node kinds.
+- [TOC ordering](md/khb-authoring/toc-ordering.md): Order in the file is order in the tree — top to bottom, at every level. Reorder
+
+## KD Help Book Internals
+
+- [KD Help Book Internals](md/khb-internals/index.md): This volume is for people who look under the viewer: viewer hackers, tooling
+- [File formats](md/khb-internals/file-formats.md): The KD Help Book family is three file kinds plus one orthogonal compression
+- [SQLite schema](md/khb-internals/sqlite-schema.md): Every .khb contains the tables below, identified by meta.formatversion
+- [Full-text search](md/khb-internals/full-text-search.md): Search over a .khb is a single SQLite FTS5 query — built at compile time,
+- [Streaming](md/khb-internals/streaming.md): A .khb can be read page-by-page over HTTP Range — open a remote book,
+- [Security model](md/khb-internals/security-model.md): A .khb can come from anywhere — a user opens, uploads or streams one — so every
+- [Manifest schemas](md/khb-internals/manifest-schemas.md): Three small JSON documents describe books to the viewer: docsets.json and
+- [Building a compiler](md/khb-internals/building-a-compiler.md): A .khb is plain SQLite, so any tool that can create a SQLite database can
+
+## Publishing KD Help Books
+
+- [Publishing KD Help Books](md/khb-publishing/index.md): This volume is for maintainers and publishers: you have one or more compiled
+- [Getting published](md/khb-publishing/getting-published.md): From a compiled book to a live documentation site in five minutes. You need two
+- [pack — build a distribution](md/khb-publishing/pack.md): khb pack assembles a publishable static distribution: it copies a built
+- [Profiles (--profile, --lock, --pwa)](md/khb-publishing/pack-profiles.md): --profile picks a pair of defaults that config.json records; --lock,
+- [The landing page (--home)](md/khb-publishing/pack-home.md): --home sets what a visitor sees on a cold start — a first visit, or any
+- [Streaming (--stream)](md/khb-publishing/pack-stream.md): --stream marks docsets for page-level streaming: instead of downloading the
+- [AI export (--llms)](md/khb-publishing/pack-llms.md): --llms writes, alongside the viewer, the llms.txt
+- [Compression (--mode)](md/khb-publishing/pack-mode.md): --mode decides how the bundled files ship: khb (the default) copies every
+- [patch — update a distribution](md/khb-publishing/patch.md): khb patch adds or replaces docsets in an already-built distribution,
+- [Anatomy of a distribution](md/khb-publishing/distribution.md): A packed distribution is four things: the viewer, a docsets/ folder, and two
+- [Hosting](md/khb-publishing/hosting.md): A packed distribution is plain static files — any static host works: GitHub
+- [CI with GitHub Actions](md/khb-publishing/ci.md): Publishing is a build you can automate: fetch the khb CLI and the prebuilt
+- [Versioning](md/khb-publishing/versioning.md): The viewer can carry several versions of one book and show exactly one at a
+- [.khbm manifests](md/khb-publishing/khbm-manifests.md): A .khbm is a small JSON file naming several remote docsets, so a reader can
