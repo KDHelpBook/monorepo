@@ -7,7 +7,8 @@
       "language": "en",
       "collection": "khb-docs",
       "version": "0.1.0",
-      "streaming": true
+      "streaming": true,
+      "hash": "87ecaeead047bcbf"
     },
     {
       "file": "docsets/khb-internals.khb",
@@ -16,7 +17,8 @@
       "language": "en",
       "collection": "khb-docs",
       "version": "0.1.0",
-      "streaming": true
+      "streaming": true,
+      "hash": "cdaab0d7f80c8d66"
     },
     {
       "file": "docsets/khb-publishing.khb",
@@ -25,7 +27,8 @@
       "language": "en",
       "collection": "khb-docs",
       "version": "0.1.0",
-      "streaming": true
+      "streaming": true,
+      "hash": "4f657351123308e5"
     }
   ]
 }
