@@ -8,6 +8,8 @@ export interface Strings {
   menuFile: string;
   menuEdit: string;
   menuView: string;
+  menuSearch: string;
+  menuGo: string;
   menuHelp: string;
   openDocset: string;
   print: string;
@@ -16,6 +18,7 @@ export interface Strings {
   clearHighlight: string;
   largerText: string;
   smallerText: string;
+  resetText: string;
   // colour theme (View menu + toolbar)
   themeMenu: string;
   themeLight: string;
@@ -94,6 +97,7 @@ export interface Strings {
   newTab: string;
   showHidePanel: string;
   ready: string;
+  printPopupBlocked: string;
   keywordsLabel: string;
   seeAlso: string;
   /** Code-block copy button and its post-copy confirmation. */
@@ -154,6 +158,8 @@ const en: Strings = {
   menuFile: "File",
   menuEdit: "Edit",
   menuView: "View",
+  menuSearch: "Search",
+  menuGo: "Go",
   menuHelp: "Help",
   openDocset: "Open docset…",
   print: "Print…",
@@ -162,6 +168,7 @@ const en: Strings = {
   clearHighlight: "Clear search highlight",
   largerText: "Larger text",
   smallerText: "Smaller text",
+  resetText: "Reset text size",
   themeMenu: "Theme",
   themeLight: "Light",
   themeDark: "Dark",
@@ -236,6 +243,7 @@ const en: Strings = {
   newTab: "Open current page in a new tab",
   showHidePanel: "Show/hide panel",
   ready: "Ready",
+  printPopupBlocked: "Allow pop-ups to print this page.",
   keywordsLabel: "Keywords:",
   seeAlso: "See also:",
   copy: "Copy",
@@ -291,6 +299,8 @@ const pl: Strings = {
   menuFile: "Plik",
   menuEdit: "Edycja",
   menuView: "Widok",
+  menuSearch: "Szukaj",
+  menuGo: "Przejdź",
   menuHelp: "Pomoc",
   openDocset: "Otwórz docset…",
   print: "Drukuj…",
@@ -299,6 +309,7 @@ const pl: Strings = {
   clearHighlight: "Wyczyść podświetlenie wyszukiwania",
   largerText: "Większy tekst",
   smallerText: "Mniejszy tekst",
+  resetText: "Zresetuj rozmiar tekstu",
   themeMenu: "Motyw",
   themeLight: "Jasny",
   themeDark: "Ciemny",
@@ -375,6 +386,7 @@ const pl: Strings = {
   newTab: "Otwórz bieżącą stronę w nowej karcie",
   showHidePanel: "Pokaż/ukryj panel",
   ready: "Gotowe",
+  printPopupBlocked: "Zezwól na wyskakujące okna, aby wydrukować tę stronę.",
   keywordsLabel: "Słowa kluczowe:",
   seeAlso: "Zobacz też:",
   copy: "Kopiuj",

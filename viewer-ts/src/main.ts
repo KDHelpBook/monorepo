@@ -1008,6 +1008,9 @@ function start(
   // Touch device? Tree folder-pages then expand on a single tap (double-tap zooms).
   const coarsePointer = window.matchMedia("(pointer: coarse)").matches;
   let currentId = "";
+  // The current doc page's sanitized HTML, stashed at render time so File → Print can
+  // reproduce it as a standalone, top-level print document (see printCurrent).
+  let printSourceHtml = "";
   // Monotonic tokens so a slow async load/search (streaming) that finishes after a
   // newer one has started is dropped instead of clobbering the newer result.
   let loadSeq = 0;
@@ -1016,7 +1019,10 @@ function start(
   let mode: Mode = "contents";
   let filterCategory = "";
   let filterProduct = ""; // family/collection scope (union by default)
-  let fontSize = loadFontSize(13);
+  // Reader font size (px): 13 is the default; font-up/down step within [11, 20],
+  // and font-reset returns to this value.
+  const DEFAULT_FONT_SIZE = 13;
+  let fontSize = loadFontSize(DEFAULT_FONT_SIZE);
   // Colour theme. "system" follows the OS; "dark-shell" darkens the app chrome
   // (menu/toolbar/tree/tabs and the Search/Manage app pages) but keeps the docset
   // reading pane light. The shell and the reading pane are separate documents (the
@@ -2193,6 +2199,40 @@ function start(
     `<style>${contentCss}\n${syntaxCss}\n:root{--content-size:${fontSize}px}</style>` +
     `</head><body class="content">${bodyHtml}<script>${FRAME_BRIDGE}</script></body></html>`;
 
+  // A standalone, top-level print document for File → Print. Unlike the reading frame this
+  // is NOT a cross-origin iframe — mobile browsers refuse to paginate those when printing
+  // (they clip to the visible area), so it opens as its own tab and the browser paginates
+  // it normally. Its safety comes from a strict CSP instead of origin isolation:
+  // `default-src 'none'` blocks all network and every script EXCEPT the one carrying this
+  // document's random `nonce` — our self-print snippet. Untrusted content is already
+  // script-stripped and can't know the nonce, so no untrusted JS can run. `for-print`
+  // bakes in the paper adaptations (styles/content.css). The snippet prints from inside
+  // the document's own load — mobile-friendly, since a programmatic print from the
+  // *opener* trips iOS Safari's "did not finish loading" prompt. It deliberately does NOT
+  // auto-close the tab: Android Chrome fires `afterprint` before the print UI finishes
+  // loading, so closing on it tore the tab down mid-print; the user closes it instead.
+  const buildPrintDoc = (bodyHtml: string, title: string): string => {
+    const nonce = Array.from(
+      crypto.getRandomValues(new Uint8Array(16)),
+      (b) => b.toString(16).padStart(2, "0"),
+    ).join("");
+    const selfPrint =
+      `addEventListener('load',function(){` +
+      `setTimeout(function(){try{print()}catch(e){}},200)});`;
+    return (
+      `<!doctype html><html class="for-print"><head><meta charset="utf-8">` +
+      `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}'; img-src data:; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; form-action 'none'">` +
+      `<meta name="referrer" content="no-referrer">` +
+      // Empty inline favicon so the tab doesn't fire a (CSP-blocked) /favicon.ico request.
+      `<link rel="icon" href="data:,">` +
+      `<title>${esc(title)}</title>` +
+      `<style>${contentCss}\n${syntaxCss}</style>` +
+      `</head><body class="content">${bodyHtml}` +
+      `<script nonce="${nonce}">${selfPrint}</script>` +
+      `</body></html>`
+    );
+  };
+
   // Wrap every occurrence of the active search terms in the content in <mark>,
   // skipping script/style and our keyword footer. Runs after each page load.
   function applyHighlight(root: Node): void {
@@ -2386,11 +2426,11 @@ function start(
         // The "On this page" nav is compiled into body_html; its `#slug` links route
         // through rewriteFrameLinks like any in-page anchor.
         rewriteFrameLinks(holder, id);
-        frame.srcdoc = frameDoc(holder.innerHTML);
+        printSourceHtml = holder.innerHTML;
+        frame.srcdoc = frameDoc(printSourceHtml);
       } else {
-        frame.srcdoc = frameDoc(
-          `<h1>${esc(s.notFoundTitle)}</h1><p>${s.notFoundBody(esc(id))}</p>`,
-        );
+        printSourceHtml = `<h1>${esc(s.notFoundTitle)}</h1><p>${s.notFoundBody(esc(id))}</p>`;
+        frame.srcdoc = frameDoc(printSourceHtml);
       }
       // Hide the app-UI overlay so the (always-visible) frame shows through.
       content.style.display = "none";
@@ -2479,6 +2519,11 @@ function start(
         setFrameFont();
         saveFontSize(fontSize);
         break;
+      case "font-reset":
+        fontSize = DEFAULT_FONT_SIZE;
+        setFrameFont();
+        saveFontSize(fontSize);
+        break;
       case "theme-light":
         setTheme("light");
         break;
@@ -2500,7 +2545,7 @@ function start(
         if (!config.prefetchLocked) setPrefetch(!prefetchEnabled);
         break;
       case "print":
-        window.print();
+        printCurrent();
         break;
       case "clear-highlight":
         highlightTerms = [];
@@ -2530,6 +2575,55 @@ function start(
       case "copy-llm-links":
         void copyLlmLinks();
         break;
+    }
+  }
+
+  // Print just the reading content, never the app shell. The page body lives in a
+  // cross-origin sandboxed frame, and mobile browsers refuse to paginate a cross-origin
+  // iframe when printing (they clip it to the visible area) — so for a doc page we open
+  // the content as its own top-level tab (buildPrintDoc), which every browser paginates
+  // normally. The overlay (Search/Manage) is same-origin content in this document, so it
+  // still prints in place with the chrome hidden by @media print.
+  function printCurrent(): void {
+    // The Search/Manage overlay is trusted app UI in #content (same origin) — print the
+    // parent directly, with the @media print rules hiding the chrome around it.
+    if (content.style.display !== "none") {
+      document.body.classList.add("print-overlay");
+      const clean = (): void => {
+        document.body.classList.remove("print-overlay");
+        window.removeEventListener("afterprint", clean);
+      };
+      window.addEventListener("afterprint", clean);
+      window.print();
+      return;
+    }
+    if (!printSourceHtml) return;
+    // Open the page as a standalone print document that self-prints via its own
+    // CSP-nonce'd script (see buildPrintDoc). window.open runs synchronously in the click
+    // gesture so it isn't pop-up-blocked.
+    const html = buildPrintDoc(printSourceHtml, document.title);
+    if (/Android/i.test(navigator.userAgent)) {
+      // Android Chrome's print preview can't load a blob: URL — it fails with "a problem
+      // occurred while printing" — so write the document straight into the new tab.
+      const w = window.open("", "_blank");
+      if (!w) {
+        status.textContent = s.printPopupBlocked;
+        return;
+      }
+      w.document.open();
+      w.document.write(html);
+      w.document.close();
+    } else {
+      // iOS Safari (verified) and desktop print a blob: URL fine, and it keeps the
+      // untrusted markup out of an app-origin document.write.
+      const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+      const w = window.open(url, "_blank");
+      if (!w) {
+        URL.revokeObjectURL(url);
+        status.textContent = s.printPopupBlocked;
+        return;
+      }
+      window.setTimeout(() => URL.revokeObjectURL(url), 60000);
     }
   }
 

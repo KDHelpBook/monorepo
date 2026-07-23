@@ -1412,6 +1412,22 @@ textarea {
 .more-item:active {
   background: var(--hover);
 }
+/* Checkable more-item (e.g. Keep books offline): a leading ✓ shown when active.
+   updatePrefetchUI() toggles .active on every [data-action="toggle-prefetch"]. */
+.more-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.more-check-mark {
+  width: 14px;
+  flex: none;
+  color: var(--swoosh);
+  font-weight: bold;
+}
+.more-check.active .more-check-mark::before {
+  content: "✓";
+}
 .more-sep {
   height: 1px;
   margin: 4px 2px;
@@ -1970,4 +1986,45 @@ textarea {
 :root[data-theme="dark"] .mg-remove {
   background: #3a2320;
   border-color: #6e3a2e;
+}
+
+/* ── Printing ────────────────────────────────────────────────────────────────
+   A documentation page prints via its own top-level tab (main.ts buildPrintDoc), so the
+   app shell below is not involved there. This block governs the other path — the trusted
+   Search/Manage overlay (#content), printed in place under body.print-overlay — and also
+   strips the chrome for a plain browser Ctrl/⌘-P. */
+@media print {
+  .menubar,
+  .toolbar,
+  .more-menu,
+  .left,
+  .splitter,
+  .doctabs,
+  .addressbar,
+  .statusbar,
+  .loading {
+    display: none !important;
+  }
+  /* Unwind the fixed full-viewport shell so content flows across pages. */
+  .window,
+  .body,
+  .pane.right,
+  .content-wrap {
+    position: static !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  /* Let the overlay flow inline when it is the active surface; its own inline
+     display:none keeps it out of print on a doc page (where the frame is shown). */
+  .content {
+    position: static !important;
+    overflow: visible !important;
+  }
+  /* On the overlay path the stale doc frame sits under #content — don't print it too. */
+  body.print-overlay .content-frame {
+    display: none !important;
+  }
+  @page {
+    margin: 1.6cm;
+  }
 }
