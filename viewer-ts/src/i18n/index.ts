@@ -22,6 +22,8 @@ export interface Strings {
   themeDark: string;
   themeDarkShell: string;
   themeSystem: string;
+  /** View-menu toggle: cache streamed books whole for offline / faster reuse. */
+  prefetchToggle: string;
   back: string;
   forward: string;
   about: string;
@@ -132,6 +134,8 @@ export interface Strings {
   streamHint: string;
   streamSidecars: string;
   streamingBadge: string;
+  /** Badge for a book served whole from the offline (prefetch) cache. */
+  offlineBadge: string;
   packLabel: string;
 }
 
@@ -152,6 +156,7 @@ const en: Strings = {
   themeDark: "Dark",
   themeDarkShell: "Dark shell, light pages",
   themeSystem: "Use system setting",
+  prefetchToggle: "Keep books offline",
   back: "Back",
   forward: "Forward",
   about: "About KD Help Book",
@@ -262,6 +267,7 @@ const en: Strings = {
     "Reads pages on demand over HTTP Range (real full-text search), and falls back to a full download if the host has no Range support.",
   streamSidecars: "Attachment packs (.khba URLs, one per line — optional):",
   streamingBadge: "· streaming",
+  offlineBadge: "· offline",
   packLabel: "attachment pack",
 };
 
@@ -282,6 +288,7 @@ const pl: Strings = {
   themeDark: "Ciemny",
   themeDarkShell: "Ciemny interfejs, jasne strony",
   themeSystem: "Ustawienie systemu",
+  prefetchToggle: "Trzymaj książki offline",
   back: "Wstecz",
   forward: "Dalej",
   about: "O programie KD Help Book",
@@ -397,6 +404,7 @@ const pl: Strings = {
   streamSidecars:
     "Paczki załączników (adresy .khba, po jednym w wierszu — opcjonalne):",
   streamingBadge: "· strumieniowanie",
+  offlineBadge: "· offline",
   packLabel: "pakiet załączników",
 };
 

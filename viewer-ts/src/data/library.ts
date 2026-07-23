@@ -4,7 +4,10 @@
 
 const DB_NAME = "khb";
 const STORE = "docsets";
-const VERSION = 1;
+/** Prefetch cache: whole `.khb` (and pack) bytes for bundled/remote streamed
+ *  books, so a streamed book can be used offline / from cache on later loads. */
+const BLOBS = "blobs";
+const VERSION = 2;
 
 export interface StoredDocset {
   id: string;
@@ -20,6 +23,14 @@ export interface StoredDocset {
   attachments?: Uint8Array[];
 }
 
+/** A prefetched whole `.khb` (+ its packs), keyed by URL + content hash so a new
+ *  build (new hash) misses and re-prefetches. */
+export interface StoredBlob {
+  key: string;
+  bytes: Uint8Array;
+  packs: Uint8Array[];
+}
+
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, VERSION);
@@ -29,6 +40,9 @@ function openDb(): Promise<IDBDatabase> {
         const store = db.createObjectStore(STORE, { keyPath: "id" });
         store.createIndex("language", "language", { unique: false });
       }
+      if (!db.objectStoreNames.contains(BLOBS)) {
+        db.createObjectStore(BLOBS, { keyPath: "key" });
+      }
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -36,14 +50,15 @@ function openDb(): Promise<IDBDatabase> {
 }
 
 async function withStore<T>(
+  storeName: string,
   mode: IDBTransactionMode,
   fn: (store: IDBObjectStore) => IDBRequest<T>,
 ): Promise<T | undefined> {
   try {
     const db = await openDb();
     return await new Promise<T>((resolve, reject) => {
-      const tx = db.transaction(STORE, mode);
-      const req = fn(tx.objectStore(STORE));
+      const tx = db.transaction(storeName, mode);
+      const req = fn(tx.objectStore(storeName));
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
       tx.oncomplete = () => db.close();
@@ -54,15 +69,50 @@ async function withStore<T>(
 }
 
 export async function putDocset(d: StoredDocset): Promise<void> {
-  await withStore("readwrite", (s) => s.put(d));
+  await withStore(STORE, "readwrite", (s) => s.put(d));
 }
 
 export async function deleteDocset(id: string): Promise<void> {
-  await withStore("readwrite", (s) => s.delete(id));
+  await withStore(STORE, "readwrite", (s) => s.delete(id));
 }
 
 export async function allDocsets(): Promise<StoredDocset[]> {
-  return (await withStore<StoredDocset[]>("readonly", (s) => s.getAll())) ?? [];
+  return (
+    (await withStore<StoredDocset[]>(STORE, "readonly", (s) => s.getAll())) ?? []
+  );
+}
+
+/** The prefetch-cache key for a docset URL at a given content hash. */
+export function blobKey(url: string, hash: string): string {
+  return `${url}@${hash}`;
+}
+
+/** Read a prefetched whole `.khb` (+ packs) by key, or null if not cached. */
+export async function getBlob(key: string): Promise<StoredBlob | null> {
+  return (
+    (await withStore<StoredBlob>(BLOBS, "readonly", (s) => s.get(key))) ?? null
+  );
+}
+
+/** Cache a prefetched whole `.khb` (+ packs). Best-effort: a quota failure is a
+ *  no-op (the book keeps streaming). */
+export async function putBlob(blob: StoredBlob): Promise<void> {
+  await withStore(BLOBS, "readwrite", (s) => s.put(blob));
+}
+
+/** Every cached blob key — for pruning entries whose content hash is now stale. */
+export async function allBlobKeys(): Promise<string[]> {
+  const keys = await withStore<IDBValidKey[]>(BLOBS, "readonly", (s) =>
+    s.getAllKeys(),
+  );
+  return (keys ?? []).map(String);
+}
+
+/** Drop cached blobs whose key isn't in `keep` (superseded builds / removed books). */
+export async function pruneBlobs(keep: Set<string>): Promise<void> {
+  for (const key of await allBlobKeys()) {
+    if (!keep.has(key)) await withStore(BLOBS, "readwrite", (s) => s.delete(key));
+  }
 }
 
 export async function docsetsByLanguage(

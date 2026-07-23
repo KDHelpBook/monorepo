@@ -131,6 +131,15 @@ enum Command {
         /// (repeatable). Streamed files stay uncompressed even in compact mode.
         #[arg(long, num_args = 0.., value_name = "DOCSET")]
         stream: Option<Vec<PathBuf>>,
+        /// Default the viewer's "keep streamed books offline" toggle to on: a
+        /// streamed book is also fetched whole in the background and cached, so
+        /// later loads open it from cache/offline. Users can still turn it off.
+        #[arg(long)]
+        prefetch: bool,
+        /// Hard-disable the offline-cache feature: the viewer hides the toggle and
+        /// never prefetches. For sites that don't want it at all.
+        #[arg(long = "no-prefetch", conflicts_with = "prefetch")]
+        no_prefetch: bool,
     },
     /// Add or replace docsets in an already-built distribution.
     Patch {
@@ -184,6 +193,8 @@ fn main() -> Result<()> {
             llms,
             base_url,
             stream,
+            prefetch,
+            no_prefetch,
         } => {
             let mut external_sources = profile == Profile::Reader;
             if lock {
@@ -207,6 +218,8 @@ fn main() -> Result<()> {
                 llms,
                 base_url,
                 stream,
+                prefetch,
+                prefetch_locked: no_prefetch,
             })
         }
         Command::Patch {

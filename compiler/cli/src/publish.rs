@@ -65,6 +65,17 @@ struct Config {
     /// literal `"search"`. Omitted → the viewer defaults to the Search page.
     #[serde(skip_serializing_if = "Option::is_none")]
     home: Option<String>,
+    /// Default for the viewer's "keep streamed books offline" toggle: when true, a
+    /// streamed book is also downloaded whole in the background and cached, so
+    /// later loads open it from cache/offline. A per-device user setting overrides
+    /// it. Omitted when false so older viewers ignore it.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    prefetch: bool,
+    /// Hard-disable the prefetch feature: the viewer hides the toggle and never
+    /// prefetches, ignoring any per-device choice. For sites that don't want the
+    /// offline cache at all (e.g. metered bandwidth). Omitted when false.
+    #[serde(rename = "prefetchLocked", skip_serializing_if = "std::ops::Not::not")]
+    prefetch_locked: bool,
 }
 
 /// Options for [`pack`].
@@ -87,6 +98,11 @@ pub struct PackOptions {
     /// `--stream`: `None` = no streaming, `Some([])` = mark every docset, else mark
     /// only the listed `--docset` paths.
     pub stream: Option<Vec<PathBuf>>,
+    /// `--prefetch`: the default for the viewer's "keep streamed books offline"
+    /// toggle (written into `config.json`).
+    pub prefetch: bool,
+    /// `--no-prefetch`: hard-disable the offline-cache feature (hide the toggle).
+    pub prefetch_locked: bool,
 }
 
 /// Assemble a fresh distribution at `out`.
@@ -118,6 +134,8 @@ pub fn pack(opts: &PackOptions) -> Result<()> {
             external_sources: opts.external_sources,
             pwa: opts.pwa,
             home: opts.home.clone(),
+            prefetch: opts.prefetch,
+            prefetch_locked: opts.prefetch_locked,
         },
     )?;
     if opts.llms {

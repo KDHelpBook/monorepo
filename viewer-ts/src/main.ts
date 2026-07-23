@@ -14,10 +14,14 @@ import {
   addExtraPack,
   addRemote,
   allDocsets,
+  blobKey,
   deleteDocset,
+  getBlob,
   getRemotes,
   importKhbm,
   loadExtraPacks,
+  pruneBlobs,
+  putBlob,
   putDocset,
   removeRemote,
 } from "./data/library";
@@ -27,6 +31,7 @@ import {
   loadExpanded,
   loadFavorites,
   loadFontSize,
+  loadPrefetch,
   loadSeenVersions,
   loadTabs,
   loadTheme,
@@ -35,6 +40,7 @@ import {
   saveExpanded,
   saveFavorites,
   saveFontSize,
+  savePrefetch,
   saveSeenVersions,
   saveTabs,
   saveTheme,
@@ -60,6 +66,12 @@ interface Config {
   /** Cold-start landing: a page id (`docsetId:localId`) or `"search"`. When
    *  unset the viewer defaults to the Search page (search-first). */
   home?: string;
+  /** Default for the "keep streamed books offline" (prefetch-to-cache) toggle —
+   *  a per-device user setting overrides it. Off when unset. */
+  prefetch?: boolean;
+  /** Hard-disable prefetch (`khb pack --no-prefetch`): hide the toggle and never
+   *  prefetch, ignoring any per-device choice. */
+  prefetchLocked?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -481,28 +493,49 @@ async function bootstrap(): Promise<void> {
   // path above. Same negotiation as a remote: the host must honour Range and a
   // cheap streamed peek must succeed, else fall back to the whole fetch.
   const bundled: DocVariant[] = [];
+  // Prefetch-to-cache ("keep streamed books offline"): a per-device toggle with a
+  // config default. When on, a streamed book that we've already downloaded whole
+  // opens straight from IndexedDB; otherwise it streams now and is prefetched to
+  // cache in the background (then hot-swapped) — see start()/runPrefetch.
+  // `--no-prefetch` hard-disables the feature (toggle hidden, never prefetches),
+  // overriding any per-device choice; otherwise the user setting wins over the
+  // config default.
+  const prefetchOn =
+    !config.prefetchLocked && loadPrefetch(config.prefetch ?? false);
+  const prefetch = new Map<string, PrefetchItem>(); // streamed book id → how to cache it
+  const validBlobKeys = new Set<string>(); // current keys, to prune stale ones
   for (const d of manifest.docsets) {
     const packs = [...(d.attachments ?? []), ...extraOf(d.id)];
     let source: DocsetSource | null = null;
     // The manifest `file` is dist-relative — resolve it (and the packs) against
     // the site base so the Range probe and the streaming engine get real URLs.
-    // Cache-key it by content (`d.hash`): a PR preview rebuilds the same-named
-    // `.khb` on every deploy, and a Range read that mixes a cached old range with
-    // a fresh one yields a malformed SQLite image. The per-content key makes each
-    // distinct build a distinct URL (probe/peek/reads stay consistent) while an
-    // unchanged book keeps its cache.
+    // The content hash (`d.hash`) keys both the HTTP cache and the prefetch cache,
+    // so a rebuilt (same-named) book gets a fresh URL while an unchanged one hits
+    // cache; and a Range read never mixes a stale range into a malformed image.
     const url = stampDocset(resolveManifestUrl(d.file, document.baseURI), d.hash);
-    if (streamEligible(d, extraOf(d.id)) && (await rangeSupported(url))) {
+    const packUrls = packs.map((p) => fresh(resolveManifestUrl(p, document.baseURI)));
+    const eligible = streamEligible(d, extraOf(d.id));
+    // Cache-first: open the whole `.khb` from IndexedDB when we prefetched it.
+    if (eligible && d.hash) {
+      const key = blobKey(url, d.hash);
+      validBlobKeys.add(key);
+      if (prefetchOn) {
+        const cached = await getBlob(key);
+        if (cached)
+          source = {
+            bytes: cached.bytes,
+            attachments: cached.packs.map((bytes) => ({ bytes })),
+          };
+      }
+    }
+    const fromCache = source != null; // opened whole from the prefetch cache
+    if (!source && eligible && (await rangeSupported(url))) {
       try {
         const { StreamingDocset } = await import("./data/streaming-docset");
         await StreamingDocset.peek(url); // validates engine + host end-to-end
-        source = {
-          url,
-          mode: "streaming",
-          attachments: packs.map((p) =>
-            fresh(resolveManifestUrl(p, document.baseURI)),
-          ),
-        };
+        source = { url, mode: "streaming", attachments: packUrls };
+        // Remember how to prefetch this streamed book whole in the background.
+        if (d.hash) prefetch.set(d.id, { url, hash: d.hash, packUrls });
       } catch {
         /* streaming open failed despite Range — fall back to a whole fetch */
       }
@@ -520,7 +553,14 @@ async function bootstrap(): Promise<void> {
         // A `.gz` suffix (on the docset or a pack) decompresses on fetch.
         attachments: packs.map((file) => ({ file: fresh(file) })),
       },
-      origin: { kind: "bundled", streaming: source != null, packs },
+      // `streaming` reflects the live transport: a cached (bytes) source is whole,
+      // not streamed, so only a real streaming source counts.
+      origin: {
+        kind: "bundled",
+        streaming: !!source && "mode" in source && source.mode === "streaming",
+        offline: fromCache,
+        packs,
+      },
     });
   }
 
@@ -624,9 +664,25 @@ async function bootstrap(): Promise<void> {
     updates,
     variants,
     failed,
+    { on: prefetchOn, items: prefetch, validKeys: validBlobKeys },
   );
   // Some books loaded but others failed — a non-blocking notice naming the bad ones.
   if (failed.length) showLoadWarnings(failed.map((f) => f.error), strings(lang));
+}
+
+/** How to prefetch one streamed book whole (for the offline cache). */
+interface PrefetchItem {
+  url: string;
+  hash: string;
+  packUrls: string[];
+}
+
+/** The prefetch-to-cache plan handed to start(): the toggle state, the streamed
+ *  books that can be prefetched, and the set of currently-valid cache keys. */
+interface PrefetchPlan {
+  on: boolean;
+  items: Map<string, PrefetchItem>;
+  validKeys: Set<string>;
 }
 
 /** Where a book came from + its packs — for the Manage docsets page. */
@@ -637,6 +693,10 @@ interface BookOrigin {
   /** Page-level streaming: the remote's transport preference, or — for a
    *  bundled book — the transport actually negotiated at load. */
   streaming?: boolean;
+  /** Served whole from the prefetch cache (IndexedDB) — set when a book opens
+   *  from cache, or a streamed book is hot-swapped to its cached copy. Shown as
+   *  "· offline" instead of "· streaming". Mutated live on hot-swap. */
+  offline?: boolean;
   /** Attachment packs: `.khba` paths/URLs (bundled/remote) or generic labels. */
   packs: string[];
 }
@@ -862,6 +922,7 @@ function start(
   updates: { title: string; from: string; to: string }[],
   variants: DocVariant[],
   failed: FailedBook[],
+  prefetchPlan: PrefetchPlan,
 ): void {
   const s: Strings = strings(lang);
   // Books that failed to load — kept visible (sidebar / About / Manage) marked as
@@ -1012,6 +1073,74 @@ function start(
   prefersDark.addEventListener("change", () => {
     if (themeMode === "system") applyTheme();
   });
+
+  // ---- prefetch to cache (keep streamed books offline) ----
+  // Streamed books we can download whole in the background, then hot-swap for the
+  // cached copy — no reload, identical content. The set shrinks as books swap.
+  let prefetchEnabled = prefetchPlan.on;
+  let prefetching = false;
+  const streamedIds = new Set(
+    [...prefetchPlan.items.keys()].filter((id) => collection.docsetById(id)),
+  );
+  const updatePrefetchUI = (): void => {
+    document
+      .querySelectorAll<HTMLElement>('[data-action="toggle-prefetch"]')
+      .forEach((el) => {
+        el.classList.toggle("active", prefetchEnabled);
+        el.setAttribute("aria-checked", String(prefetchEnabled));
+      });
+  };
+  // Replace an open streamed docset with a whole-file one of identical content —
+  // the TOC/structure is unchanged, so nothing needs re-rendering; later
+  // page/asset/search calls just use the cached (offline) docset.
+  const hotSwapToCache = async (
+    id: string,
+    bytes: Uint8Array,
+    packBytes: Uint8Array[],
+  ): Promise<void> => {
+    if (!streamedIds.has(id)) return; // gone / already swapped / version-switched
+    const { StreamingDocset } = await import("./data/streaming-docset");
+    const replacement = await StreamingDocset.openBytes(bytes, packBytes);
+    const previous = collection.docsetById(id);
+    collection = collection.withDocset(id, replacement);
+    streamedIds.delete(id);
+    previous?.close(); // free the streamed wa-sqlite handle
+    // Flip the transport shown in About / Manage (both render on demand from
+    // `variants`): this book is now served whole from cache, not streamed.
+    const v = variants.find((x) => x.id === id && x.origin.streaming);
+    if (v) {
+      v.origin.streaming = false;
+      v.origin.offline = true;
+    }
+  };
+  // Download each still-streaming book whole, cache it (IndexedDB), and hot-swap.
+  const runPrefetch = async (): Promise<void> => {
+    if (!prefetchEnabled || prefetching) return;
+    prefetching = true;
+    try {
+      for (const id of [...streamedIds]) {
+        const item = prefetchPlan.items.get(id);
+        if (!item || !prefetchEnabled || !streamedIds.has(id)) continue;
+        try {
+          const bytes = await fetchDocsetBytes(item.url);
+          const packs: Uint8Array[] = [];
+          for (const p of item.packUrls) packs.push(await fetchDocsetBytes(p));
+          await putBlob({ key: blobKey(item.url, item.hash), bytes, packs });
+          await hotSwapToCache(id, bytes, packs);
+        } catch {
+          /* offline / quota / fetch error — the book just keeps streaming */
+        }
+      }
+    } finally {
+      prefetching = false;
+    }
+  };
+  const setPrefetch = (on: boolean): void => {
+    prefetchEnabled = on;
+    savePrefetch(on);
+    updatePrefetchUI();
+    if (on) void runPrefetch(); // start caching (and hot-swapping) right away
+  };
   // Terms to highlight in the opened page — set when a search result is clicked,
   // persisted across navigation (classic help-viewer behaviour) until explicitly cleared.
   let highlightTerms: string[] = [];
@@ -2355,6 +2484,9 @@ function start(
         setTheme(THEME_CYCLE[(i + 1) % THEME_CYCLE.length] ?? "light");
         break;
       }
+      case "toggle-prefetch":
+        if (!config.prefetchLocked) setPrefetch(!prefetchEnabled);
+        break;
       case "print":
         window.print();
         break;
@@ -2434,6 +2566,18 @@ function start(
   // The <html> data-theme was already set pre-paint by the inline script in index.html.
   applyTheme();
 
+  // Reflect the prefetch toggle, drop cache entries from superseded builds, and —
+  // when enabled — start downloading streamed books whole in the background,
+  // hot-swapping each for its cached copy as it lands. A `--no-prefetch` build
+  // hides the toggle entirely.
+  if (config.prefetchLocked)
+    document
+      .querySelectorAll<HTMLElement>('[data-action="toggle-prefetch"]')
+      .forEach((el) => (el.style.display = "none"));
+  else updatePrefetchUI();
+  void pruneBlobs(prefetchPlan.validKeys);
+  if (prefetchEnabled) void runPrefetch();
+
   // ---- About modal ----
   function showAbout(): void {
     const bg = document.createElement("div");
@@ -2441,17 +2585,20 @@ function start(
       "position:fixed;inset:0;background:var(--backdrop);display:grid;place-items:center;z-index:50";
     // Loaded docsets with their versions (language shown too, since a fallback book
     // may differ from the UI language).
-    // Whether a loaded book is actually being streamed — matched from the chosen
-    // editions (same "· streaming" marker the Manage page shows).
-    const streamed = (id: string, language: string): boolean =>
-      variants.some(
-        (v) => v.id === id && v.language === language && v.origin.streaming,
-      );
+    // The transport marker for a loaded book — "· offline" (whole from cache) or
+    // "· streaming" (page-by-page), matched from the chosen editions (same markers
+    // the Manage page shows).
+    const transport = (id: string, language: string): string => {
+      const v = variants.find((x) => x.id === id && x.language === language);
+      if (v?.origin.offline) return ` ${esc(s.offlineBadge)}`;
+      if (v?.origin.streaming) return ` ${esc(s.streamingBadge)}`;
+      return "";
+    };
     const bookLines = collection
       .books()
       .map(
         (b) =>
-          `<div>${esc(b.title)} <span style="color:var(--muted)">· ${esc(b.language)}${b.version ? ` · ${esc(s.versionLabel)} ${esc(b.version)}` : ""}${streamed(b.id, b.language) ? ` ${esc(s.streamingBadge)}` : ""}</span></div>`,
+          `<div>${esc(b.title)} <span style="color:var(--muted)">· ${esc(b.language)}${b.version ? ` · ${esc(s.versionLabel)} ${esc(b.version)}` : ""}${transport(b.id, b.language)}</span></div>`,
       )
       .join("");
     // List books that failed to load too, so they aren't silently missing here.
@@ -2620,7 +2767,11 @@ function start(
           : o.kind === "remote"
             ? s.remoteBadge
             : s.bundledBadge;
-      return o.streaming ? `${kind} ${s.streamingBadge}` : kind;
+      return o.offline
+        ? `${kind} ${s.offlineBadge}`
+        : o.streaming
+          ? `${kind} ${s.streamingBadge}`
+          : kind;
     };
 
     // Show every edition (variant) grouped by product, the loaded ones marked
