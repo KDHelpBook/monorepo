@@ -528,6 +528,7 @@ async function bootstrap(): Promise<void> {
           };
       }
     }
+    const fromCache = source != null; // opened whole from the prefetch cache
     if (!source && eligible && (await rangeSupported(url))) {
       try {
         const { StreamingDocset } = await import("./data/streaming-docset");
@@ -557,6 +558,7 @@ async function bootstrap(): Promise<void> {
       origin: {
         kind: "bundled",
         streaming: !!source && "mode" in source && source.mode === "streaming",
+        offline: fromCache,
         packs,
       },
     });
@@ -691,6 +693,10 @@ interface BookOrigin {
   /** Page-level streaming: the remote's transport preference, or — for a
    *  bundled book — the transport actually negotiated at load. */
   streaming?: boolean;
+  /** Served whole from the prefetch cache (IndexedDB) — set when a book opens
+   *  from cache, or a streamed book is hot-swapped to its cached copy. Shown as
+   *  "· offline" instead of "· streaming". Mutated live on hot-swap. */
+  offline?: boolean;
   /** Attachment packs: `.khba` paths/URLs (bundled/remote) or generic labels. */
   packs: string[];
 }
@@ -1099,6 +1105,13 @@ function start(
     collection = collection.withDocset(id, replacement);
     streamedIds.delete(id);
     previous?.close(); // free the streamed wa-sqlite handle
+    // Flip the transport shown in About / Manage (both render on demand from
+    // `variants`): this book is now served whole from cache, not streamed.
+    const v = variants.find((x) => x.id === id && x.origin.streaming);
+    if (v) {
+      v.origin.streaming = false;
+      v.origin.offline = true;
+    }
   };
   // Download each still-streaming book whole, cache it (IndexedDB), and hot-swap.
   const runPrefetch = async (): Promise<void> => {
@@ -2572,17 +2585,20 @@ function start(
       "position:fixed;inset:0;background:var(--backdrop);display:grid;place-items:center;z-index:50";
     // Loaded docsets with their versions (language shown too, since a fallback book
     // may differ from the UI language).
-    // Whether a loaded book is actually being streamed — matched from the chosen
-    // editions (same "· streaming" marker the Manage page shows).
-    const streamed = (id: string, language: string): boolean =>
-      variants.some(
-        (v) => v.id === id && v.language === language && v.origin.streaming,
-      );
+    // The transport marker for a loaded book — "· offline" (whole from cache) or
+    // "· streaming" (page-by-page), matched from the chosen editions (same markers
+    // the Manage page shows).
+    const transport = (id: string, language: string): string => {
+      const v = variants.find((x) => x.id === id && x.language === language);
+      if (v?.origin.offline) return ` ${esc(s.offlineBadge)}`;
+      if (v?.origin.streaming) return ` ${esc(s.streamingBadge)}`;
+      return "";
+    };
     const bookLines = collection
       .books()
       .map(
         (b) =>
-          `<div>${esc(b.title)} <span style="color:var(--muted)">· ${esc(b.language)}${b.version ? ` · ${esc(s.versionLabel)} ${esc(b.version)}` : ""}${streamed(b.id, b.language) ? ` ${esc(s.streamingBadge)}` : ""}</span></div>`,
+          `<div>${esc(b.title)} <span style="color:var(--muted)">· ${esc(b.language)}${b.version ? ` · ${esc(s.versionLabel)} ${esc(b.version)}` : ""}${transport(b.id, b.language)}</span></div>`,
       )
       .join("");
     // List books that failed to load too, so they aren't silently missing here.
@@ -2751,7 +2767,11 @@ function start(
           : o.kind === "remote"
             ? s.remoteBadge
             : s.bundledBadge;
-      return o.streaming ? `${kind} ${s.streamingBadge}` : kind;
+      return o.offline
+        ? `${kind} ${s.offlineBadge}`
+        : o.streaming
+          ? `${kind} ${s.streamingBadge}`
+          : kind;
     };
 
     // Show every edition (variant) grouped by product, the loaded ones marked

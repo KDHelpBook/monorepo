@@ -134,6 +134,8 @@ export interface Strings {
   streamHint: string;
   streamSidecars: string;
   streamingBadge: string;
+  /** Badge for a book served whole from the offline (prefetch) cache. */
+  offlineBadge: string;
   packLabel: string;
 }
 
@@ -265,6 +267,7 @@ const en: Strings = {
     "Reads pages on demand over HTTP Range (real full-text search), and falls back to a full download if the host has no Range support.",
   streamSidecars: "Attachment packs (.khba URLs, one per line — optional):",
   streamingBadge: "· streaming",
+  offlineBadge: "· offline",
   packLabel: "attachment pack",
 };
 
@@ -401,6 +404,7 @@ const pl: Strings = {
   streamSidecars:
     "Paczki załączników (adresy .khba, po jednym w wierszu — opcjonalne):",
   streamingBadge: "· strumieniowanie",
+  offlineBadge: "· offline",
   packLabel: "pakiet załączników",
 };
 
