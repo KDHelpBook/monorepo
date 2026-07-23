@@ -4,6 +4,7 @@ import contentCss from "./styles/content.css?inline";
 import syntaxCss from "./styles/syntax.css?inline";
 import {
   Collection,
+  DocsetLoadError,
   fetchDocsetBytes,
   rangeSupported,
   type DocsetSource,
@@ -28,6 +29,7 @@ import {
   loadFontSize,
   loadSeenVersions,
   loadTabs,
+  loadTheme,
   saveDocsetLangs,
   saveDocsetVersions,
   saveExpanded,
@@ -35,6 +37,8 @@ import {
   saveFontSize,
   saveSeenVersions,
   saveTabs,
+  saveTheme,
+  type ThemeMode,
 } from "./data/uistate";
 import {
   applyFolders,
@@ -168,7 +172,8 @@ addEventListener('touchstart',function(e){pull=stop()<=0;py=e.touches[0].clientY
 addEventListener('touchmove',function(e){if(pull&&e.touches[0].clientY-py>72){pull=false;post({t:'khb',a:'pull'})}},{passive:true});
 addEventListener('touchend',function(){pull=false},{passive:true});
 addEventListener('message',function(e){var d=e.data;if(!d||d.t!=='khb-app')return;
- if(d.a==='font'&&typeof d.size==='number'){document.documentElement.style.setProperty('--content-size',d.size+'px')}});
+ if(d.a==='font'&&typeof d.size==='number'){document.documentElement.style.setProperty('--content-size',d.size+'px')}
+ else if(d.a==='theme'){var de=document.documentElement;if(d.dark){de.setAttribute('data-theme','dark')}else{de.removeAttribute('data-theme')}}});
 function ready(){var m=document.querySelector('mark.hl');if(m)m.scrollIntoView({block:'center'})}
 if(document.readyState!=='loading')ready();else addEventListener('DOMContentLoaded',ready);
 })();`;
@@ -217,6 +222,166 @@ async function loadConfig(): Promise<Config> {
     /* no config.json → defaults */
   }
   return { externalSources: true, pwa: true };
+}
+
+// --- Loading / progress UI ------------------------------------------------
+// The #loading panel and #status-progress bar live in the static shell, so these
+// helpers run at module scope (before start() wires up the app) and address the
+// nodes directly. The cold-start panel covers the empty content area during the
+// initial docset download; the status bar shows a small activity bar while a
+// later background fetch (streamed page/asset/search) is in flight.
+
+/** A short human byte label ("1.4 MB" / "820 KB"), for downloads with no total. */
+function fmtBytes(n: number): string {
+  if (n >= 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  if (n >= 1024) return `${Math.round(n / 1024)} KB`;
+  return `${n} B`;
+}
+
+/** Drive the cold-start panel from a whole-file download's byte counts. */
+function setDownloadProgress(
+  loaded: number,
+  total: number | null,
+  title: string,
+  index: number,
+  count: number,
+  lang: string,
+): void {
+  const box = document.getElementById("loading");
+  if (!box || box.classList.contains("done")) return;
+  const s = strings(lang);
+  const titleEl = document.getElementById("loading-title");
+  if (titleEl) titleEl.textContent = s.downloadingHelp;
+  const nameEl = document.getElementById("loading-name");
+  if (nameEl) {
+    nameEl.textContent = count > 1 ? `${title} (${index + 1}/${count})` : title;
+  }
+  const prog = document.getElementById("loading-progress");
+  const bar = document.getElementById("loading-bar");
+  const pct = document.getElementById("loading-pct");
+  if (total != null && total > 0) {
+    const p = Math.min(100, Math.round((loaded / total) * 100));
+    prog?.classList.remove("indeterminate");
+    if (bar) bar.style.width = `${p}%`;
+    if (pct) pct.textContent = `${p}%`;
+  } else {
+    // No Content-Length (chunked/compressed): keep the animation, show bytes so far.
+    prog?.classList.add("indeterminate");
+    if (pct) pct.textContent = fmtBytes(loaded);
+  }
+}
+
+/** Hide the cold-start panel once the collection is ready to render. */
+function hideLoading(): void {
+  document.getElementById("loading")?.classList.add("done");
+}
+
+// The UI language, captured as soon as bootstrap resolves it, so a failure that
+// happens deep in loading can still be reported in the right language (the bottom
+// catch has no `lang` in scope). Defaults to "en" for failures before that point.
+let bootLang = "en";
+
+/** The book a failed source names — its title if known, else the URL/label. */
+function errorName(e: DocsetLoadError): string {
+  return e.title || e.source;
+}
+
+/** Split a load failure into a headline, a human reason, and the source it hit. */
+function formatLoadError(
+  err: unknown,
+  s: Strings,
+): { headline: string; reason: string; source: string } {
+  if (err instanceof DocsetLoadError) {
+    return {
+      headline: s.loadFailed,
+      reason: s.loadErrorReason(err.kind, err.detail),
+      // Name the offending book: its title (if known) and the file/URL.
+      source: err.title ? `${err.title} — ${err.source}` : err.source,
+    };
+  }
+  const detail = err instanceof Error ? err.message : String(err);
+  return { headline: s.loadFailed, reason: detail, source: "" };
+}
+
+/** Surface a load failure in the (visible) cold-start panel, not the hidden #content. */
+function showLoadError(err: unknown, opts: { more?: number } = {}): void {
+  const box = document.getElementById("loading");
+  if (!box) return;
+  box.classList.remove("done");
+  box.classList.add("error");
+  box.removeAttribute("hidden");
+  const s = strings(bootLang);
+  const { headline, reason, source } = formatLoadError(err, s);
+  const titleEl = document.getElementById("loading-title");
+  if (titleEl) titleEl.textContent = headline;
+  const nameEl = document.getElementById("loading-name");
+  if (nameEl) {
+    nameEl.textContent =
+      opts.more && opts.more > 0
+        ? `${reason} ${s.loadErrorMore(opts.more)}`
+        : reason;
+  }
+  // Reuse the (now-freed) progress row's slot for the offending file/URL, muted.
+  document.getElementById("loading-progress")?.remove();
+  const pct = document.getElementById("loading-pct");
+  if (pct) pct.textContent = source;
+}
+
+/** A non-blocking toast naming books that failed to load while others succeeded. */
+function showLoadWarnings(errors: DocsetLoadError[], s: Strings): void {
+  if (!errors.length) return;
+  const toast = document.createElement("div");
+  toast.className = "update-toast";
+  const msg = document.createElement("span");
+  msg.textContent = s.loadWarnSome(errors.map(errorName));
+  const dismiss = document.createElement("button");
+  dismiss.type = "button";
+  dismiss.className = "update-dismiss";
+  dismiss.setAttribute("aria-label", s.close);
+  dismiss.textContent = "×";
+  dismiss.addEventListener("click", () => toast.remove());
+  toast.append(msg, dismiss);
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 12000);
+}
+
+// Status-bar activity bar: reference-counted so overlapping fetches (a page body
+// plus its assets) keep it up until the last finishes. A 150 ms reveal delay
+// means an instant in-memory read on a whole-file book never flashes it.
+let busyCount = 0;
+let busyTimer: ReturnType<typeof setTimeout> | null = null;
+
+function beginBusy(): void {
+  busyCount++;
+  if (busyCount === 1 && busyTimer == null) {
+    busyTimer = setTimeout(() => {
+      busyTimer = null;
+      if (busyCount > 0) {
+        document.getElementById("status-progress")?.removeAttribute("hidden");
+      }
+    }, 150);
+  }
+}
+
+function endBusy(): void {
+  busyCount = Math.max(0, busyCount - 1);
+  if (busyCount === 0) {
+    if (busyTimer != null) {
+      clearTimeout(busyTimer);
+      busyTimer = null;
+    }
+    document.getElementById("status-progress")?.setAttribute("hidden", "");
+  }
+}
+
+/** Run an async op with the status-bar activity bar flagged for its duration. */
+async function withBusy<T>(fn: () => Promise<T>): Promise<T> {
+  beginBusy();
+  try {
+    return await fn();
+  } finally {
+    endBusy();
+  }
 }
 
 async function bootstrap(): Promise<void> {
@@ -410,16 +575,39 @@ async function bootstrap(): Promise<void> {
 
   const available = [...new Set(variants.map((v) => v.language))];
   const lang = chooseLang(available);
+  bootLang = lang; // so a later load failure reports in the chosen language
   document.documentElement.lang = lang;
   applyStatic(lang);
 
-  const { sources, langInfo, versionInfo } = resolveVariants(variants, lang);
+  const { sources, books, titles, langInfo, versionInfo } = resolveVariants(
+    variants,
+    lang,
+  );
   if (!sources.length) throw new Error("no docsets to show");
 
   if (config.pwa) registerServiceWorker(strings(lang));
   else unregisterServiceWorker();
+  // A bad book is skipped, not fatal: collect per-source failures (paired with the
+  // chosen edition) and keep loading the rest. Only an empty result blocks the app.
+  const failed: FailedBook[] = [];
+  const collection = await Collection.load(sources, lang, {
+    onProgress: (l, t, i, n) =>
+      setDownloadProgress(l, t, titles[i] ?? "", i, n, lang),
+    labels: titles,
+    onError: (e, i) => {
+      const variant = books[i];
+      if (variant) failed.push({ variant, error: e });
+    },
+  });
+  if (!collection.books().length) {
+    // Nothing loaded — show the full error panel (naming the first failure).
+    showLoadError(failed[0]?.error ?? new Error("no docsets to show"), {
+      more: Math.max(0, failed.length - 1),
+    });
+    return;
+  }
   start(
-    await Collection.load(sources, lang),
+    collection,
     lang,
     available,
     config,
@@ -428,7 +616,10 @@ async function bootstrap(): Promise<void> {
     updates,
     variants,
     sanitizeFolders(manifest.folders),
+    failed,
   );
+  // Some books loaded but others failed — a non-blocking notice naming the bad ones.
+  if (failed.length) showLoadWarnings(failed.map((f) => f.error), strings(lang));
 }
 
 /** Where a book came from + its packs — for the Manage docsets page. */
@@ -454,6 +645,13 @@ interface DocVariant {
   origin: BookOrigin;
 }
 
+/** A chosen edition that failed to load — kept so it stays visible (sidebar,
+ *  About, Manage) marked as failed, instead of silently vanishing. */
+interface FailedBook {
+  variant: DocVariant;
+  error: DocsetLoadError;
+}
+
 /** Per-collection language availability for the Manage docsets override UI. */
 interface CollectionLangInfo {
   collection: string;
@@ -473,6 +671,11 @@ function resolveVariants(
   uiLang: string,
 ): {
   sources: DocsetSource[];
+  /** The chosen editions, index-aligned with `sources` — to name a book (progress
+   *  panel) or map a load failure back to its full metadata. */
+  books: DocVariant[];
+  /** Book titles, index-aligned with `sources` — for the download progress panel. */
+  titles: string[];
   langInfo: CollectionLangInfo[];
   versionInfo: CollectionVersionInfo[];
 } {
@@ -508,7 +711,13 @@ function resolveVariants(
       versions,
       chosen: chosenByCol.get(collection)?.version ?? versions[0]!,
     }));
-  return { sources: shown.map((v) => v.source), langInfo, versionInfo };
+  return {
+    sources: shown.map((v) => v.source),
+    books: shown,
+    titles: shown.map((v) => v.title),
+    langInfo,
+    versionInfo,
+  };
 }
 
 /** Per-collection version availability for the Version switcher + Manage docsets. */
@@ -646,8 +855,17 @@ function start(
   updates: { title: string; from: string; to: string }[],
   variants: DocVariant[],
   folders: FolderNode[],
+  failed: FailedBook[],
 ): void {
   const s: Strings = strings(lang);
+  // Books that failed to load — kept visible (sidebar / About / Manage) marked as
+  // failed. Mutable: the in-place version/language rebuild refreshes it.
+  let failedBooks = failed;
+  const failedById = (): Map<string, DocsetLoadError> =>
+    new Map(failedBooks.map((f) => [f.variant.id, f.error]));
+  // The collection is loaded and the UI is about to render — drop the cold-start
+  // download panel so the frame/TOC show through.
+  hideLoading();
   // Locked (bundled) builds hide the "open other docsets" affordances.
   if (!config.externalSources) {
     document
@@ -720,6 +938,48 @@ function start(
   let filterCategory = "";
   let filterProduct = ""; // family/collection scope (union by default)
   let fontSize = loadFontSize(13);
+  // Colour theme: "light" | "dark" | "system" (system follows prefers-color-scheme).
+  let themeMode: ThemeMode = loadTheme();
+  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)");
+  const effectiveDark = (): boolean =>
+    themeMode === "dark" || (themeMode === "system" && prefersDark.matches);
+
+  // Push the theme to the sandboxed content frame — a display-only message (no
+  // srcdoc rebuild), mirroring setFrameFont. The frame's bridge sets/clears
+  // data-theme on its <html>; first paint is baked in by frameDoc().
+  const setFrameTheme = (): void => {
+    frame.contentWindow?.postMessage(
+      { t: "khb-app", a: "theme", dark: effectiveDark() },
+      "*",
+    );
+  };
+  // Reflect the active mode in the View-menu radios + mobile picker + toolbar.
+  const updateThemeUI = (): void => {
+    document.querySelectorAll<HTMLElement>("[data-theme-opt]").forEach((el) => {
+      const on = el.dataset.themeOpt === themeMode;
+      el.classList.toggle("active", on);
+      el.setAttribute("aria-checked", String(on));
+    });
+  };
+  // Apply the effective theme to the app chrome (data-theme on <html>), the
+  // reading frame, and the toggle UI.
+  const applyTheme = (): void => {
+    const de = document.documentElement;
+    if (effectiveDark()) de.setAttribute("data-theme", "dark");
+    else de.removeAttribute("data-theme");
+    setFrameTheme();
+    updateThemeUI();
+  };
+  const setTheme = (mode: ThemeMode): void => {
+    themeMode = mode;
+    saveTheme(mode);
+    applyTheme();
+  };
+  const THEME_CYCLE: ThemeMode[] = ["light", "dark", "system"];
+  // In "system" mode, follow the OS toggle live (a pinned light/dark ignores it).
+  prefersDark.addEventListener("change", () => {
+    if (themeMode === "system") applyTheme();
+  });
   // Terms to highlight in the opened page — set when a search result is clicked,
   // persisted across navigation (classic help-viewer behaviour) until explicitly cleared.
   let highlightTerms: string[] = [];
@@ -770,7 +1030,15 @@ function start(
     ]);
     return applyFolders(collection.tocTree(forced), folders, lang);
   };
-  let toc = computeToc();
+  // A synthetic, clickable top-level leaf per failed book (`@failed:<id>`) — it
+  // registers in `pages` like any leaf and opens a reason page (see loadContent).
+  const failedTocNodes = (): TocNode[] =>
+    failedBooks.map((f) => ({
+      pageId: `@failed:${f.variant.id}`,
+      title: f.variant.title,
+      children: [],
+    }));
+  let toc = [...computeToc(), ...failedTocNodes()];
 
   // (Re)build the page-info and keyword maps from the current `collection`/`toc`.
   function buildPages(nodes: TocNode[], path: string[]): void {
@@ -842,17 +1110,21 @@ function start(
   function treeNode(n: TocNode, forceOpen = false): HTMLLIElement {
     const li = document.createElement("li");
     const kids = n.children.length > 0;
+    const failedNode = n.pageId.startsWith("@failed:");
     const row = document.createElement("div");
-    row.className = "node" + (n.group ? " group" : "");
+    row.className =
+      "node" + (n.group ? " group" : "") + (failedNode ? " failed" : "");
     row.dataset.id = n.pageId;
     const open = forceOpen || expanded.has(n.pageId);
     row.innerHTML =
       `<span class="twisty ${kids ? "" : "leaf"}">${kids ? (open ? "−" : "+") : ""}</span>` +
-      (n.group
-        ? n.pageId.startsWith(SHELF_PREFIX)
-          ? shelfIcon()
-          : groupIcon()
-        : pageIcon(kids)) +
+      (failedNode
+        ? '<span class="ico fail-ico" aria-hidden="true">⚠</span>'
+        : n.group
+          ? n.pageId.startsWith(SHELF_PREFIX)
+            ? shelfIcon()
+            : groupIcon()
+          : pageIcon(kids)) +
       `<span class="label">${esc(n.title)}</span>`;
     // A switchable product folder shows its current version/language in parens and a
     // ⋯ button that opens a small menu to change either — right where you see the
@@ -1004,16 +1276,33 @@ function start(
         collection.books().map((b) => [b.id, b.collection]),
       );
       const r = resolveVariants(variants, lang);
-      const next = await Collection.load(r.sources, lang);
+      // Switching version/language: a book that fails to load is skipped, not
+      // fatal. If the whole new set is unloadable, keep the current collection.
+      const rebuildFailed: FailedBook[] = [];
+      const next = await Collection.load(r.sources, lang, {
+        labels: r.titles,
+        onError: (e, i) => {
+          const variant = r.books[i];
+          if (variant) rebuildFailed.push({ variant, error: e });
+        },
+      });
+      const rebuildErrors = rebuildFailed.map((f) => f.error);
+      if (!next.books().length) {
+        next.close();
+        if (rebuildErrors.length) showLoadWarnings(rebuildErrors, s);
+        return;
+      }
       const prev = collection;
       collection = next;
       prev.close();
+      failedBooks = rebuildFailed;
+      if (rebuildErrors.length) showLoadWarnings(rebuildErrors, s);
       langInfo = r.langInfo;
       versionInfo = r.versionInfo;
       verByCol = new Map(versionInfo.map((v) => [v.collection, v]));
       langByCol = new Map(langInfo.map((l) => [l.collection, l]));
       switchableCols = new Set([...verByCol.keys(), ...langByCol.keys()]);
-      toc = computeToc();
+      toc = [...computeToc(), ...failedTocNodes()];
       deriveMaps();
       fillFilters();
 
@@ -1189,38 +1478,45 @@ function start(
       return;
     }
     const token = ++searchSeq;
-    const results = await collection.search(q, 40);
-    if (token !== searchSeq) return; // superseded by a newer keystroke
-    if (!results.length) {
-      leftBody.innerHTML = `<div class="empty">${esc(s.noResults)}<br><b>${esc(q)}</b></div>`;
-      statusCount.textContent = s.searchResults(0);
-      return;
+    // Search reads FTS index pages — a streamed book fetches them over the
+    // network, so flag the status-bar activity bar while the query runs.
+    beginBusy();
+    try {
+      const results = await collection.search(q, 40);
+      if (token !== searchSeq) return; // superseded by a newer keystroke
+      if (!results.length) {
+        leftBody.innerHTML = `<div class="empty">${esc(s.noResults)}<br><b>${esc(q)}</b></div>`;
+        statusCount.textContent = s.searchResults(0);
+        return;
+      }
+      const terms = queryTerms(q);
+      const frag = document.createDocumentFragment();
+      for (const hit of results) {
+        const div = document.createElement("div");
+        div.className = "result";
+        div.innerHTML =
+          `<div class="r-title">${esc(hit.title)}</div>` +
+          `<div class="r-crumb">${crumb(hit.pageId)}</div>` +
+          `<div class="r-snip">${hit.snippet}</div>`;
+        // Opening a result highlights the query terms on the destination page.
+        div.addEventListener("click", (e) => {
+          highlightTerms = terms;
+          openPage(hit.pageId, wantNew(e));
+        });
+        div.addEventListener("auxclick", (e) => {
+          if (e.button !== 1) return;
+          e.preventDefault();
+          highlightTerms = terms;
+          openPage(hit.pageId, true);
+        });
+        frag.appendChild(div);
+      }
+      leftBody.innerHTML = "";
+      leftBody.appendChild(frag);
+      statusCount.textContent = s.searchResults(results.length);
+    } finally {
+      endBusy();
     }
-    const terms = queryTerms(q);
-    const frag = document.createDocumentFragment();
-    for (const hit of results) {
-      const div = document.createElement("div");
-      div.className = "result";
-      div.innerHTML =
-        `<div class="r-title">${esc(hit.title)}</div>` +
-        `<div class="r-crumb">${crumb(hit.pageId)}</div>` +
-        `<div class="r-snip">${hit.snippet}</div>`;
-      // Opening a result highlights the query terms on the destination page.
-      div.addEventListener("click", (e) => {
-        highlightTerms = terms;
-        openPage(hit.pageId, wantNew(e));
-      });
-      div.addEventListener("auxclick", (e) => {
-        if (e.button !== 1) return;
-        e.preventDefault();
-        highlightTerms = terms;
-        openPage(hit.pageId, true);
-      });
-      frag.appendChild(div);
-    }
-    leftBody.innerHTML = "";
-    leftBody.appendChild(frag);
-    statusCount.textContent = s.searchResults(results.length);
   }
 
   // ---- Full Search page (roomy results in the document area, help-viewer style) ----
@@ -1254,7 +1550,8 @@ function start(
 
   // Apply the scope/sort controls to a raw search over the whole collection.
   async function searchPageResults(query: string): Promise<SearchHit[]> {
-    let hits = await collection.search(query, 200);
+    // Streamed books fetch FTS index pages here — show the status-bar activity bar.
+    let hits = await withBusy(() => collection.search(query, 200));
     if (searchScope.category) {
       const allowed = new Set(collection.pagesByCategory(searchScope.category));
       hits = hits.filter((h) => allowed.has(h.pageId));
@@ -1734,10 +2031,12 @@ function start(
   // Wrap page-body HTML into a full document for the sandboxed frame: the theme CSS
   // (the frame can't see the app stylesheet) + our trusted bridge script.
   const frameDoc = (bodyHtml: string): string =>
-    `<!doctype html><html><head><meta charset="utf-8">` +
+    `<!doctype html><html${effectiveDark() ? ' data-theme="dark"' : ""}>` +
+    `<head><meta charset="utf-8">` +
     `<meta name="referrer" content="no-referrer">` +
     // Typography + the syntax-highlighting theme (colours the compiler's class-tagged
-    // code spans; the light theme, with a dormant [data-theme="dark"] block).
+    // code spans; the light theme, with the [data-theme="dark"] block activated when
+    // the frame's <html> carries data-theme="dark").
     `<style>${contentCss}\n${syntaxCss}\n:root{--content-size:${fontSize}px}</style>` +
     `</head><body class="content">${bodyHtml}<script>${FRAME_BRIDGE}</script></body></html>`;
 
@@ -1863,6 +2162,27 @@ function start(
     if (t) loadContent(t.id);
   }
 
+  // Render the reason a book failed to load into the sandboxed frame — reached by
+  // clicking its `@failed:<id>` entry in the sidebar / tabs.
+  function renderFailedPage(id: string): void {
+    const vid = id.slice("@failed:".length);
+    const fb = failedBooks.find((f) => f.variant.id === vid);
+    const title = fb?.variant.title ?? vid;
+    const { reason, source } = fb
+      ? formatLoadError(fb.error, s)
+      : { reason: "", source: "" };
+    frame.srcdoc = frameDoc(
+      `<h1>${esc(title)}</h1>` +
+        `<p><b>${esc(s.loadFailed)}</b> — ${esc(reason)}</p>` +
+        (source
+          ? `<p style="color:#777;word-break:break-all">${esc(source)}</p>`
+          : "") +
+        `<p style="color:#777">${esc(s.loadFailedHint)}</p>`,
+    );
+    document.title = `${title} — KD Help Book`;
+    address.value = fb ? `khb://${vid}` : "";
+  }
+
   async function loadContent(id: string): Promise<void> {
     currentId = id;
     const token = ++loadSeq;
@@ -1880,46 +2200,63 @@ function start(
       updateFavBtn();
       return;
     }
+    if (id.startsWith("@failed:")) {
+      // A book that failed to load — render its reason in the frame (no docset).
+      renderFailedPage(id);
+      content.style.display = "none";
+      renderTabs();
+      updateFavBtn();
+      highlightTree();
+      return;
+    }
     const info = pages.get(id);
     // A streamed page body may take a round-trip; show the intended title now.
     status.textContent = s.ready;
-    const page = await collection.page(id);
-    if (token !== loadSeq) return; // a newer navigation superseded this one
-    const title = page?.title ?? info?.title ?? id;
-    if (page) {
-      // Build in a detached container (parent origin — full DOM access), then hand
-      // the serialized HTML to the sandboxed frame, which isolates the untrusted
-      // docset markup from the app's origin.
-      const holder = document.createElement("div");
-      holder.innerHTML = decorate(parkAssetUrls(page.bodyHtml), id);
-      stripDangerous(holder);
-      await resolveAssets(holder, id); // parked asset: → data: (may stream)
-      if (token !== loadSeq) return;
-      applyHighlight(holder);
-      enhanceCodeBlocks(holder); // filename bar + copy button
-      // The "On this page" nav is compiled into body_html; its `#slug` links route
-      // through rewriteFrameLinks like any in-page anchor.
-      rewriteFrameLinks(holder, id);
-      frame.srcdoc = frameDoc(holder.innerHTML);
-    } else {
-      frame.srcdoc = frameDoc(
-        `<h1>${esc(s.notFoundTitle)}</h1><p>${s.notFoundBody(esc(id))}</p>`,
-      );
+    // The page body (and its assets) may stream over the network — show the
+    // status-bar activity bar so a slow fetch doesn't look frozen.
+    beginBusy();
+    try {
+      const page = await collection.page(id);
+      if (token !== loadSeq) return; // a newer navigation superseded this one
+      const title = page?.title ?? info?.title ?? id;
+      if (page) {
+        // Build in a detached container (parent origin — full DOM access), then hand
+        // the serialized HTML to the sandboxed frame, which isolates the untrusted
+        // docset markup from the app's origin.
+        const holder = document.createElement("div");
+        holder.innerHTML = decorate(parkAssetUrls(page.bodyHtml), id);
+        stripDangerous(holder);
+        await resolveAssets(holder, id); // parked asset: → data: (may stream)
+        if (token !== loadSeq) return;
+        applyHighlight(holder);
+        enhanceCodeBlocks(holder); // filename bar + copy button
+        // The "On this page" nav is compiled into body_html; its `#slug` links route
+        // through rewriteFrameLinks like any in-page anchor.
+        rewriteFrameLinks(holder, id);
+        frame.srcdoc = frameDoc(holder.innerHTML);
+      } else {
+        frame.srcdoc = frameDoc(
+          `<h1>${esc(s.notFoundTitle)}</h1><p>${s.notFoundBody(esc(id))}</p>`,
+        );
+      }
+      // Hide the app-UI overlay so the (always-visible) frame shows through.
+      content.style.display = "none";
+      document.title = `${title} — KD Help Book`;
+      const { docsetId, localId } = collection.split(id);
+      address.value = `khb://${docsetId}/${localId}.htm`;
+      renderTabs();
+      updateFavBtn();
+      if (mode === "contents") revealCurrent();
+      else highlightTree();
+      // Reflect the current page in the URL for deep-linking/bookmarking, but with
+      // replaceState so it doesn't build a *browser* history that would fight the
+      // per-tab Back/Forward (the toolbar buttons own navigation now).
+      if (location.hash.slice(1) !== id)
+        history.replaceState(null, "", `#${id}`);
+      status.textContent = s.ready;
+    } finally {
+      endBusy();
     }
-    // Hide the app-UI overlay so the (always-visible) frame shows through.
-    content.style.display = "none";
-    document.title = `${title} — KD Help Book`;
-    const { docsetId, localId } = collection.split(id);
-    address.value = `khb://${docsetId}/${localId}.htm`;
-    renderTabs();
-    updateFavBtn();
-    if (mode === "contents") revealCurrent();
-    else highlightTree();
-    // Reflect the current page in the URL for deep-linking/bookmarking, but with
-    // replaceState so it doesn't build a *browser* history that would fight the
-    // per-tab Back/Forward (the toolbar buttons own navigation now).
-    if (location.hash.slice(1) !== id) history.replaceState(null, "", `#${id}`);
-    status.textContent = s.ready;
   }
 
   function openPage(id: string, newTab = false): void {
@@ -1989,6 +2326,20 @@ function start(
         setFrameFont();
         saveFontSize(fontSize);
         break;
+      case "theme-light":
+        setTheme("light");
+        break;
+      case "theme-dark":
+        setTheme("dark");
+        break;
+      case "theme-system":
+        setTheme("system");
+        break;
+      case "theme-cycle": {
+        const i = THEME_CYCLE.indexOf(themeMode);
+        setTheme(THEME_CYCLE[(i + 1) % THEME_CYCLE.length] ?? "light");
+        break;
+      }
       case "print":
         window.print();
         break;
@@ -2064,11 +2415,15 @@ function start(
     if (el) runAction(el.dataset.action!);
   });
 
+  // Reconcile the toggle UI (and the frame, once it loads) with the saved theme.
+  // The <html> data-theme was already set pre-paint by the inline script in index.html.
+  applyTheme();
+
   // ---- About modal ----
   function showAbout(): void {
     const bg = document.createElement("div");
     bg.style.cssText =
-      "position:fixed;inset:0;background:rgba(20,35,60,.35);display:grid;place-items:center;z-index:50";
+      "position:fixed;inset:0;background:var(--backdrop);display:grid;place-items:center;z-index:50";
     // Loaded docsets with their versions (language shown too, since a fallback book
     // may differ from the UI language).
     const bookLines = collection
@@ -2078,14 +2433,21 @@ function start(
           `<div>${esc(b.title)} <span style="color:var(--muted)">· ${esc(b.language)}${b.version ? ` · ${esc(s.versionLabel)} ${esc(b.version)}` : ""}</span></div>`,
       )
       .join("");
+    // List books that failed to load too, so they aren't silently missing here.
+    const failedLines = failedBooks
+      .map(
+        (f) =>
+          `<div>${esc(f.variant.title)} <span style="color:var(--danger)">· ${esc(s.bookFailed)}</span></div>`,
+      )
+      .join("");
     bg.innerHTML =
-      '<div style="width:420px;background:var(--chrome-top);border:1px solid #17335c;border-radius:3px;box-shadow:0 12px 40px rgba(0,0,0,.5);overflow:hidden">' +
+      '<div style="width:420px;background:var(--chrome-top);border:1px solid var(--modal-border);border-radius:3px;box-shadow:0 12px 40px rgba(0,0,0,.5);overflow:hidden">' +
       `<div style="background:linear-gradient(180deg,var(--title-top),var(--title-bot));color:#fff;font-weight:bold;padding:6px 10px">${esc(s.about)}</div>` +
       '<div style="padding:16px 18px;line-height:1.6"><div style="font-size:15px;font-weight:bold;color:var(--content-h)">KD Help Book</div>' +
       `<div>${esc(s.aboutTagline)}</div>` +
-      `<p style="color:#5b6675;margin:.8em 0 .3em">${esc(s.aboutLanguage)} <b>${esc(collection.language)}</b></p>` +
-      `<div style="font-size:11px;color:#5b6675">${bookLines}</div></div>` +
-      '<div style="padding:10px 16px;text-align:right;border-top:1px solid var(--chrome-border)"><button style="font-family:var(--font-ui);font-size:12px;padding:4px 16px;border:1px solid #16305a;border-radius:2px;background:linear-gradient(180deg,#eef4fd,#cbd9ec);cursor:pointer">OK</button></div></div>';
+      `<p style="color:var(--muted);margin:.8em 0 .3em">${esc(s.aboutLanguage)} <b>${esc(collection.language)}</b></p>` +
+      `<div style="font-size:11px;color:var(--muted)">${bookLines}${failedLines}</div></div>` +
+      '<div style="padding:10px 16px;text-align:right;border-top:1px solid var(--chrome-border)"><button style="font-family:var(--font-ui);font-size:12px;padding:4px 16px;border:1px solid var(--btn-border);border-radius:2px;background:var(--btn-face);cursor:pointer">OK</button></div></div>';
     const close = (): void => bg.remove();
     bg.addEventListener("click", (e) => {
       if (e.target === bg || (e.target as HTMLElement).tagName === "BUTTON")
@@ -2115,23 +2477,23 @@ function start(
   // CORS-reachable host serving the `.khb` uncompressed.
   function openUrl(): void {
     const btn =
-      "font-family:var(--font-ui);font-size:12px;padding:4px 16px;border:1px solid #16305a;border-radius:2px;cursor:pointer";
+      "font-family:var(--font-ui);font-size:12px;padding:4px 16px;border:1px solid var(--btn-border);border-radius:2px;cursor:pointer";
     const bg = document.createElement("div");
     bg.style.cssText =
-      "position:fixed;inset:0;background:rgba(20,35,60,.35);display:grid;place-items:center;z-index:50";
+      "position:fixed;inset:0;background:var(--backdrop);display:grid;place-items:center;z-index:50";
     bg.innerHTML =
-      '<div style="width:480px;max-width:92vw;background:var(--chrome-top);border:1px solid #17335c;border-radius:3px;box-shadow:0 12px 40px rgba(0,0,0,.5);overflow:hidden">' +
+      '<div style="width:480px;max-width:92vw;background:var(--chrome-top);border:1px solid var(--modal-border);border-radius:3px;box-shadow:0 12px 40px rgba(0,0,0,.5);overflow:hidden">' +
       `<div style="background:linear-gradient(180deg,var(--title-top),var(--title-bot));color:#fff;font-weight:bold;padding:6px 10px">${esc(s.openUrlTitle)}</div>` +
       `<div style="padding:14px 18px"><div style="color:var(--muted);margin-bottom:6px">${esc(s.openUrlHint)}</div>` +
-      '<input class="url-in" type="url" placeholder="https://…/docs.khb" spellcheck="false" style="width:100%;font-family:var(--font-mono);font-size:12px;padding:5px 7px;border:1px solid #7f9bc0;border-radius:2px;box-sizing:border-box">' +
+      '<input class="url-in" type="url" placeholder="https://…/docs.khb" spellcheck="false" style="width:100%;font-family:var(--font-mono);font-size:12px;padding:5px 7px;border:1px solid var(--input-border);border-radius:2px;box-sizing:border-box">' +
       `<label style="display:flex;align-items:center;gap:6px;margin-top:8px;color:var(--content-fg);font-size:12px;cursor:pointer"><input class="url-stream" type="checkbox" checked> ${esc(s.streamOption)}</label>` +
       `<div style="color:var(--muted);font-size:11px;margin-top:2px;margin-left:22px">${esc(s.streamHint)}</div>` +
       `<div class="url-sidecars-row" style="margin-top:8px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">${esc(s.streamSidecars)}</div>` +
-      '<textarea class="url-sidecars" rows="2" spellcheck="false" placeholder="https://…/docs.khba" style="width:100%;font-family:var(--font-mono);font-size:12px;padding:5px 7px;border:1px solid #7f9bc0;border-radius:2px;box-sizing:border-box;resize:vertical"></textarea></div>' +
-      '<div class="url-err" style="color:#a33;font-size:11px;min-height:15px;margin-top:5px"></div></div>' +
+      '<textarea class="url-sidecars" rows="2" spellcheck="false" placeholder="https://…/docs.khba" style="width:100%;font-family:var(--font-mono);font-size:12px;padding:5px 7px;border:1px solid var(--input-border);border-radius:2px;box-sizing:border-box;resize:vertical"></textarea></div>' +
+      '<div class="url-err" style="color:var(--danger);font-size:11px;min-height:15px;margin-top:5px"></div></div>' +
       '<div style="padding:10px 16px;border-top:1px solid var(--chrome-border);display:flex;gap:8px;justify-content:flex-end">' +
-      `<button class="url-cancel" style="${btn};background:#eef1f6">${esc(s.cancel)}</button>` +
-      `<button class="url-add" style="${btn};background:linear-gradient(180deg,#eef4fd,#cbd9ec)">${esc(s.add)}</button></div></div>`;
+      `<button class="url-cancel" style="${btn};background:var(--btn-cancel-face)">${esc(s.cancel)}</button>` +
+      `<button class="url-add" style="${btn};background:var(--btn-face)">${esc(s.add)}</button></div></div>`;
     const input = bg.querySelector<HTMLInputElement>(".url-in")!;
     const stream = bg.querySelector<HTMLInputElement>(".url-stream")!;
     const sidecarsRow = bg.querySelector<HTMLElement>(".url-sidecars-row")!;
@@ -2244,6 +2606,7 @@ function start(
     // active — so a multi-version × multi-language product shows its whole matrix,
     // and a click on any edition makes it the shown one (live).
     const activeIds = new Set(collection.books().map((b) => b.id));
+    const failedErrs = failedById(); // chosen editions that failed to load
     const hasVer = new Set(versionInfo.map((v) => v.collection));
     const hasLang = new Set(langInfo.map((l) => l.collection));
     const families = collection.families();
@@ -2291,13 +2654,21 @@ function start(
                 ? `<span class="mg-missing" title="${esc(missing.map((m) => m.path).join("\n"))}">${esc(s.missingAssets(missing.length))}</span>` +
                   `<button class="mg-addpack" data-id="${esc(v.id)}">${esc(s.addPack)}</button>`
                 : "";
+              // A chosen edition that failed to load: mark it (reason on hover);
+              // clicking still re-runs rebuild(), i.e. retries the load.
+              const failErr = failedErrs.get(v.id);
+              const failBadge = failErr
+                ? `<span class="mg-failed" title="${esc(formatLoadError(failErr, s).reason)}">${esc(s.bookFailed)}</span>`
+                : "";
+              const dot = active ? "●" : failErr ? "⚠" : "○";
               return (
-                `<div class="mg-ed${active ? " active" : ""}" data-col="${esc(col)}" data-ver="${esc(v.version)}" data-lang="${esc(v.language)}" role="button" tabindex="0">` +
-                `<span class="mg-ed-dot">${active ? "●" : "○"}</span>` +
+                `<div class="mg-ed${active ? " active" : ""}${failErr ? " failed" : ""}" data-col="${esc(col)}" data-ver="${esc(v.version)}" data-lang="${esc(v.language)}" role="button" tabindex="0">` +
+                `<span class="mg-ed-dot">${dot}</span>` +
                 `<span class="mg-ed-vl">${v.version ? `${esc(s.versionLabel)} ${esc(v.version)} · ` : ""}${esc(langLabel(v.language))}</span>` +
                 `<span class="mg-badge mg-${o.kind}">${esc(badge(o))}</span>` +
                 packs +
                 missBadge +
+                failBadge +
                 remove +
                 `</div>`
               );
@@ -2956,9 +3327,9 @@ function start(
 
 // ---------------------------------------------------------------------------
 bootstrap().catch((err: unknown) => {
-  const content = document.querySelector("#content");
-  if (content)
-    content.innerHTML = `<h1>Failed to load</h1><pre>${String(err)}</pre>`;
+  // Show the failure in the (visible) cold-start panel — the #content overlay is
+  // display:none until start() runs, which never happens on a bootstrap failure.
+  showLoadError(err);
   // eslint-disable-next-line no-console
   console.error(err);
 });

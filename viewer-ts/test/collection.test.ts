@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { Collection } from "../src/data/collection";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  Collection,
+  DocsetLoadError,
+  classifyLoadError,
+  fetchDocsetBytes,
+} from "../src/data/collection";
 import { applyFolders } from "../src/data/folders";
 import type {
   Category,
@@ -293,5 +298,69 @@ describe("Collection.search score normalization", () => {
       10,
     );
     expect(hits).toHaveLength(10);
+  });
+});
+
+describe("load error classification", () => {
+  it("maps common failures to a kind", () => {
+    expect(classifyLoadError(new Error("received an HTML page, not a .khb")).kind).toBe(
+      "web-page",
+    );
+    expect(classifyLoadError(new Error("file is not a database")).kind).toBe(
+      "not-a-khb",
+    );
+    expect(classifyLoadError(new Error("HTTP 404 Not Found")).kind).toBe("http");
+    expect(classifyLoadError(new Error("Failed to fetch")).kind).toBe("network");
+    expect(classifyLoadError(new Error("something odd")).kind).toBe("unknown");
+    expect(classifyLoadError("plain string").detail).toBe("plain string");
+  });
+
+  it("DocsetLoadError carries source, kind, detail and optional title", () => {
+    const e = new DocsetLoadError("docsets/x.khb", "not-a-khb", "boom", "Book X");
+    expect(e).toBeInstanceOf(Error);
+    expect(e.source).toBe("docsets/x.khb");
+    expect(e.kind).toBe("not-a-khb");
+    expect(e.detail).toBe("boom");
+    expect(e.title).toBe("Book X");
+    expect(e.message).toContain("Book X");
+    expect(e.message).toContain("docsets/x.khb");
+  });
+});
+
+describe("fetchDocsetBytes", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const res = (body: Uint8Array, init: Partial<Response> = {}): Response =>
+    ({
+      ok: init.ok ?? true,
+      status: init.status ?? 200,
+      statusText: init.statusText ?? "OK",
+      headers: new Headers(),
+      body: null, // force the arrayBuffer() path
+      arrayBuffer: async () => body.buffer,
+    }) as unknown as Response;
+
+  it("flags an HTML page (a missing-file 200) as not a .khb", async () => {
+    const html = new TextEncoder().encode("<!doctype html><html>404</html>");
+    vi.stubGlobal("fetch", vi.fn(async () => res(html)));
+    await expect(fetchDocsetBytes("docsets/x.khb")).rejects.toThrow(/HTML page/i);
+  });
+
+  it("passes real SQLite bytes through untouched", async () => {
+    const sqlite = new TextEncoder().encode("SQLite format 3 rest");
+    vi.stubGlobal("fetch", vi.fn(async () => res(sqlite)));
+    const out = await fetchDocsetBytes("docsets/x.khb");
+    expect(out[0]).toBe(0x53); // 'S'
+  });
+
+  it("throws an HTTP-tagged error on a non-ok response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        res(new Uint8Array(), { ok: false, status: 404, statusText: "Not Found" }),
+      ),
+    );
+    const err = await fetchDocsetBytes("docsets/x.khb").catch((e: unknown) => e);
+    expect(classifyLoadError(err).kind).toBe("http");
   });
 });
