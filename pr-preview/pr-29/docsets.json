@@ -8,7 +8,7 @@
       "collection": "khb-docs",
       "version": "0.1.0",
       "streaming": true,
-      "hash": "2852361f6de45fdd"
+      "hash": "1ed73e821ffb41a9"
     },
     {
       "file": "docsets/khb-internals.khb",
@@ -18,7 +18,7 @@
       "collection": "khb-docs",
       "version": "0.1.0",
       "streaming": true,
-      "hash": "524026629b9b4ba5"
+      "hash": "cd2476f9d6909499"
     },
     {
       "file": "docsets/khb-publishing.khb",
@@ -28,7 +28,7 @@
       "collection": "khb-docs",
       "version": "0.1.0",
       "streaming": true,
-      "hash": "faafc5a8929f5633"
+      "hash": "118c958bbfcb4f01"
     }
   ]
 }
