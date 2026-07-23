@@ -207,10 +207,11 @@ export class Collection {
       onProgress?: LoadProgress;
       /** Book titles, index-aligned with `sources`, to name a failed source. */
       labels?: string[];
-      /** Called per failed source. A **bad book is skipped, not fatal**: the
-       *  others still load, and the caller decides how to surface the failure.
-       *  With no handler, a failure throws (the legacy all-or-nothing behavior). */
-      onError?: (err: DocsetLoadError) => void;
+      /** Called per failed source, with its index into `sources` (so the caller
+       *  can map it back to the chosen edition). A **bad book is skipped, not
+       *  fatal**: the others still load, and the caller decides how to surface the
+       *  failure. With no handler, a failure throws (legacy all-or-nothing). */
+      onError?: (err: DocsetLoadError, index: number) => void;
     } = {},
   ): Promise<Collection> {
     const { onProgress, labels, onError } = opts;
@@ -252,7 +253,7 @@ export class Collection {
           labels?.[index],
         );
         // Skip a bad book and keep loading the rest when the caller handles errors.
-        if (onError) onError(err);
+        if (onError) onError(err, index);
         else throw err;
       }
     }

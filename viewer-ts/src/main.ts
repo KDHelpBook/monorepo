@@ -569,7 +569,7 @@ async function bootstrap(): Promise<void> {
   document.documentElement.lang = lang;
   applyStatic(lang);
 
-  const { sources, titles, langInfo, versionInfo } = resolveVariants(
+  const { sources, books, titles, langInfo, versionInfo } = resolveVariants(
     variants,
     lang,
   );
@@ -577,19 +577,22 @@ async function bootstrap(): Promise<void> {
 
   if (config.pwa) registerServiceWorker(strings(lang));
   else unregisterServiceWorker();
-  // A bad book is skipped, not fatal: collect per-source failures and keep loading
-  // the rest. Only an empty result (every book failed) blocks the app.
-  const loadErrors: DocsetLoadError[] = [];
+  // A bad book is skipped, not fatal: collect per-source failures (paired with the
+  // chosen edition) and keep loading the rest. Only an empty result blocks the app.
+  const failed: FailedBook[] = [];
   const collection = await Collection.load(sources, lang, {
     onProgress: (l, t, i, n) =>
       setDownloadProgress(l, t, titles[i] ?? "", i, n, lang),
     labels: titles,
-    onError: (e) => loadErrors.push(e),
+    onError: (e, i) => {
+      const variant = books[i];
+      if (variant) failed.push({ variant, error: e });
+    },
   });
   if (!collection.books().length) {
     // Nothing loaded — show the full error panel (naming the first failure).
-    showLoadError(loadErrors[0] ?? new Error("no docsets to show"), {
-      more: Math.max(0, loadErrors.length - 1),
+    showLoadError(failed[0]?.error ?? new Error("no docsets to show"), {
+      more: Math.max(0, failed.length - 1),
     });
     return;
   }
@@ -602,9 +605,10 @@ async function bootstrap(): Promise<void> {
     versionInfo,
     updates,
     variants,
+    failed,
   );
   // Some books loaded but others failed — a non-blocking notice naming the bad ones.
-  if (loadErrors.length) showLoadWarnings(loadErrors, strings(lang));
+  if (failed.length) showLoadWarnings(failed.map((f) => f.error), strings(lang));
 }
 
 /** Where a book came from + its packs — for the Manage docsets page. */
@@ -630,6 +634,13 @@ interface DocVariant {
   origin: BookOrigin;
 }
 
+/** A chosen edition that failed to load — kept so it stays visible (sidebar,
+ *  About, Manage) marked as failed, instead of silently vanishing. */
+interface FailedBook {
+  variant: DocVariant;
+  error: DocsetLoadError;
+}
+
 /** Per-collection language availability for the Manage docsets override UI. */
 interface CollectionLangInfo {
   collection: string;
@@ -649,6 +660,9 @@ function resolveVariants(
   uiLang: string,
 ): {
   sources: DocsetSource[];
+  /** The chosen editions, index-aligned with `sources` — to name a book (progress
+   *  panel) or map a load failure back to its full metadata. */
+  books: DocVariant[];
   /** Book titles, index-aligned with `sources` — for the download progress panel. */
   titles: string[];
   langInfo: CollectionLangInfo[];
@@ -688,6 +702,7 @@ function resolveVariants(
     }));
   return {
     sources: shown.map((v) => v.source),
+    books: shown,
     titles: shown.map((v) => v.title),
     langInfo,
     versionInfo,
@@ -828,8 +843,14 @@ function start(
   versionInfo: CollectionVersionInfo[],
   updates: { title: string; from: string; to: string }[],
   variants: DocVariant[],
+  failed: FailedBook[],
 ): void {
   const s: Strings = strings(lang);
+  // Books that failed to load — kept visible (sidebar / About / Manage) marked as
+  // failed. Mutable: the in-place version/language rebuild refreshes it.
+  let failedBooks = failed;
+  const failedById = (): Map<string, DocsetLoadError> =>
+    new Map(failedBooks.map((f) => [f.variant.id, f.error]));
   // The collection is loaded and the UI is about to render — drop the cold-start
   // download panel so the frame/TOC show through.
   hideLoading();
@@ -983,7 +1004,15 @@ function start(
   let verByCol = new Map(versionInfo.map((v) => [v.collection, v]));
   let langByCol = new Map(langInfo.map((l) => [l.collection, l]));
   let switchableCols = new Set([...verByCol.keys(), ...langByCol.keys()]);
-  let toc = collection.tocTree(switchableCols);
+  // A synthetic, clickable top-level leaf per failed book (`@failed:<id>`) — it
+  // registers in `pages` like any leaf and opens a reason page (see loadContent).
+  const failedTocNodes = (): TocNode[] =>
+    failedBooks.map((f) => ({
+      pageId: `@failed:${f.variant.id}`,
+      title: f.variant.title,
+      children: [],
+    }));
+  let toc = [...collection.tocTree(switchableCols), ...failedTocNodes()];
 
   // (Re)build the page-info and keyword maps from the current `collection`/`toc`.
   function buildPages(nodes: TocNode[], path: string[]): void {
@@ -1051,13 +1080,19 @@ function start(
   function treeNode(n: TocNode, forceOpen = false): HTMLLIElement {
     const li = document.createElement("li");
     const kids = n.children.length > 0;
+    const failedNode = n.pageId.startsWith("@failed:");
     const row = document.createElement("div");
-    row.className = "node" + (n.group ? " group" : "");
+    row.className =
+      "node" + (n.group ? " group" : "") + (failedNode ? " failed" : "");
     row.dataset.id = n.pageId;
     const open = forceOpen || expanded.has(n.pageId);
     row.innerHTML =
       `<span class="twisty ${kids ? "" : "leaf"}">${kids ? (open ? "−" : "+") : ""}</span>` +
-      (n.group ? groupIcon() : pageIcon(kids)) +
+      (failedNode
+        ? '<span class="ico fail-ico" aria-hidden="true">⚠</span>'
+        : n.group
+          ? groupIcon()
+          : pageIcon(kids)) +
       `<span class="label">${esc(n.title)}</span>`;
     // A switchable product folder shows its current version/language in parens and a
     // ⋯ button that opens a small menu to change either — right where you see the
@@ -1211,11 +1246,15 @@ function start(
       const r = resolveVariants(variants, lang);
       // Switching version/language: a book that fails to load is skipped, not
       // fatal. If the whole new set is unloadable, keep the current collection.
-      const rebuildErrors: DocsetLoadError[] = [];
+      const rebuildFailed: FailedBook[] = [];
       const next = await Collection.load(r.sources, lang, {
         labels: r.titles,
-        onError: (e) => rebuildErrors.push(e),
+        onError: (e, i) => {
+          const variant = r.books[i];
+          if (variant) rebuildFailed.push({ variant, error: e });
+        },
       });
+      const rebuildErrors = rebuildFailed.map((f) => f.error);
       if (!next.books().length) {
         next.close();
         if (rebuildErrors.length) showLoadWarnings(rebuildErrors, s);
@@ -1224,13 +1263,14 @@ function start(
       const prev = collection;
       collection = next;
       prev.close();
+      failedBooks = rebuildFailed;
       if (rebuildErrors.length) showLoadWarnings(rebuildErrors, s);
       langInfo = r.langInfo;
       versionInfo = r.versionInfo;
       verByCol = new Map(versionInfo.map((v) => [v.collection, v]));
       langByCol = new Map(langInfo.map((l) => [l.collection, l]));
       switchableCols = new Set([...verByCol.keys(), ...langByCol.keys()]);
-      toc = collection.tocTree(switchableCols);
+      toc = [...collection.tocTree(switchableCols), ...failedTocNodes()];
       deriveMaps();
       fillFilters();
 
@@ -2090,6 +2130,27 @@ function start(
     if (t) loadContent(t.id);
   }
 
+  // Render the reason a book failed to load into the sandboxed frame — reached by
+  // clicking its `@failed:<id>` entry in the sidebar / tabs.
+  function renderFailedPage(id: string): void {
+    const vid = id.slice("@failed:".length);
+    const fb = failedBooks.find((f) => f.variant.id === vid);
+    const title = fb?.variant.title ?? vid;
+    const { reason, source } = fb
+      ? formatLoadError(fb.error, s)
+      : { reason: "", source: "" };
+    frame.srcdoc = frameDoc(
+      `<h1>${esc(title)}</h1>` +
+        `<p><b>${esc(s.loadFailed)}</b> — ${esc(reason)}</p>` +
+        (source
+          ? `<p style="color:#777;word-break:break-all">${esc(source)}</p>`
+          : "") +
+        `<p style="color:#777">${esc(s.loadFailedHint)}</p>`,
+    );
+    document.title = `${title} — KD Help Book`;
+    address.value = fb ? `khb://${vid}` : "";
+  }
+
   async function loadContent(id: string): Promise<void> {
     currentId = id;
     const token = ++loadSeq;
@@ -2105,6 +2166,15 @@ function start(
       // branch too, and the page path's renderTabs() below is skipped by the return.
       renderTabs();
       updateFavBtn();
+      return;
+    }
+    if (id.startsWith("@failed:")) {
+      // A book that failed to load — render its reason in the frame (no docset).
+      renderFailedPage(id);
+      content.style.display = "none";
+      renderTabs();
+      updateFavBtn();
+      highlightTree();
       return;
     }
     const info = pages.get(id);
@@ -2331,13 +2401,20 @@ function start(
           `<div>${esc(b.title)} <span style="color:var(--muted)">· ${esc(b.language)}${b.version ? ` · ${esc(s.versionLabel)} ${esc(b.version)}` : ""}</span></div>`,
       )
       .join("");
+    // List books that failed to load too, so they aren't silently missing here.
+    const failedLines = failedBooks
+      .map(
+        (f) =>
+          `<div>${esc(f.variant.title)} <span style="color:var(--danger)">· ${esc(s.bookFailed)}</span></div>`,
+      )
+      .join("");
     bg.innerHTML =
       '<div style="width:420px;background:var(--chrome-top);border:1px solid var(--modal-border);border-radius:3px;box-shadow:0 12px 40px rgba(0,0,0,.5);overflow:hidden">' +
       `<div style="background:linear-gradient(180deg,var(--title-top),var(--title-bot));color:#fff;font-weight:bold;padding:6px 10px">${esc(s.about)}</div>` +
       '<div style="padding:16px 18px;line-height:1.6"><div style="font-size:15px;font-weight:bold;color:var(--content-h)">KD Help Book</div>' +
       `<div>${esc(s.aboutTagline)}</div>` +
       `<p style="color:var(--muted);margin:.8em 0 .3em">${esc(s.aboutLanguage)} <b>${esc(collection.language)}</b></p>` +
-      `<div style="font-size:11px;color:var(--muted)">${bookLines}</div></div>` +
+      `<div style="font-size:11px;color:var(--muted)">${bookLines}${failedLines}</div></div>` +
       '<div style="padding:10px 16px;text-align:right;border-top:1px solid var(--chrome-border)"><button style="font-family:var(--font-ui);font-size:12px;padding:4px 16px;border:1px solid var(--btn-border);border-radius:2px;background:var(--btn-face);cursor:pointer">OK</button></div></div>';
     const close = (): void => bg.remove();
     bg.addEventListener("click", (e) => {
@@ -2497,6 +2574,7 @@ function start(
     // active — so a multi-version × multi-language product shows its whole matrix,
     // and a click on any edition makes it the shown one (live).
     const activeIds = new Set(collection.books().map((b) => b.id));
+    const failedErrs = failedById(); // chosen editions that failed to load
     const hasVer = new Set(versionInfo.map((v) => v.collection));
     const hasLang = new Set(langInfo.map((l) => l.collection));
     const families = collection.families();
@@ -2544,13 +2622,21 @@ function start(
                 ? `<span class="mg-missing" title="${esc(missing.map((m) => m.path).join("\n"))}">${esc(s.missingAssets(missing.length))}</span>` +
                   `<button class="mg-addpack" data-id="${esc(v.id)}">${esc(s.addPack)}</button>`
                 : "";
+              // A chosen edition that failed to load: mark it (reason on hover);
+              // clicking still re-runs rebuild(), i.e. retries the load.
+              const failErr = failedErrs.get(v.id);
+              const failBadge = failErr
+                ? `<span class="mg-failed" title="${esc(formatLoadError(failErr, s).reason)}">${esc(s.bookFailed)}</span>`
+                : "";
+              const dot = active ? "●" : failErr ? "⚠" : "○";
               return (
-                `<div class="mg-ed${active ? " active" : ""}" data-col="${esc(col)}" data-ver="${esc(v.version)}" data-lang="${esc(v.language)}" role="button" tabindex="0">` +
-                `<span class="mg-ed-dot">${active ? "●" : "○"}</span>` +
+                `<div class="mg-ed${active ? " active" : ""}${failErr ? " failed" : ""}" data-col="${esc(col)}" data-ver="${esc(v.version)}" data-lang="${esc(v.language)}" role="button" tabindex="0">` +
+                `<span class="mg-ed-dot">${dot}</span>` +
                 `<span class="mg-ed-vl">${v.version ? `${esc(s.versionLabel)} ${esc(v.version)} · ` : ""}${esc(langLabel(v.language))}</span>` +
                 `<span class="mg-badge mg-${o.kind}">${esc(badge(o))}</span>` +
                 packs +
                 missBadge +
+                failBadge +
                 remove +
                 `</div>`
               );

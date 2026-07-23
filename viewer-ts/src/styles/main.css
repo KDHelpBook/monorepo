@@ -408,6 +408,17 @@ textarea {
   font-weight: bold;
   color: #1a3d6b;
 }
+/* A book that failed to load — kept in the tree, muted, with a warning glyph.
+   Still clickable (opens its reason page). */
+.node.failed > .label {
+  color: var(--muted);
+}
+.ico.fail-ico {
+  display: grid;
+  place-items: center;
+  color: var(--danger);
+  font-size: 12px;
+}
 /* Current version/language shown in parens on a switchable product folder. */
 .node-meta {
   flex: none;
@@ -997,6 +1008,17 @@ textarea {
   color: #8a5a00;
   border: 1px solid #e6c98a;
   white-space: nowrap;
+}
+/* A chosen edition that failed to load — red-toned pill (reason on hover). */
+.mg-failed {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 8px;
+  background: #fbe6e6;
+  color: #a33;
+  border: 1px solid #e0a9a9;
+  white-space: nowrap;
+  cursor: help;
 }
 .mg-addpack {
   font-family: var(--font-ui);

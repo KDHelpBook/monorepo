@@ -37,6 +37,10 @@ export interface Strings {
   loadErrorMore: (n: number) => string;
   /** Non-blocking toast naming books that failed while others loaded. */
   loadWarnSome: (names: string[]) => string;
+  /** Short "failed to load" tag for a book in About / the Manage list. */
+  bookFailed: string;
+  /** Hint on a failed book's reason page: how to remove/retry it. */
+  loadFailedHint: string;
   textSize: string;
   close: string;
   prevImage: string;
@@ -171,6 +175,8 @@ const en: Strings = {
   loadErrorMore: (n) => `(+${n} more)`,
   loadWarnSome: (names) =>
     `Some help books couldn't be loaded: ${names.join(", ")}`,
+  bookFailed: "Failed to load",
+  loadFailedHint: "Open “Manage docsets” to remove it or try loading again.",
   textSize: "Text size",
   close: "Close",
   prevImage: "Previous image",
@@ -297,6 +303,9 @@ const pl: Strings = {
   loadErrorMore: (n) => `(+${n} więcej)`,
   loadWarnSome: (names) =>
     `Nie udało się wczytać niektórych książek pomocy: ${names.join(", ")}`,
+  bookFailed: "Nie wczytano",
+  loadFailedHint:
+    "Otwórz „Zarządzaj dokumentacją”, aby usunąć lub spróbować ponownie.",
   textSize: "Rozmiar tekstu",
   close: "Zamknij",
   prevImage: "Poprzedni obraz",
