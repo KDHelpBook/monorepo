@@ -103,12 +103,15 @@ export function saveFontSize(px: number): void {
 }
 
 // ---- colour theme ----
-// "system" (default) follows the OS `prefers-color-scheme`; "light"/"dark" pin it.
-export type ThemeMode = "light" | "dark" | "system";
+// "system" (default) follows the OS `prefers-color-scheme`; "light"/"dark" pin it;
+// "dark-shell" darkens the app chrome but keeps the docset reading pane light.
+export type ThemeMode = "light" | "dark" | "dark-shell" | "system";
 export function loadTheme(): ThemeMode {
   try {
     const v = localStorage.getItem(K.theme);
-    return v === "light" || v === "dark" || v === "system" ? v : "system";
+    return v === "light" || v === "dark" || v === "dark-shell" || v === "system"
+      ? v
+      : "system";
   } catch {
     return "system";
   }

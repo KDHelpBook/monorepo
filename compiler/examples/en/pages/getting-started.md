@@ -10,7 +10,8 @@ categories: [basics]
 KD Help Book compiles your documentation into a self-contained **`.khb`** docset — a
 SQLite database with a prebuilt full-text index — and reads it in a fast viewer
 with a period-authentic classic desktop help interface: a table-of-contents tree, an
-F1-style keyword index, offline full-text search, favorites, and tabs.
+F1-style keyword index, offline full-text search, favorites, and tabs — plus a light
+or dark theme (following your system by default) and adjustable text size.
 
 ## Where to start
 

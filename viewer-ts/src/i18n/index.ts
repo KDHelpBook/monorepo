@@ -20,6 +20,7 @@ export interface Strings {
   themeMenu: string;
   themeLight: string;
   themeDark: string;
+  themeDarkShell: string;
   themeSystem: string;
   back: string;
   forward: string;
@@ -149,6 +150,7 @@ const en: Strings = {
   themeMenu: "Theme",
   themeLight: "Light",
   themeDark: "Dark",
+  themeDarkShell: "Dark shell, light pages",
   themeSystem: "Use system setting",
   back: "Back",
   forward: "Forward",
@@ -278,6 +280,7 @@ const pl: Strings = {
   themeMenu: "Motyw",
   themeLight: "Jasny",
   themeDark: "Ciemny",
+  themeDarkShell: "Ciemny interfejs, jasne strony",
   themeSystem: "Ustawienie systemu",
   back: "Wstecz",
   forward: "Dalej",
