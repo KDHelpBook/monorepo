@@ -14,6 +14,7 @@
   --code-border: #d7e0ee;
   --text: #1b1b1b;
   --content-fg: var(--text); /* referenced by .code-head etc.; was never defined */
+  --diagram-surface: #fff; /* node fill in build-time SVG diagrams (ink = currentColor) */
   --font-body: Verdana, "Segoe UI", Tahoma, sans-serif;
   --font-ui: Tahoma, "Segoe UI", Verdana, sans-serif;
   --font-mono: Consolas, "Lucida Console", "Courier New", monospace;
@@ -1049,6 +1050,8 @@ body {
   --code-bg: #1b2029;
   --code-border: #333c47;
   --text: #d6dbe2;
+  /* Diagram node fill; ink (lines/text) rides currentColor = --text, so it flips too. */
+  --diagram-surface: #232a33;
 }
 [data-theme="dark"] body {
   background: #1a1f27;
