@@ -97,6 +97,7 @@ export interface Strings {
   newTab: string;
   showHidePanel: string;
   ready: string;
+  printPopupBlocked: string;
   keywordsLabel: string;
   seeAlso: string;
   /** Code-block copy button and its post-copy confirmation. */
@@ -242,6 +243,7 @@ const en: Strings = {
   newTab: "Open current page in a new tab",
   showHidePanel: "Show/hide panel",
   ready: "Ready",
+  printPopupBlocked: "Allow pop-ups to print this page.",
   keywordsLabel: "Keywords:",
   seeAlso: "See also:",
   copy: "Copy",
@@ -384,6 +386,7 @@ const pl: Strings = {
   newTab: "Otwórz bieżącą stronę w nowej karcie",
   showHidePanel: "Pokaż/ukryj panel",
   ready: "Gotowe",
+  printPopupBlocked: "Zezwól na wyskakujące okna, aby wydrukować tę stronę.",
   keywordsLabel: "Słowa kluczowe:",
   seeAlso: "Zobacz też:",
   copy: "Kopiuj",

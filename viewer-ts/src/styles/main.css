@@ -1989,11 +1989,10 @@ textarea {
 }
 
 /* ── Printing ────────────────────────────────────────────────────────────────
-   printCurrent() (main.ts) prints the parent tab with the app chrome hidden. Two
-   paths: the trusted Search/Manage overlay (#content) prints as-is under
-   body.print-overlay, and a documentation page prints under body.print-doc with the
-   sandboxed reading frame expanded to its full content height (set inline by JS) so it
-   paginates. A plain browser Ctrl/⌘-P (no body class) still gets the chrome stripped. */
+   A documentation page prints via its own top-level tab (main.ts buildPrintDoc), so the
+   app shell below is not involved there. This block governs the other path — the trusted
+   Search/Manage overlay (#content), printed in place under body.print-overlay — and also
+   strips the chrome for a plain browser Ctrl/⌘-P. */
 @media print {
   .menubar,
   .toolbar,
@@ -2020,15 +2019,6 @@ textarea {
   .content {
     position: static !important;
     overflow: visible !important;
-  }
-  /* Doc page: the reading frame flows at its JS-set full height so it paginates
-     across pages; keep the (hidden) overlay out of the way. */
-  body.print-doc .content-frame {
-    position: static !important;
-    width: 100% !important;
-  }
-  body.print-doc .content {
-    display: none !important;
   }
   /* On the overlay path the stale doc frame sits under #content — don't print it too. */
   body.print-overlay .content-frame {

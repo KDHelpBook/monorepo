@@ -178,9 +178,7 @@ addEventListener('touchmove',function(e){if(pull&&e.touches[0].clientY-py>72){pu
 addEventListener('touchend',function(){pull=false},{passive:true});
 addEventListener('message',function(e){var d=e.data;if(!d||d.t!=='khb-app')return;
  if(d.a==='font'&&typeof d.size==='number'){document.documentElement.style.setProperty('--content-size',d.size+'px')}
- else if(d.a==='theme'){var de=document.documentElement;if(d.dark){de.setAttribute('data-theme','dark')}else{de.removeAttribute('data-theme')}}
- else if(d.a==='measure'){document.documentElement.classList.add('for-print');post({t:'khb',a:'printsize',h:Math.ceil(document.documentElement.scrollHeight)+8})}
- else if(d.a==='unprint'){document.documentElement.classList.remove('for-print')}});
+ else if(d.a==='theme'){var de=document.documentElement;if(d.dark){de.setAttribute('data-theme','dark')}else{de.removeAttribute('data-theme')}}});
 function ready(){var m=document.querySelector('mark.hl');if(m)m.scrollIntoView({block:'center'})}
 if(document.readyState!=='loading')ready();else addEventListener('DOMContentLoaded',ready);
 })();`;
@@ -1010,6 +1008,9 @@ function start(
   // Touch device? Tree folder-pages then expand on a single tap (double-tap zooms).
   const coarsePointer = window.matchMedia("(pointer: coarse)").matches;
   let currentId = "";
+  // The current doc page's sanitized HTML, stashed at render time so File → Print can
+  // reproduce it as a standalone, top-level print document (see printCurrent).
+  let printSourceHtml = "";
   // Monotonic tokens so a slow async load/search (streaming) that finishes after a
   // newer one has started is dropped instead of clobbering the newer result.
   let loadSeq = 0;
@@ -2198,6 +2199,21 @@ function start(
     `<style>${contentCss}\n${syntaxCss}\n:root{--content-size:${fontSize}px}</style>` +
     `</head><body class="content">${bodyHtml}<script>${FRAME_BRIDGE}</script></body></html>`;
 
+  // A standalone, top-level print document for File → Print. Unlike the reading frame this
+  // is NOT a cross-origin iframe — mobile browsers refuse to paginate those when printing
+  // (they clip to the visible area), so it opens as its own tab and the browser paginates
+  // it normally. Its safety comes from a strict CSP instead of origin isolation:
+  // `default-src 'none'` blocks all script execution (defence-in-depth over stripDangerous)
+  // and all network; only inline styles and data: images/fonts are allowed. `for-print`
+  // bakes in the paper adaptations (styles/content.css); there is no bridge script.
+  const buildPrintDoc = (bodyHtml: string, title: string): string =>
+    `<!doctype html><html class="for-print"><head><meta charset="utf-8">` +
+    `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; form-action 'none'">` +
+    `<meta name="referrer" content="no-referrer">` +
+    `<title>${esc(title)}</title>` +
+    `<style>${contentCss}\n${syntaxCss}</style>` +
+    `</head><body class="content">${bodyHtml}</body></html>`;
+
   // Wrap every occurrence of the active search terms in the content in <mark>,
   // skipping script/style and our keyword footer. Runs after each page load.
   function applyHighlight(root: Node): void {
@@ -2391,11 +2407,11 @@ function start(
         // The "On this page" nav is compiled into body_html; its `#slug` links route
         // through rewriteFrameLinks like any in-page anchor.
         rewriteFrameLinks(holder, id);
-        frame.srcdoc = frameDoc(holder.innerHTML);
+        printSourceHtml = holder.innerHTML;
+        frame.srcdoc = frameDoc(printSourceHtml);
       } else {
-        frame.srcdoc = frameDoc(
-          `<h1>${esc(s.notFoundTitle)}</h1><p>${s.notFoundBody(esc(id))}</p>`,
-        );
+        printSourceHtml = `<h1>${esc(s.notFoundTitle)}</h1><p>${s.notFoundBody(esc(id))}</p>`;
+        frame.srcdoc = frameDoc(printSourceHtml);
       }
       // Hide the app-UI overlay so the (always-visible) frame shows through.
       content.style.display = "none";
@@ -2544,15 +2560,11 @@ function start(
   }
 
   // Print just the reading content, never the app shell. The page body lives in a
-  // cross-origin sandboxed frame, so a naive window.print() would print the whole app
-  // chrome. Instead we print the parent tab with the chrome hidden (@media print) and
-  // the reading frame expanded to its full content height so it paginates across pages.
-  // This is the one approach that also works on mobile, where browsers always print the
-  // whole tab and never a lone iframe (an in-frame print there clipped to the visible
-  // area). Because the frame is cross-origin we can't read its height, so its bridge
-  // measures it — with the print adaptations applied via the `for-print` class, so the
-  // measured height matches what prints — and reports it back; we set the frame height,
-  // print, then restore.
+  // cross-origin sandboxed frame, and mobile browsers refuse to paginate a cross-origin
+  // iframe when printing (they clip it to the visible area) — so for a doc page we open
+  // the content as its own top-level tab (buildPrintDoc), which every browser paginates
+  // normally. The overlay (Search/Manage) is same-origin content in this document, so it
+  // still prints in place with the chrome hidden by @media print.
   function printCurrent(): void {
     // The Search/Manage overlay is trusted app UI in #content (same origin) — print the
     // parent directly, with the @media print rules hiding the chrome around it.
@@ -2566,26 +2578,38 @@ function start(
       window.print();
       return;
     }
-    // Doc page: ask the frame for its full print height, then expand it + print the parent.
-    const onSize = (e: MessageEvent): void => {
-      if (e.source !== frame.contentWindow) return; // only our reading frame
-      const d = e.data as { t?: unknown; a?: unknown; h?: unknown };
-      if (!d || d.t !== "khb" || d.a !== "printsize") return;
-      window.removeEventListener("message", onSize);
-      if (typeof d.h === "number" && d.h > 0) frame.style.height = `${d.h}px`;
-      document.body.classList.add("print-doc");
-      const cleanup = (): void => {
-        window.removeEventListener("afterprint", cleanup);
-        document.body.classList.remove("print-doc");
-        frame.style.height = "";
-        frame.contentWindow?.postMessage({ t: "khb-app", a: "unprint" }, "*");
-      };
-      window.addEventListener("afterprint", cleanup);
-      // One frame so the expanded height + chrome-hiding class settle before printing.
-      requestAnimationFrame(() => window.print());
-    };
-    window.addEventListener("message", onSize);
-    frame.contentWindow?.postMessage({ t: "khb-app", a: "measure" }, "*");
+    if (!printSourceHtml) return;
+    // Open the page as a standalone print document. window.open runs synchronously in the
+    // click gesture so it isn't pop-up-blocked; the blob: URL is same-origin (its CSP
+    // blocks all scripts), so we can auto-print it and close the tab when done.
+    const url = URL.createObjectURL(
+      new Blob([buildPrintDoc(printSourceHtml, document.title)], {
+        type: "text/html",
+      }),
+    );
+    const w = window.open(url, "_blank");
+    if (!w) {
+      URL.revokeObjectURL(url);
+      status.textContent = s.printPopupBlocked;
+      return;
+    }
+    w.addEventListener("load", () => {
+      // Close the throwaway tab once its print dialog is dismissed (desktop). Mobile
+      // browsers may ignore auto-print and print from their own menu; the tab then stays.
+      w.addEventListener("afterprint", () => {
+        try {
+          w.close();
+        } catch {
+          /* ignore */
+        }
+      });
+      try {
+        w.print();
+      } catch {
+        /* let the user print from the browser menu */
+      }
+    });
+    window.setTimeout(() => URL.revokeObjectURL(url), 60000);
   }
 
   // Share the current page's deep link via the OS share sheet, falling back to
