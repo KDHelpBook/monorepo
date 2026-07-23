@@ -207,6 +207,14 @@ function chooseLang(available: string[]): string {
 // bare pathname (see sw.js).
 const fresh = (file: string): string => `${file}?v=${__BUILD_ID__}`;
 
+// A docset's own cache key. Prefer the manifest's per-content hash: an unchanged
+// book then keeps its URL — and the viewer's HTTP cache — across deploys, while a
+// changed (or rebuilt same-named preview) book gets a fresh key so a stale byte
+// range can't mix with a fresh one into a malformed image. Older packs carry no
+// hash → fall back to the per-build stamp (correct, just re-fetched each deploy).
+const stampDocset = (url: string, hash?: string): string =>
+  hash ? `${url}?v=${hash}` : fresh(url);
+
 async function loadConfig(): Promise<Config> {
   try {
     const res = await fetch(fresh("config.json"));
@@ -475,11 +483,12 @@ async function bootstrap(): Promise<void> {
     let source: DocsetSource | null = null;
     // The manifest `file` is dist-relative — resolve it (and the packs) against
     // the site base so the Range probe and the streaming engine get real URLs.
-    // Build-stamp it too (as with config/docsets.json): a PR preview rebuilds the
-    // same-named `.khb` on every deploy, and a Range read that mixes a cached old
-    // range with a fresh one yields a malformed SQLite image. A per-build query
-    // makes each deploy a distinct cache key, so probe/peek/reads stay consistent.
-    const url = fresh(resolveManifestUrl(d.file, document.baseURI));
+    // Cache-key it by content (`d.hash`): a PR preview rebuilds the same-named
+    // `.khb` on every deploy, and a Range read that mixes a cached old range with
+    // a fresh one yields a malformed SQLite image. The per-content key makes each
+    // distinct build a distinct URL (probe/peek/reads stay consistent) while an
+    // unchanged book keeps its cache.
+    const url = stampDocset(resolveManifestUrl(d.file, document.baseURI), d.hash);
     if (streamEligible(d, extraOf(d.id)) && (await rangeSupported(url))) {
       try {
         const { StreamingDocset } = await import("./data/streaming-docset");
@@ -502,8 +511,9 @@ async function bootstrap(): Promise<void> {
       version: d.version ?? "",
       title: d.title,
       source: source ?? {
-        // Same per-build cache key on the whole-fetch fallback and its packs.
-        file: fresh(d.file),
+        // Same content-keyed cache-busting on the whole-fetch fallback; packs
+        // carry no per-content hash in the manifest, so they stay on the build stamp.
+        file: stampDocset(d.file, d.hash),
         // A `.gz` suffix (on the docset or a pack) decompresses on fetch.
         attachments: packs.map((file) => ({ file: fresh(file) })),
       },

@@ -22,6 +22,12 @@ export interface ManifestEntry {
    *  --stream`). A preference, not a promise: the viewer probes the host and
    *  falls back to the whole fetch when Range isn't honoured. */
   streaming?: boolean;
+  /** Short content hash of the shipped file. Appended to the docset URL as
+   *  `?v=<hash>` so a rebuilt same-named book gets a fresh HTTP-cache key (no
+   *  stale byte range mixing into a malformed image), while an unchanged book
+   *  keeps its cache across deploys. Absent on older packs → fall back to the
+   *  per-build stamp. */
+  hash?: string;
 }
 
 export interface Manifest {
