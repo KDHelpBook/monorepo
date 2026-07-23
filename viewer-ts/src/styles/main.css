@@ -1148,6 +1148,18 @@ textarea {
 .pane-toggle {
   display: none;
 }
+/* Touch devices get the ☰ toggle at every width: on phones it drives the drawer,
+   on tablets (non-compact, coarse pointer) it collapses the docked sidebar — the
+   pin's hover-based auto-hide is unusable by touch, so ☰ is the touch collapse path. */
+@media (pointer: coarse) {
+  .pane-toggle {
+    display: inline-flex;
+  }
+  /* The pushpin's auto-hide reveal is hover-only — unusable by touch. */
+  .left-head .pin {
+    display: none;
+  }
+}
 
 /* Auto-hide: when the panel is collapsed it becomes a vertical icon strip */
 .left-strip {
@@ -1232,6 +1244,16 @@ textarea {
   transform: translateX(0);
 }
 
+/* Touch tablets: the ☰ button collapses the docked sidebar in place (panel gone,
+   content fills the width). Scoped to the non-compact layout — the complement of
+   COMPACT_MQ in main.ts — so it can never leak into the compact slide-in drawer. */
+@media (min-width: 641px) and (min-height: 481px) {
+  .window.nav-collapsed #left-pane,
+  .window.nav-collapsed #splitter {
+    display: none;
+  }
+}
+
 /* Scrim behind the mobile drawer */
 .scrim {
   display: none;
@@ -1266,6 +1288,12 @@ textarea {
   }
   .pane-toggle {
     display: inline-flex;
+  }
+  /* The drawer layout neutralizes auto-hide, so the pushpin does nothing here —
+     the ☰ button is the panel toggle. Hide the dead control (also covers a narrow
+     desktop window with a mouse). */
+  .left-head .pin {
+    display: none;
   }
   .splitter {
     display: none;
@@ -1697,15 +1725,27 @@ textarea {
 .menu-radio:hover .menu-check {
   color: var(--select-text);
 }
-/* Toolbar theme button shows the icon of the *effective* theme — sun in light,
-   moon in dark; data-theme flips which is visible. */
-.theme-btn .ico-moon {
+/* Toolbar theme button shows the icon of the current *mode* — sun (light), moon
+   (dark), split circle (system/auto) — driven by data-mode, which updateThemeUI()
+   sets. Keying off the mode (not the effective theme) means every cycle click
+   visibly changes the icon, so switching to a mode with the same effective look
+   (e.g. system → light on a light OS) no longer reads as a dead button. */
+.theme-btn .ico-sun,
+.theme-btn .ico-moon,
+.theme-btn .ico-shell,
+.theme-btn .ico-system {
   display: none;
 }
-:root[data-theme="dark"] .theme-btn .ico-sun {
-  display: none;
+.theme-btn[data-mode="light"] .ico-sun {
+  display: inline;
 }
-:root[data-theme="dark"] .theme-btn .ico-moon {
+.theme-btn[data-mode="dark"] .ico-moon {
+  display: inline;
+}
+.theme-btn[data-mode="dark-shell"] .ico-shell {
+  display: inline;
+}
+.theme-btn[data-mode="system"] .ico-system {
   display: inline;
 }
 /* Mobile theme picker reuses the .more-size row; mark the active option. */

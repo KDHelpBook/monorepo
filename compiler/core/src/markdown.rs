@@ -20,7 +20,7 @@ const THEME_DARK: &str = "base16-ocean.dark";
 ///
 /// It emits **CSS classes** (`ClassStyle::Spaced`), not inline styles — the colours
 /// come from a stylesheet the viewer injects ([`syntax_theme_css`]), so code blocks
-/// follow the app theme (e.g. a future dark mode) instead of baking one theme into
+/// follow the app theme (light or dark) instead of baking one theme into
 /// every `.khb`. The trade-off: rendering needs the viewer's CSS to show colour.
 pub fn highlighter() -> SyntectAdapter {
     SyntectAdapter::new(None)
@@ -99,8 +99,8 @@ pub fn highlight_inline(code: &str, lang: &str) -> String {
 }
 
 /// The stylesheet that colours the class-tagged code spans: the light theme by
-/// default, and the dark theme under `[data-theme="dark"]` (dormant until the viewer
-/// sets that hook). Generated from syntect so it always matches the classes the
+/// default, and the dark theme under `[data-theme="dark"]`, which the viewer sets on
+/// the frame in dark mode. Generated from syntect so it always matches the classes the
 /// [`highlighter`] emits. Regenerate with `cargo run -p khb-core --example syntax-css`.
 pub fn syntax_theme_css() -> String {
     use syntect::highlighting::ThemeSet;

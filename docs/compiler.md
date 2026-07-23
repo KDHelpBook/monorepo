@@ -67,8 +67,8 @@ A fenced code block that declares a language (```` ```rust ````, ```` ```bash ``
 `…`) is **syntax-highlighted at compile time** (comrak + syntect). The highlighting is
 emitted as **CSS classes** (not inline styles), so the colours come from a stylesheet
 the viewer injects into the content frame — which lets code blocks follow the app
-theme (a light theme by default, with a dormant `[data-theme="dark"]` block ready for
-dark mode) instead of one theme being baked into every `.khb`. The theme CSS is
+theme — light, or dark via the stylesheet's `[data-theme="dark"]` block — instead of
+one theme being baked into every `.khb`. The theme CSS is
 generated from syntect so it always matches the emitted classes; regenerate it with
 `cargo run -p khb-core --example syntax-css > viewer-ts/src/styles/syntax.css`. The
 search text (`plain`) is taken from an unhighlighted render, so the per-token spans
