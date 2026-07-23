@@ -1155,6 +1155,10 @@ textarea {
   .pane-toggle {
     display: inline-flex;
   }
+  /* The pushpin's auto-hide reveal is hover-only — unusable by touch. */
+  .left-head .pin {
+    display: none;
+  }
 }
 
 /* Auto-hide: when the panel is collapsed it becomes a vertical icon strip */
@@ -1284,6 +1288,12 @@ textarea {
   }
   .pane-toggle {
     display: inline-flex;
+  }
+  /* The drawer layout neutralizes auto-hide, so the pushpin does nothing here —
+     the ☰ button is the panel toggle. Hide the dead control (also covers a narrow
+     desktop window with a mouse). */
+  .left-head .pin {
+    display: none;
   }
   .splitter {
     display: none;

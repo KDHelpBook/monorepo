@@ -1742,10 +1742,10 @@ function start(
   const narrow = (): boolean => window.matchMedia(COMPACT_MQ).matches;
 
   let pinned = true; // docked vs auto-hide
-  // Auto-hide reveals the panel on hover, which a touch device can't do. On coarse
-  // pointers (tablets) keep it docked and drop the pin toggle — the ☰ drawer covers
-  // "hide the panel" on phones/short screens.
-  if (coarsePointer) pinBtn.style.display = "none";
+  // The pin only makes sense on the wide, fine-pointer desktop layout: its auto-hide
+  // reveal is hover-only (dead on touch), and the compact drawer neutralizes auto-hide
+  // entirely. Its visibility is therefore handled declaratively in CSS — hidden in the
+  // compact/drawer layout and on coarse pointers — so it reacts to live window resizes.
 
   const renderPanel = (): void => {
     win.classList.toggle("autohide", !pinned);
