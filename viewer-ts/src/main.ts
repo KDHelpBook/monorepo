@@ -1021,7 +1021,10 @@ function start(
   let mode: Mode = "contents";
   let filterCategory = "";
   let filterProduct = ""; // family/collection scope (union by default)
-  let fontSize = loadFontSize(13);
+  // Reader font size (px): 13 is the default; font-up/down step within [11, 20],
+  // and font-reset returns to this value.
+  const DEFAULT_FONT_SIZE = 13;
+  let fontSize = loadFontSize(DEFAULT_FONT_SIZE);
   // Colour theme. "system" follows the OS; "dark-shell" darkens the app chrome
   // (menu/toolbar/tree/tabs and the Search/Manage app pages) but keeps the docset
   // reading pane light. The shell and the reading pane are separate documents (the
@@ -2481,6 +2484,11 @@ function start(
         break;
       case "font-down":
         fontSize = Math.max(11, fontSize - 1);
+        setFrameFont();
+        saveFontSize(fontSize);
+        break;
+      case "font-reset":
+        fontSize = DEFAULT_FONT_SIZE;
         setFrameFont();
         saveFontSize(fontSize);
         break;

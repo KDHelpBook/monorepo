@@ -16,6 +16,7 @@ export interface Strings {
   clearHighlight: string;
   largerText: string;
   smallerText: string;
+  resetText: string;
   // colour theme (View menu + toolbar)
   themeMenu: string;
   themeLight: string;
@@ -162,6 +163,7 @@ const en: Strings = {
   clearHighlight: "Clear search highlight",
   largerText: "Larger text",
   smallerText: "Smaller text",
+  resetText: "Reset text size",
   themeMenu: "Theme",
   themeLight: "Light",
   themeDark: "Dark",
@@ -299,6 +301,7 @@ const pl: Strings = {
   clearHighlight: "Wyczyść podświetlenie wyszukiwania",
   largerText: "Większy tekst",
   smallerText: "Mniejszy tekst",
+  resetText: "Zresetuj rozmiar tekstu",
   themeMenu: "Motyw",
   themeLight: "Jasny",
   themeDark: "Ciemny",
