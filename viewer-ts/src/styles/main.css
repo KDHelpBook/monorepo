@@ -1971,3 +1971,56 @@ textarea {
   background: #3a2320;
   border-color: #6e3a2e;
 }
+
+/* ── Printing ────────────────────────────────────────────────────────────────
+   Off-screen host for the throwaway print frame (main.ts printCurrent). The frame
+   prints its *own* document, so the parent never shows it; a real (non-zero) size
+   off-screen lets its content lay out for pagination. */
+.print-frame {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  width: 816px;
+  height: 1056px;
+  border: 0;
+}
+
+/* A documentation page is printed by that frame, so the app chrome below is never
+   involved there. This block governs the other path — the trusted Search/Manage
+   overlay (#content), printed via the parent — and also strips the chrome for a plain
+   browser Ctrl/⌘-P. */
+@media print {
+  .menubar,
+  .toolbar,
+  .more-menu,
+  .left,
+  .splitter,
+  .doctabs,
+  .addressbar,
+  .statusbar,
+  .loading {
+    display: none !important;
+  }
+  /* Unwind the fixed full-viewport shell so content flows across pages. */
+  .window,
+  .body,
+  .pane.right,
+  .content-wrap {
+    position: static !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  /* Let the overlay flow inline when it is the active surface; its own inline
+     display:none keeps it out of print on a doc page (where the frame is shown). */
+  .content {
+    position: static !important;
+    overflow: visible !important;
+  }
+  /* On the overlay path the stale doc frame sits under #content — don't print it too. */
+  body.print-overlay .content-frame {
+    display: none !important;
+  }
+  @page {
+    margin: 1.6cm;
+  }
+}

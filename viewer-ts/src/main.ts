@@ -178,7 +178,8 @@ addEventListener('touchmove',function(e){if(pull&&e.touches[0].clientY-py>72){pu
 addEventListener('touchend',function(){pull=false},{passive:true});
 addEventListener('message',function(e){var d=e.data;if(!d||d.t!=='khb-app')return;
  if(d.a==='font'&&typeof d.size==='number'){document.documentElement.style.setProperty('--content-size',d.size+'px')}
- else if(d.a==='theme'){var de=document.documentElement;if(d.dark){de.setAttribute('data-theme','dark')}else{de.removeAttribute('data-theme')}}});
+ else if(d.a==='theme'){var de=document.documentElement;if(d.dark){de.setAttribute('data-theme','dark')}else{de.removeAttribute('data-theme')}}
+ else if(d.a==='print'){var pdone=function(){post({t:'khb',a:'afterprint'});removeEventListener('afterprint',pdone)};addEventListener('afterprint',pdone);requestAnimationFrame(function(){requestAnimationFrame(function(){print()})})}});
 function ready(){var m=document.querySelector('mark.hl');if(m)m.scrollIntoView({block:'center'})}
 if(document.readyState!=='loading')ready();else addEventListener('DOMContentLoaded',ready);
 })();`;
@@ -996,6 +997,10 @@ function start(
   // Touch device? Tree folder-pages then expand on a single tap (double-tap zooms).
   const coarsePointer = window.matchMedia("(pointer: coarse)").matches;
   let currentId = "";
+  // The exact rendered HTML of the current doc page, stashed at render time so
+  // File → Print can reproduce it in a throwaway print frame (see printCurrent).
+  let printSourceHtml = "";
+  let printFrame: HTMLIFrameElement | null = null;
   // Monotonic tokens so a slow async load/search (streaming) that finishes after a
   // newer one has started is dropped instead of clobbering the newer result.
   let loadSeq = 0;
@@ -2374,11 +2379,11 @@ function start(
         // The "On this page" nav is compiled into body_html; its `#slug` links route
         // through rewriteFrameLinks like any in-page anchor.
         rewriteFrameLinks(holder, id);
-        frame.srcdoc = frameDoc(holder.innerHTML);
+        printSourceHtml = holder.innerHTML;
+        frame.srcdoc = frameDoc(printSourceHtml);
       } else {
-        frame.srcdoc = frameDoc(
-          `<h1>${esc(s.notFoundTitle)}</h1><p>${s.notFoundBody(esc(id))}</p>`,
-        );
+        printSourceHtml = `<h1>${esc(s.notFoundTitle)}</h1><p>${s.notFoundBody(esc(id))}</p>`;
+        frame.srcdoc = frameDoc(printSourceHtml);
       }
       // Hide the app-UI overlay so the (always-visible) frame shows through.
       content.style.display = "none";
@@ -2488,7 +2493,7 @@ function start(
         if (!config.prefetchLocked) setPrefetch(!prefetchEnabled);
         break;
       case "print":
-        window.print();
+        printCurrent();
         break;
       case "clear-highlight":
         highlightTerms = [];
@@ -2516,6 +2521,53 @@ function start(
         void shareCurrent();
         break;
     }
+  }
+
+  // Print just the reading content, never the app shell. The page body lives in a
+  // cross-origin sandboxed frame, so window.print() on the app would print the whole
+  // chrome (and clip the frame to a single viewport-sized page). Instead we print the
+  // content's *own* document: a throwaway frame that carries allow-modals — which a
+  // sandbox requires for print() to work — only for the moment of printing, so the
+  // persistent viewing frame keeps its stricter sandbox. The frame prints itself
+  // (natural pagination) on a bridge message, then reports afterprint so we tear it down.
+  function printCurrent(): void {
+    // The Search/Manage overlay is trusted app UI in #content (same origin) — print the
+    // parent and let the @media print rules hide the chrome around it.
+    if (content.style.display !== "none") {
+      document.body.classList.add("print-overlay");
+      const clean = (): void => {
+        document.body.classList.remove("print-overlay");
+        window.removeEventListener("afterprint", clean);
+      };
+      window.addEventListener("afterprint", clean);
+      window.print();
+      return;
+    }
+    if (!printSourceHtml) return;
+    if (printFrame) printFrame.remove(); // singleton — a new print replaces any stray one
+    const pf = document.createElement("iframe");
+    pf.className = "print-frame";
+    // Isolated opaque origin (no allow-same-origin) + allow-modals so print() fires.
+    pf.setAttribute("sandbox", "allow-scripts allow-modals");
+    pf.setAttribute("referrerpolicy", "no-referrer");
+    printFrame = pf;
+    const onMsg = (e: MessageEvent): void => {
+      if (e.source !== pf.contentWindow) return; // scoped to this print frame only
+      const d = e.data as { t?: unknown; a?: unknown };
+      if (!d || d.t !== "khb" || d.a !== "afterprint") return;
+      window.removeEventListener("message", onMsg);
+      if (printFrame === pf) printFrame = null;
+      pf.remove();
+    };
+    window.addEventListener("message", onMsg);
+    pf.addEventListener("load", () => {
+      pf.contentWindow?.postMessage({ t: "khb-app", a: "print" }, "*");
+    });
+    // Same builder as the on-screen frame, so theme/font/CSS match; @media print in
+    // content.css adapts the body for paper. Set srcdoc before appending so `load`
+    // fires once (for the real document), not first for an empty about:blank.
+    pf.srcdoc = frameDoc(printSourceHtml);
+    document.body.appendChild(pf);
   }
 
   // Share the current page's deep link via the OS share sheet, falling back to
