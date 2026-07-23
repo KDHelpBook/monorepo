@@ -1,0 +1,793 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#3c5f95" />
+    <!-- Apply the saved colour theme before first paint (no flash of light chrome
+         when reloading in dark). Mirrors loadTheme()/effectiveDark() in main.ts;
+         the reading iframe is themed separately via frameDoc(). -->
+    <script>
+      (function () {
+        try {
+          var m = localStorage.getItem("khb.theme");
+          var dark =
+            m === "dark" ||
+            ((m === "system" || m === null) &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (dark)
+            document.documentElement.setAttribute("data-theme", "dark");
+        } catch (e) {
+          /* storage/matchMedia unavailable — stay light */
+        }
+      })();
+    </script>
+    <!-- Installable to the phone home screen (uses the existing service worker). -->
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <meta name="apple-mobile-web-app-title" content="KD Help Book" />
+    <link rel="apple-touch-icon" href="icons/icon-192.png" />
+    <!-- AI/crawler discovery hooks (<link rel="llms-txt">, and rel="sitemap" when
+         --base-url is set) are injected here by `khb pack --llms`, which is what
+         actually produces llms.txt / sitemap.xml. Kept OUT of the base template so
+         a dev server or a non-llms pack never advertises files that don't exist.
+         pack replaces the exact marker below; it's an inert comment otherwise. -->
+    <link rel="llms-txt" href="llms.txt" />
+    <link rel="sitemap" type="application/xml" href="sitemap.xml" />
+    <title>KD Help Book</title>
+    <script type="module" crossorigin src="./assets/index-D99s1SvY.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-B7i5kExn.css">
+  </head>
+  <body>
+    <!-- A JS-less <noscript> landing block (title + links to the static exports
+         llms.txt / llms-full.txt / sitemap.xml, for crawlers and LLM fetchers) is
+         injected here by `khb pack --llms`. Left out of the base template so a dev
+         server / non-llms pack doesn't point bots at files that don't exist. pack
+         replaces the exact marker below; inert comment otherwise. -->
+    <noscript>
+      <div class="bot-index">
+        <h1>KD Help Book</h1>
+        <p>A documentation reader. This page is a client-side application and needs JavaScript to run. Machine-readable copies of the documentation are available as static files:</p>
+        <ul>
+          <li><a href="llms.txt">llms.txt</a> — an index of every page, linking to its clean-Markdown copy</li>
+          <li><a href="llms-full.txt">llms-full.txt</a> — the full documentation inline, for one-shot ingestion</li>
+          <li><a href="sitemap.xml">sitemap.xml</a> — every crawlable page URL</li>
+        </ul>
+      </div>
+    </noscript>
+    <div class="window" id="window" role="application" aria-label="KD Help Book Viewer">
+      <!-- Menu bar (top of our chrome; the OS provides the window titlebar) -->
+      <div class="menubar" id="menubar" role="menubar">
+        <div class="menu" data-menu="file">
+          <span class="menu-label" data-i18n="menuFile">File</span>
+          <div class="menu-popup">
+            <div
+              class="menu-item"
+              data-action="open-docset"
+              data-i18n="openDocset"
+            >
+              Open docset…
+            </div>
+            <div class="menu-item" data-action="open-url" data-i18n="openUrl">
+              Open from URL…
+            </div>
+            <div
+              class="menu-item"
+              data-action="manage-docsets"
+              data-i18n="manageDocsets"
+            >
+              Manage docsets…
+            </div>
+            <div class="menu-item" data-action="share" data-i18n="share">
+              Share…
+            </div>
+            <div class="menu-item" data-action="print" data-i18n="print">
+              Print…
+            </div>
+          </div>
+        </div>
+        <div class="menu" data-menu="edit">
+          <span class="menu-label" data-i18n="menuEdit">Edit</span>
+          <div class="menu-popup">
+            <div class="menu-item" data-action="find" data-i18n="find">
+              Find on page…
+            </div>
+          </div>
+        </div>
+        <div class="menu" data-menu="view">
+          <span class="menu-label" data-i18n="menuView">View</span>
+          <div class="menu-popup">
+            <div
+              class="menu-item"
+              data-action="mode-contents"
+              data-i18n="contents"
+            >
+              Contents
+            </div>
+            <div class="menu-item" data-action="mode-index" data-i18n="index">
+              Index
+            </div>
+            <div class="menu-item" data-action="mode-search" data-i18n="search">
+              Search
+            </div>
+            <div
+              class="menu-item"
+              data-action="search-page"
+              data-i18n="advancedSearch"
+            >
+              Advanced search…
+            </div>
+            <div
+              class="menu-item"
+              data-action="mode-favorites"
+              data-i18n="favorites"
+            >
+              Favorites
+            </div>
+            <div class="menu-sep"></div>
+            <div class="menu-item" data-action="sync" data-i18n="sync">
+              Sync with Contents
+            </div>
+            <div
+              class="menu-item"
+              data-action="clear-highlight"
+              data-i18n="clearHighlight"
+            >
+              Clear search highlight
+            </div>
+            <div class="menu-item" data-action="font-up" data-i18n="largerText">
+              Larger text
+            </div>
+            <div
+              class="menu-item"
+              data-action="font-down"
+              data-i18n="smallerText"
+            >
+              Smaller text
+            </div>
+            <div class="menu-sep"></div>
+            <!-- Colour theme (three radio-style items; the active one shows a ✓,
+                 kept in sync by updateThemeUI() in main.ts). -->
+            <div class="menu-label-mini" data-i18n="themeMenu">Theme</div>
+            <div
+              class="menu-item menu-radio"
+              data-action="theme-light"
+              data-theme-opt="light"
+            >
+              <span class="menu-check" aria-hidden="true"></span
+              ><span data-i18n="themeLight">Light</span>
+            </div>
+            <div
+              class="menu-item menu-radio"
+              data-action="theme-dark"
+              data-theme-opt="dark"
+            >
+              <span class="menu-check" aria-hidden="true"></span
+              ><span data-i18n="themeDark">Dark</span>
+            </div>
+            <div
+              class="menu-item menu-radio"
+              data-action="theme-system"
+              data-theme-opt="system"
+            >
+              <span class="menu-check" aria-hidden="true"></span
+              ><span data-i18n="themeSystem">Use system setting</span>
+            </div>
+            <div class="menu-sep"></div>
+            <div class="menu-item" data-action="back" data-i18n="back">
+              Back
+            </div>
+            <div class="menu-item" data-action="forward" data-i18n="forward">
+              Forward
+            </div>
+          </div>
+        </div>
+        <div class="menu" data-menu="help">
+          <span class="menu-label" data-i18n="menuHelp">Help</span>
+          <div class="menu-popup">
+            <div class="menu-item" data-action="about" data-i18n="about">
+              About KD Help Book
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Toolbar — only functional buttons -->
+      <div class="toolbar">
+        <button
+          class="tbtn pane-toggle"
+          id="btn-pane"
+          title="Show/hide panel"
+          data-i18n-title="showHidePanel"
+        >
+          ☰
+        </button>
+        <!-- Mobile-only overflow: the actions that live in the (hidden) menubar. -->
+        <button
+          class="tbtn more-btn"
+          id="btn-more"
+          title="More"
+          aria-label="More"
+        >
+          ⋯
+        </button>
+        <button
+          class="tbtn"
+          data-action="back"
+          title="Back"
+          data-i18n-title="back"
+          id="btn-back"
+        >
+          <svg viewBox="0 0 16 16">
+            <path
+              d="M10 3 5 8l5 5"
+              fill="none"
+              stroke="#1f4d8f"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            /></svg
+          ><span data-i18n="back">Back</span>
+        </button>
+        <button
+          class="tbtn"
+          data-action="forward"
+          title="Forward"
+          data-i18n-title="forward"
+          id="btn-fwd"
+        >
+          <svg viewBox="0 0 16 16">
+            <path
+              d="M6 3l5 5-5 5"
+              fill="none"
+              stroke="#1f4d8f"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </button>
+        <div class="tsep"></div>
+        <button
+          class="tbtn"
+          data-action="mode-contents"
+          title="Contents"
+          data-i18n-title="contents"
+        >
+          <svg viewBox="0 0 16 16">
+            <rect
+              x="2"
+              y="2.5"
+              width="12"
+              height="11"
+              rx="1"
+              fill="#fff"
+              stroke="#1f4d8f"
+            />
+            <path
+              d="M5 5.5h6M5 8h6M5 10.5h4"
+              stroke="#e8651e"
+              stroke-width="1.4"
+              stroke-linecap="round"
+            /></svg
+          ><span data-i18n="contents">Contents</span>
+        </button>
+        <button
+          class="tbtn"
+          data-action="mode-index"
+          title="Index"
+          data-i18n-title="index"
+        >
+          <svg viewBox="0 0 16 16">
+            <path d="M4 2h8v12H4z" fill="#fff" stroke="#1f4d8f" />
+            <path
+              d="M6.5 5h4M6.5 7.5h4M6.5 10h3"
+              stroke="#e8651e"
+              stroke-width="1.3"
+              stroke-linecap="round"
+            /></svg
+          ><span data-i18n="index">Index</span>
+        </button>
+        <button
+          class="tbtn"
+          data-action="mode-search"
+          title="Search"
+          data-i18n-title="search"
+        >
+          <svg viewBox="0 0 16 16">
+            <circle
+              cx="7"
+              cy="7"
+              r="4"
+              fill="none"
+              stroke="#1f4d8f"
+              stroke-width="1.6"
+            />
+            <path
+              d="M10 10l4 4"
+              stroke="#e8651e"
+              stroke-width="2"
+              stroke-linecap="round"
+            /></svg
+          ><span data-i18n="search">Search</span>
+        </button>
+        <button
+          class="tbtn"
+          data-action="mode-favorites"
+          title="Favorites"
+          data-i18n-title="favorites"
+        >
+          <svg viewBox="0 0 16 16">
+            <path
+              d="M8 1.6l1.9 3.9 4.3.6-3.1 3 .7 4.2L8 11.3 4.2 13.3l.7-4.2-3.1-3 4.3-.6z"
+              fill="#ffd24d"
+              stroke="#e8651e"
+              stroke-width=".8"
+            /></svg
+          ><span data-i18n="favorites">Favorites</span>
+        </button>
+        <div class="tsep"></div>
+        <button
+          class="tbtn"
+          data-action="font-up"
+          title="Larger text"
+          data-i18n-title="largerText"
+          style="font-weight: bold"
+        >
+          A<span style="font-size: 9px">▲</span>
+        </button>
+        <button
+          class="tbtn"
+          data-action="font-down"
+          title="Smaller text"
+          data-i18n-title="smallerText"
+        >
+          A<span style="font-size: 9px">▼</span>
+        </button>
+        <button
+          class="tbtn theme-btn"
+          id="theme-btn"
+          data-action="theme-cycle"
+          title="Theme"
+          data-i18n-title="themeMenu"
+          aria-label="Theme"
+        >
+          <svg
+            class="ico-sun"
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            aria-hidden="true"
+          >
+            <circle cx="8" cy="8" r="3.1" fill="currentColor" />
+            <g
+              stroke="currentColor"
+              stroke-width="1.2"
+              stroke-linecap="round"
+            >
+              <line x1="8" y1="0.8" x2="8" y2="2.6" />
+              <line x1="8" y1="13.4" x2="8" y2="15.2" />
+              <line x1="0.8" y1="8" x2="2.6" y2="8" />
+              <line x1="13.4" y1="8" x2="15.2" y2="8" />
+              <line x1="2.8" y1="2.8" x2="4.1" y2="4.1" />
+              <line x1="11.9" y1="11.9" x2="13.2" y2="13.2" />
+              <line x1="2.8" y1="13.2" x2="4.1" y2="11.9" />
+              <line x1="11.9" y1="4.1" x2="13.2" y2="2.8" />
+            </g>
+          </svg>
+          <svg
+            class="ico-moon"
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            aria-hidden="true"
+          >
+            <path
+              d="M11 2.3a5.7 5.7 0 1 0 2.8 10.2A6.2 6.2 0 0 1 11 2.3z"
+              fill="currentColor"
+            />
+          </svg>
+        </button>
+        <button
+          class="tbtn"
+          data-action="sync"
+          title="Sync with Contents"
+          data-i18n-title="sync"
+        >
+          <span data-i18n="sync">Sync</span>
+        </button>
+        <div class="tsep"></div>
+        <select
+          class="lang-select"
+          id="lang-select"
+          title="Language"
+          data-i18n-title="languageLabel"
+        >
+          <option value="en">English</option>
+          <option value="pl">Polski</option>
+        </select>
+        <!-- Mobile overflow menu (opened by the ⋯ button); actions reuse the same
+             data-action delegation and externalSources gating as the menubar. -->
+        <div class="more-menu" id="more-menu" hidden>
+          <button
+            class="more-item"
+            data-action="open-docset"
+            data-i18n="openDocset"
+          >
+            Open docset…
+          </button>
+          <button class="more-item" data-action="open-url" data-i18n="openUrl">
+            Open from URL…
+          </button>
+          <button
+            class="more-item"
+            data-action="manage-docsets"
+            data-i18n="manageDocsets"
+          >
+            Manage docsets…
+          </button>
+          <button
+            class="more-item"
+            data-action="search-page"
+            data-i18n="advancedSearch"
+          >
+            Advanced search…
+          </button>
+          <button class="more-item" data-action="sync" data-i18n="sync">
+            Sync with Contents
+          </button>
+          <button
+            class="more-item"
+            data-action="clear-highlight"
+            data-i18n="clearHighlight"
+          >
+            Clear search highlight
+          </button>
+          <button class="more-item" data-action="share" data-i18n="share">
+            Share…
+          </button>
+          <div class="more-sep"></div>
+          <!-- Text size lives here (not just the off-screen toolbar) so it's
+               reachable on a phone. These buttons keep the menu open (they aren't
+               `.more-item`), so you can tap up/down repeatedly. -->
+          <div class="more-size">
+            <span data-i18n="textSize">Text size</span>
+            <span class="more-size-btns">
+              <button
+                class="more-size-btn"
+                data-action="font-down"
+                title="Smaller text"
+                data-i18n-title="smallerText"
+              >
+                A−
+              </button>
+              <button
+                class="more-size-btn"
+                data-action="font-up"
+                title="Larger text"
+                data-i18n-title="largerText"
+              >
+                A+
+              </button>
+            </span>
+          </div>
+          <!-- Theme picker (kept open on tap, like text size; active option gets
+               the .active class from updateThemeUI()). -->
+          <div class="more-size more-theme">
+            <span data-i18n="themeMenu">Theme</span>
+            <span class="more-size-btns">
+              <button
+                class="more-size-btn"
+                data-action="theme-light"
+                data-theme-opt="light"
+                title="Light"
+                data-i18n-title="themeLight"
+              >
+                ☀
+              </button>
+              <button
+                class="more-size-btn"
+                data-action="theme-dark"
+                data-theme-opt="dark"
+                title="Dark"
+                data-i18n-title="themeDark"
+              >
+                ☾
+              </button>
+              <button
+                class="more-size-btn"
+                data-action="theme-system"
+                data-theme-opt="system"
+                title="Use system setting"
+                data-i18n-title="themeSystem"
+              >
+                ⚙
+              </button>
+            </span>
+          </div>
+          <label class="more-lang">
+            <span data-i18n="languageLabel">Language</span>
+            <select class="lang-select" id="lang-select-m">
+              <option value="en">English</option>
+              <option value="pl">Polski</option>
+            </select>
+          </label>
+          <button class="more-item" data-action="about" data-i18n="about">
+            About KD Help Book
+          </button>
+        </div>
+      </div>
+
+      <!-- Main area -->
+      <div class="body">
+        <!-- Scrim behind the mobile drawer -->
+        <div class="scrim" id="scrim"></div>
+        <!-- Thin left-edge catcher: a right-swipe here opens the drawer (the content
+             iframe would otherwise swallow the gesture). Mobile-only, drawer-closed. -->
+        <div class="edge-swipe" id="edge-swipe"></div>
+        <!-- Vertical strip shown when the panel is auto-hidden -->
+        <div class="left-strip" id="left-strip">
+          <button class="strip-exp" id="strip-exp" title="Expand panel">
+            »
+          </button>
+          <button
+            data-action="mode-contents"
+            data-mode="contents"
+            title="Contents"
+            data-i18n-title="contents"
+          >
+            <svg viewBox="0 0 16 16">
+              <rect
+                x="2"
+                y="2.5"
+                width="12"
+                height="11"
+                rx="1"
+                fill="#fff"
+                stroke="#1f4d8f"
+              />
+              <path
+                d="M5 5.5h6M5 8h6M5 10.5h4"
+                stroke="#e8651e"
+                stroke-width="1.4"
+                stroke-linecap="round"
+              /></svg
+            ><span class="vlabel" data-i18n="contents">Contents</span>
+          </button>
+          <button
+            data-action="mode-index"
+            data-mode="index"
+            title="Index"
+            data-i18n-title="index"
+          >
+            <svg viewBox="0 0 16 16">
+              <path d="M4 2h8v12H4z" fill="#fff" stroke="#1f4d8f" />
+              <path
+                d="M6.5 5h4M6.5 7.5h4M6.5 10h3"
+                stroke="#e8651e"
+                stroke-width="1.3"
+                stroke-linecap="round"
+              /></svg
+            ><span class="vlabel" data-i18n="index">Index</span>
+          </button>
+          <button
+            data-action="mode-search"
+            data-mode="search"
+            title="Search"
+            data-i18n-title="search"
+          >
+            <svg viewBox="0 0 16 16">
+              <circle
+                cx="7"
+                cy="7"
+                r="4"
+                fill="none"
+                stroke="#1f4d8f"
+                stroke-width="1.6"
+              />
+              <path
+                d="M10 10l4 4"
+                stroke="#e8651e"
+                stroke-width="2"
+                stroke-linecap="round"
+              /></svg
+            ><span class="vlabel" data-i18n="search">Search</span>
+          </button>
+          <button
+            data-action="mode-favorites"
+            data-mode="favorites"
+            title="Favorites"
+            data-i18n-title="favorites"
+          >
+            <svg viewBox="0 0 16 16">
+              <path
+                d="M8 2l1.7 3.5 3.8.5-2.8 2.7.7 3.8L8 10.6 4.6 12.5l.7-3.8L2.5 6l3.8-.5z"
+                fill="#ffd24d"
+                stroke="#e8651e"
+                stroke-width=".8"
+              /></svg
+            ><span class="vlabel" data-i18n="favorites">Favorites</span>
+          </button>
+        </div>
+        <!-- Left pane -->
+        <div class="pane left" id="left-pane">
+          <div class="left-head">
+            <span id="left-title">Contents</span>
+            <span class="spacer"></span>
+            <span
+              class="hbtn pin"
+              id="left-pin"
+              title="Auto-hide panel"
+              role="button"
+              tabindex="0"
+            >
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path
+                  fill="currentColor"
+                  d="M4.146.146A.5.5 0 0 1 4.5 0h7a.5.5 0 0 1 .354.854L10.243 2.46l.83 2.198 1.846 1.846A.5.5 0 0 1 13 7.5H8.75v5l-.5 1-.5-1v-5H3.5a.5.5 0 0 1-.354-.854L4.992 4.66l.83-2.198L4.146.854a.5.5 0 0 1 0-.708"
+                />
+              </svg>
+            </span>
+          </div>
+          <div class="filterbar" id="filterbar">
+            <div
+              class="filter-row"
+              id="filter-product-row"
+              style="display: none"
+            >
+              <label for="filter-product" data-i18n="filterProduct"
+                >Filter by product:</label
+              >
+              <select id="filter-product">
+                <option value="" data-i18n="filterAllProducts">
+                  (all products)
+                </option>
+              </select>
+            </div>
+            <label for="filter" data-i18n="filterLabel"
+              >Filter by category:</label
+            >
+            <select id="filter">
+              <option value="" data-i18n="filterAll">(all)</option>
+            </select>
+          </div>
+          <div class="search-box" id="search-box" style="display: none">
+            <input
+              id="search-input"
+              type="search"
+              placeholder="Type words to search…"
+              data-i18n-ph="searchPlaceholder"
+              autocomplete="off"
+            />
+            <!-- Opens the roomy Search page (scope + sort) with the current query. -->
+            <button
+              class="adv-search"
+              data-action="search-page"
+              data-i18n="advancedSearch"
+            >
+              Advanced search…
+            </button>
+          </div>
+          <div class="left-body" id="left-body"></div>
+          <div class="left-tabs" role="tablist">
+            <button data-action="mode-contents" data-mode="contents" class="on">
+              <svg viewBox="0 0 16 16">
+                <rect
+                  x="2"
+                  y="2.5"
+                  width="12"
+                  height="11"
+                  rx="1"
+                  fill="#fff"
+                  stroke="#1f4d8f"
+                />
+                <path
+                  d="M5 5.5h6M5 8h6M5 10.5h4"
+                  stroke="#e8651e"
+                  stroke-width="1.4"
+                  stroke-linecap="round"
+                /></svg
+              ><span data-i18n="contents">Contents</span>
+            </button>
+            <button data-action="mode-index" data-mode="index">
+              <svg viewBox="0 0 16 16">
+                <path d="M4 2h8v12H4z" fill="#fff" stroke="#1f4d8f" />
+                <path
+                  d="M6.5 5h4M6.5 7.5h4M6.5 10h3"
+                  stroke="#e8651e"
+                  stroke-width="1.3"
+                  stroke-linecap="round"
+                /></svg
+              ><span data-i18n="index">Index</span>
+            </button>
+            <button data-action="mode-search" data-mode="search">
+              <svg viewBox="0 0 16 16">
+                <circle
+                  cx="7"
+                  cy="7"
+                  r="4"
+                  fill="none"
+                  stroke="#1f4d8f"
+                  stroke-width="1.6"
+                />
+                <path
+                  d="M10 10l4 4"
+                  stroke="#e8651e"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                /></svg
+              ><span data-i18n="search">Search</span>
+            </button>
+            <button data-action="mode-favorites" data-mode="favorites">
+              <svg viewBox="0 0 16 16">
+                <path
+                  d="M8 2l1.7 3.5 3.8.5-2.8 2.7.7 3.8L8 10.6 4.6 12.5l.7-3.8L2.5 6l3.8-.5z"
+                  fill="#ffd24d"
+                  stroke="#e8651e"
+                  stroke-width=".8"
+                /></svg
+              ><span data-i18n="favorites">Favorites</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="splitter" id="splitter"></div>
+
+        <!-- Right pane -->
+        <div class="pane right">
+          <div class="doctabs">
+            <div class="tabstrip" id="tabstrip"></div>
+            <div class="doctabs-right">
+              <button
+                class="tbtn tab-new"
+                id="tab-new"
+                title="Open current page in a new tab"
+                data-i18n-title="newTab"
+              >
+                ＋
+              </button>
+              <button class="tbtn" id="fav-toggle" title="Add/remove favorite">
+                ☆ <span class="fav-label" data-i18n="favorite">Favorite</span>
+              </button>
+            </div>
+          </div>
+          <div class="addressbar">
+            <span class="lbl" data-i18n="addressLabel">Address:</span>
+            <input id="address" spellcheck="false" value="" />
+          </div>
+          <div class="content-wrap" id="content-wrap">
+            <!-- Page bodies (untrusted docset HTML) render here. `allow-scripts`
+                 (WITHOUT allow-same-origin) keeps the frame an isolated opaque
+                 origin — untrusted JS can run but can't reach the app; our trusted
+                 bridge talks to the app only via postMessage (validated). No
+                 popups/modals/forms/top-nav tokens: links go through the bridge. -->
+            <iframe
+              id="content-frame"
+              class="content-frame"
+              title="Documentation"
+              sandbox="allow-scripts"
+              referrerpolicy="no-referrer"
+            ></iframe>
+            <!-- App-generated UI (the Search results page) — not untrusted. -->
+            <div class="content" id="content" style="display: none"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="statusbar">
+        <span id="status">Ready</span>
+        <span class="grow"></span>
+        <span id="status-count"></span>
+      </div>
+    </div>
+
+  </body>
+</html>
