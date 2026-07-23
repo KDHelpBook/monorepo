@@ -179,7 +179,7 @@ addEventListener('touchend',function(){pull=false},{passive:true});
 addEventListener('message',function(e){var d=e.data;if(!d||d.t!=='khb-app')return;
  if(d.a==='font'&&typeof d.size==='number'){document.documentElement.style.setProperty('--content-size',d.size+'px')}
  else if(d.a==='theme'){var de=document.documentElement;if(d.dark){de.setAttribute('data-theme','dark')}else{de.removeAttribute('data-theme')}}
- else if(d.a==='print'){var pdone=function(){post({t:'khb',a:'afterprint'});removeEventListener('afterprint',pdone)};addEventListener('afterprint',pdone);requestAnimationFrame(function(){requestAnimationFrame(function(){print()})})}});
+ else if(d.a==='print'){var pdone=function(){post({t:'khb',a:'afterprint'});removeEventListener('afterprint',pdone)};addEventListener('afterprint',pdone);print()}});
 function ready(){var m=document.querySelector('mark.hl');if(m)m.scrollIntoView({block:'center'})}
 if(document.readyState!=='loading')ready();else addEventListener('DOMContentLoaded',ready);
 })();`;
@@ -2530,6 +2530,9 @@ function start(
   // sandbox requires for print() to work — only for the moment of printing, so the
   // persistent viewing frame keeps its stricter sandbox. The frame prints itself
   // (natural pagination) on a bridge message, then reports afterprint so we tear it down.
+  // The bridge calls print() straight away — not via rAF — because Chrome pauses
+  // requestAnimationFrame in an off-screen cross-origin frame; the frame's `load` event
+  // (when we post the message) already guarantees its layout is done.
   function printCurrent(): void {
     // The Search/Manage overlay is trusted app UI in #content (same origin) — print the
     // parent and let the @media print rules hide the chrome around it.
