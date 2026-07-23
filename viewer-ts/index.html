@@ -755,12 +755,15 @@
                  (WITHOUT allow-same-origin) keeps the frame an isolated opaque
                  origin — untrusted JS can run but can't reach the app; our trusted
                  bridge talks to the app only via postMessage (validated). No
-                 popups/modals/forms/top-nav tokens: links go through the bridge. -->
+                 popups/modals/forms/top-nav tokens: links go through the bridge.
+                 `allow-downloads` lets an asset link save its file (the docset's
+                 own bytes, resolved to a `data:` URL) — it grants no app or
+                 same-origin access, so origin isolation is untouched. -->
             <iframe
               id="content-frame"
               class="content-frame"
               title="Documentation"
-              sandbox="allow-scripts"
+              sandbox="allow-scripts allow-downloads"
               referrerpolicy="no-referrer"
             ></iframe>
             <!-- App-generated UI (the Search results page) — not untrusted. -->

@@ -148,9 +148,11 @@ downloading it whole, falling back to the whole fetch when the host can't `Range
 
 A `.khb` can come from anywhere (a user opens/uploads one), so its stored `body_html`
 is **untrusted**. The viewer renders every page body in a **sandboxed `<iframe>`**
-with `sandbox="allow-scripts"` — crucially **without `allow-same-origin`**, so the
-frame is an isolated, opaque origin. Origin isolation (not script-blocking) is the
-security boundary:
+with `sandbox="allow-scripts allow-downloads"` — crucially **without
+`allow-same-origin`**, so the frame is an isolated, opaque origin (the
+`allow-downloads` token only lets an asset link save its file; it grants no app
+or same-origin access). Origin isolation (not script-blocking) is the security
+boundary:
 
 - Untrusted JS may run, but in a different origin it **cannot reach the app**: no
   access to the parent DOM, `localStorage`, or the IndexedDB where other docsets
