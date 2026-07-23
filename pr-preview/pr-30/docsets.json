@@ -1,0 +1,34 @@
+{
+  "docsets": [
+    {
+      "file": "docsets/khb-authoring.khb",
+      "id": "khb-authoring",
+      "title": "Authoring KD Help Books",
+      "language": "en",
+      "collection": "khb-docs",
+      "version": "0.1.0",
+      "streaming": true,
+      "hash": "db5270c11b7cda51"
+    },
+    {
+      "file": "docsets/khb-internals.khb",
+      "id": "khb-internals",
+      "title": "KD Help Book Internals",
+      "language": "en",
+      "collection": "khb-docs",
+      "version": "0.1.0",
+      "streaming": true,
+      "hash": "283e6246e70414fd"
+    },
+    {
+      "file": "docsets/khb-publishing.khb",
+      "id": "khb-publishing",
+      "title": "Publishing KD Help Books",
+      "language": "en",
+      "collection": "khb-docs",
+      "version": "0.1.0",
+      "streaming": true,
+      "hash": "5d83b45252ee32a6"
+    }
+  ]
+}
