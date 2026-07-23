@@ -926,18 +926,25 @@ function start(
   let filterCategory = "";
   let filterProduct = ""; // family/collection scope (union by default)
   let fontSize = loadFontSize(13);
-  // Colour theme: "light" | "dark" | "system" (system follows prefers-color-scheme).
+  // Colour theme. "system" follows the OS; "dark-shell" darkens the app chrome
+  // (menu/toolbar/tree/tabs and the Search/Manage app pages) but keeps the docset
+  // reading pane light. The shell and the reading pane are separate documents (the
+  // app document vs the sandboxed iframe), so we theme them independently.
   let themeMode: ThemeMode = loadTheme();
   const prefersDark = window.matchMedia("(prefers-color-scheme: dark)");
-  const effectiveDark = (): boolean =>
+  const shellDark = (): boolean =>
+    themeMode === "dark" ||
+    themeMode === "dark-shell" ||
+    (themeMode === "system" && prefersDark.matches);
+  const contentDark = (): boolean =>
     themeMode === "dark" || (themeMode === "system" && prefersDark.matches);
 
-  // Push the theme to the sandboxed content frame — a display-only message (no
-  // srcdoc rebuild), mirroring setFrameFont. The frame's bridge sets/clears
+  // Push the content theme to the sandboxed reading frame — a display-only message
+  // (no srcdoc rebuild), mirroring setFrameFont. The frame's bridge sets/clears
   // data-theme on its <html>; first paint is baked in by frameDoc().
   const setFrameTheme = (): void => {
     frame.contentWindow?.postMessage(
-      { t: "khb-app", a: "theme", dark: effectiveDark() },
+      { t: "khb-app", a: "theme", dark: contentDark() },
       "*",
     );
   };
@@ -960,17 +967,19 @@ function start(
           ? s.themeLight
           : themeMode === "dark"
             ? s.themeDark
-            : s.themeSystem;
+            : themeMode === "dark-shell"
+              ? s.themeDarkShell
+              : s.themeSystem;
       const title = `${s.themeMenu}: ${label}`;
       btn.title = title;
       btn.setAttribute("aria-label", title);
     }
   };
-  // Apply the effective theme to the app chrome (data-theme on <html>), the
-  // reading frame, and the toggle UI.
+  // Apply the shell theme to the app chrome (data-theme on <html>) and the content
+  // theme to the reading frame, then refresh the toggle UI.
   const applyTheme = (): void => {
     const de = document.documentElement;
-    if (effectiveDark()) de.setAttribute("data-theme", "dark");
+    if (shellDark()) de.setAttribute("data-theme", "dark");
     else de.removeAttribute("data-theme");
     setFrameTheme();
     updateThemeUI();
@@ -980,7 +989,7 @@ function start(
     saveTheme(mode);
     applyTheme();
   };
-  const THEME_CYCLE: ThemeMode[] = ["light", "dark", "system"];
+  const THEME_CYCLE: ThemeMode[] = ["light", "dark", "dark-shell", "system"];
   // In "system" mode, follow the OS toggle live (a pinned light/dark ignores it).
   prefersDark.addEventListener("change", () => {
     if (themeMode === "system") applyTheme();
@@ -2016,7 +2025,7 @@ function start(
   // Wrap page-body HTML into a full document for the sandboxed frame: the theme CSS
   // (the frame can't see the app stylesheet) + our trusted bridge script.
   const frameDoc = (bodyHtml: string): string =>
-    `<!doctype html><html${effectiveDark() ? ' data-theme="dark"' : ""}>` +
+    `<!doctype html><html${contentDark() ? ' data-theme="dark"' : ""}>` +
     `<head><meta charset="utf-8">` +
     `<meta name="referrer" content="no-referrer">` +
     // Typography + the syntax-highlighting theme (colours the compiler's class-tagged
@@ -2316,6 +2325,9 @@ function start(
         break;
       case "theme-dark":
         setTheme("dark");
+        break;
+      case "theme-dark-shell":
+        setTheme("dark-shell");
         break;
       case "theme-system":
         setTheme("system");

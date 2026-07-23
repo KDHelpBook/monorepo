@@ -1704,6 +1704,7 @@ textarea {
    (e.g. system → light on a light OS) no longer reads as a dead button. */
 .theme-btn .ico-sun,
 .theme-btn .ico-moon,
+.theme-btn .ico-shell,
 .theme-btn .ico-system {
   display: none;
 }
@@ -1711,6 +1712,9 @@ textarea {
   display: inline;
 }
 .theme-btn[data-mode="dark"] .ico-moon {
+  display: inline;
+}
+.theme-btn[data-mode="dark-shell"] .ico-shell {
   display: inline;
 }
 .theme-btn[data-mode="system"] .ico-system {

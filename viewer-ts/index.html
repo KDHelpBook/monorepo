@@ -7,15 +7,17 @@
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
     <meta name="theme-color" content="#3c5f95" />
-    <!-- Apply the saved colour theme before first paint (no flash of light chrome
-         when reloading in dark). Mirrors loadTheme()/effectiveDark() in main.ts;
-         the reading iframe is themed separately via frameDoc(). -->
+    <!-- Apply the saved *shell* theme before first paint (no flash of light chrome
+         when reloading in dark). Mirrors loadTheme()/shellDark() in main.ts; the
+         reading iframe is themed separately via frameDoc(). "dark-shell" darkens the
+         chrome but leaves the reading pane light. -->
     <script>
       (function () {
         try {
           var m = localStorage.getItem("khb.theme");
           var dark =
             m === "dark" ||
+            m === "dark-shell" ||
             ((m === "system" || m === null) &&
               window.matchMedia("(prefers-color-scheme: dark)").matches);
           if (dark)
@@ -159,6 +161,14 @@
             >
               <span class="menu-check" aria-hidden="true"></span
               ><span data-i18n="themeDark">Dark</span>
+            </div>
+            <div
+              class="menu-item menu-radio"
+              data-action="theme-dark-shell"
+              data-theme-opt="dark-shell"
+            >
+              <span class="menu-check" aria-hidden="true"></span
+              ><span data-i18n="themeDarkShell">Dark shell, light pages</span>
             </div>
             <div
               class="menu-item menu-radio"
@@ -400,6 +410,28 @@
             />
             <path d="M8 2.7a5.3 5.3 0 0 1 0 10.6z" fill="currentColor" />
           </svg>
+          <svg
+            class="ico-shell"
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            aria-hidden="true"
+          >
+            <rect
+              x="1.5"
+              y="2.5"
+              width="13"
+              height="11"
+              rx="1.5"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.2"
+            />
+            <path
+              d="M3 2.5 h10 a1.5 1.5 0 0 1 1.5 1.5 v1.5 h-13 v-1.5 a1.5 1.5 0 0 1 1.5 -1.5 z"
+              fill="currentColor"
+            />
+          </svg>
         </button>
         <button
           class="tbtn"
@@ -506,6 +538,15 @@
                 data-i18n-title="themeDark"
               >
                 ☾
+              </button>
+              <button
+                class="more-size-btn"
+                data-action="theme-dark-shell"
+                data-theme-opt="dark-shell"
+                title="Dark shell, light pages"
+                data-i18n-title="themeDarkShell"
+              >
+                ◨
               </button>
               <button
                 class="more-size-btn"
