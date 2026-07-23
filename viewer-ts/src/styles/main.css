@@ -1697,15 +1697,23 @@ textarea {
 .menu-radio:hover .menu-check {
   color: var(--select-text);
 }
-/* Toolbar theme button shows the icon of the *effective* theme — sun in light,
-   moon in dark; data-theme flips which is visible. */
-.theme-btn .ico-moon {
+/* Toolbar theme button shows the icon of the current *mode* — sun (light), moon
+   (dark), split circle (system/auto) — driven by data-mode, which updateThemeUI()
+   sets. Keying off the mode (not the effective theme) means every cycle click
+   visibly changes the icon, so switching to a mode with the same effective look
+   (e.g. system → light on a light OS) no longer reads as a dead button. */
+.theme-btn .ico-sun,
+.theme-btn .ico-moon,
+.theme-btn .ico-system {
   display: none;
 }
-:root[data-theme="dark"] .theme-btn .ico-sun {
-  display: none;
+.theme-btn[data-mode="light"] .ico-sun {
+  display: inline;
 }
-:root[data-theme="dark"] .theme-btn .ico-moon {
+.theme-btn[data-mode="dark"] .ico-moon {
+  display: inline;
+}
+.theme-btn[data-mode="system"] .ico-system {
   display: inline;
 }
 /* Mobile theme picker reuses the .more-size row; mark the active option. */

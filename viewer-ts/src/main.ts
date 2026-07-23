@@ -948,6 +948,23 @@ function start(
       el.classList.toggle("active", on);
       el.setAttribute("aria-checked", String(on));
     });
+    // The toolbar button reflects the current *mode* (not the effective theme), so
+    // each cycle click visibly changes its icon and tooltip — system/auto gets its
+    // own glyph. Without this, cycling within one effective theme (e.g. system →
+    // light on a light OS) looked like a dead click.
+    const btn = document.getElementById("theme-btn");
+    if (btn) {
+      btn.dataset.mode = themeMode;
+      const label =
+        themeMode === "light"
+          ? s.themeLight
+          : themeMode === "dark"
+            ? s.themeDark
+            : s.themeSystem;
+      const title = `${s.themeMenu}: ${label}`;
+      btn.title = title;
+      btn.setAttribute("aria-label", title);
+    }
   };
   // Apply the effective theme to the app chrome (data-theme on <html>), the
   // reading frame, and the toggle UI.
