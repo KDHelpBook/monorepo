@@ -231,6 +231,7 @@ documented in *Publishing KD Help Books*.
 Use `#` for headings — one to six `#` for levels 1–6. A blank line separates
 paragraphs; a single newline inside a paragraph is treated as a space.
 
+~~~code-preview example
 ```md
 # Page title (H1)
 
@@ -243,6 +244,19 @@ same paragraph because there is no blank line between them.
 
 A new paragraph starts after a blank line.
 ```
+```md
+# Page title (H1)
+
+## A section
+
+### A subsection
+
+Regular paragraph text. This second line joins the
+same paragraph because there is no blank line between them.
+
+A new paragraph starts after a blank line.
+```
+~~~
 
 The **first H1** is used as the page title when the frontmatter has no explicit
 `title` — see [title (frontmatter)](md/khb-authoring/frontmatter-title.md). Keep exactly one H1 per
@@ -254,12 +268,20 @@ Every heading is given an `id` — the slug of its text — and a hover-revealed
 permalink, so a section can be deep-linked with a [`#slug` anchor](md/khb-authoring/links.md). Cross-page
 navigation still comes from the docset's `toc.yaml` / folder structure.
 
+~~~code-preview example
 ```md
 ## Where to start
 
 …later, from anywhere on this page…
 Jump back to [Where to start](#where-to-start).
 ```
+```md
+## Where to start
+
+…later, from anywhere on this page…
+Jump back to [Where to start](#where-to-start).
+```
+~~~
 
 Headings also drive the **"On this page"** navigation box: a page with two or more
 top-level sections gets one automatically, built from its headings. Force it on or
@@ -719,11 +741,18 @@ renders inline, a link to any other file becomes a download. Use forward slashes
 and keep files under `assets/`; other relative paths are left as plain links,
 which won't resolve in the rendered page.
 
+~~~code-preview example
 ```md
 ![How a docset is built](assets/khb-pipeline.svg)
 
 Download the [quick-reference card](assets/quick-reference.txt).
 ```
+```md
+![How a docset is built](assets/khb-pipeline.svg)
+
+Download the [quick-reference card](assets/quick-reference.txt).
+```
+~~~
 
 ## Images
 
@@ -731,9 +760,14 @@ Standard image syntax. An image renders inline, and the viewer offers a
 **lightbox** (click to enlarge). Write meaningful `alt` text — it's what screen
 readers announce and what search sees.
 
+~~~code-preview example
 ```md
 ![How a docset is built](assets/khb-pipeline.svg)
 ```
+```md
+![How a docset is built](assets/khb-pipeline.svg)
+```
+~~~
 
 > [!WARNING]
 > Remote/absolute image URLs (`https://…`) are **not** fetched — content is
@@ -744,9 +778,14 @@ readers announce and what search sees.
 Give an image a **title** — the quoted text after the URL — and it renders as a
 `<figure>` with the title shown as a `<figcaption>` beneath it.
 
+~~~code-preview example
 ```md
 ![Architecture](assets/khb-pipeline.svg "How a docset is built")
 ```
+```md
+![Architecture](assets/khb-pipeline.svg "How a docset is built")
+```
+~~~
 
 ## Sizing
 
@@ -755,12 +794,20 @@ full-resolution phone screenshot fills the whole page. Cap the *displayed* size
 with hints on the path: `#w=` takes pixels or a percentage of the column, `#h=`
 takes pixels or a share of the reading pane (`vh`), and `&` combines them.
 
+~~~code-preview example
 ```md
 ![Tap the card](assets/tap-screen.png#w=300)
 ![Result, half-width](assets/result.png#w=50%)
 ![Tall screenshot](assets/settings.png#h=50vh)
 ![Thumbnail](assets/full-flow.png#w=300&h=200)
 ```
+```md
+![Tap the card](assets/tap-screen.png#w=300)
+![Result, half-width](assets/result.png#w=50%)
+![Tall screenshot](assets/settings.png#h=50vh)
+![Thumbnail](assets/full-flow.png#w=300&h=200)
+```
+~~~
 
 A hint never upscales a smaller image, still shrinks with narrow viewports, and
 keeps the aspect ratio (with both caps, the image fits inside the box). It only
@@ -864,9 +911,14 @@ A **link to a non-image asset** (`[label](assets/…)`) becomes a **download**. 
 file under `assets/` is stored whether or not a page references it, so a folder of
 downloadable extras needs no inline mentions.
 
+~~~code-preview example
 ```md
 Download the [quick-reference card](assets/quick-reference.txt).
 ```
+```md
+Download the [quick-reference card](assets/quick-reference.txt).
+```
+~~~
 
 ## Embedded or sidecar
 

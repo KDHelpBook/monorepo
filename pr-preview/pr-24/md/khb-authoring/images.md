@@ -7,11 +7,18 @@ renders inline, a link to any other file becomes a download. Use forward slashes
 and keep files under `assets/`; other relative paths are left as plain links,
 which won't resolve in the rendered page.
 
+~~~code-preview example
 ```md
 ![How a docset is built](assets/khb-pipeline.svg)
 
 Download the [quick-reference card](assets/quick-reference.txt).
 ```
+```md
+![How a docset is built](assets/khb-pipeline.svg)
+
+Download the [quick-reference card](assets/quick-reference.txt).
+```
+~~~
 
 ## Images
 
@@ -19,9 +26,14 @@ Standard image syntax. An image renders inline, and the viewer offers a
 **lightbox** (click to enlarge). Write meaningful `alt` text — it's what screen
 readers announce and what search sees.
 
+~~~code-preview example
 ```md
 ![How a docset is built](assets/khb-pipeline.svg)
 ```
+```md
+![How a docset is built](assets/khb-pipeline.svg)
+```
+~~~
 
 > [!WARNING]
 > Remote/absolute image URLs (`https://…`) are **not** fetched — content is
@@ -32,9 +44,14 @@ readers announce and what search sees.
 Give an image a **title** — the quoted text after the URL — and it renders as a
 `<figure>` with the title shown as a `<figcaption>` beneath it.
 
+~~~code-preview example
 ```md
 ![Architecture](assets/khb-pipeline.svg "How a docset is built")
 ```
+```md
+![Architecture](assets/khb-pipeline.svg "How a docset is built")
+```
+~~~
 
 ## Sizing
 
@@ -43,12 +60,20 @@ full-resolution phone screenshot fills the whole page. Cap the *displayed* size
 with hints on the path: `#w=` takes pixels or a percentage of the column, `#h=`
 takes pixels or a share of the reading pane (`vh`), and `&` combines them.
 
+~~~code-preview example
 ```md
 ![Tap the card](assets/tap-screen.png#w=300)
 ![Result, half-width](assets/result.png#w=50%)
 ![Tall screenshot](assets/settings.png#h=50vh)
 ![Thumbnail](assets/full-flow.png#w=300&h=200)
 ```
+```md
+![Tap the card](assets/tap-screen.png#w=300)
+![Result, half-width](assets/result.png#w=50%)
+![Tall screenshot](assets/settings.png#h=50vh)
+![Thumbnail](assets/full-flow.png#w=300&h=200)
+```
+~~~
 
 A hint never upscales a smaller image, still shrinks with narrow viewports, and
 keeps the aspect ratio (with both caps, the image fits inside the box). It only
@@ -152,9 +177,14 @@ A **link to a non-image asset** (`[label](assets/…)`) becomes a **download**. 
 file under `assets/` is stored whether or not a page references it, so a folder of
 downloadable extras needs no inline mentions.
 
+~~~code-preview example
 ```md
 Download the [quick-reference card](assets/quick-reference.txt).
 ```
+```md
+Download the [quick-reference card](assets/quick-reference.txt).
+```
+~~~
 
 ## Embedded or sidecar
 
