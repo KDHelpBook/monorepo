@@ -4,6 +4,7 @@ import {
   DocsetLoadError,
   classifyLoadError,
   fetchDocsetBytes,
+  rangeSupported,
 } from "../src/data/collection";
 import type {
   Category,
@@ -378,7 +379,8 @@ describe("Collection.load streaming fallback", () => {
     const book = stub({ id: "khb-x", title: "X" });
     streamOpen.mockRejectedValue(new Error("database disk image is malformed"));
     streamOpenBytes.mockResolvedValue(book);
-    vi.stubGlobal("fetch", vi.fn(async () => sqliteRes()));
+    const fetchMock = vi.fn(async () => sqliteRes());
+    vi.stubGlobal("fetch", fetchMock);
 
     const col = await Collection.load(
       [{ url: "docsets/khb-x.khb?v=1", mode: "streaming", attachments: [] }],
@@ -388,6 +390,9 @@ describe("Collection.load streaming fallback", () => {
     expect(streamOpen).toHaveBeenCalledOnce(); // tried streaming first
     expect(streamOpenBytes).toHaveBeenCalledOnce(); // then the whole-fetch fallback
     expect(col.books().map((b) => b.id)).toEqual(["khb-x"]); // book kept, not failed
+    // The fallback is a plain whole GET (cacheable) — no 206 poisons it because
+    // the Range reads used no-store.
+    expect(fetchMock).toHaveBeenCalledWith("docsets/khb-x.khb?v=1");
   });
 
   it("reports the failure only when the whole-fetch fallback also fails", async () => {
@@ -405,6 +410,38 @@ describe("Collection.load streaming fallback", () => {
     expect(col.books()).toHaveLength(0);
     expect(errors).toHaveLength(1);
     expect(errors[0]!.kind).toBe("not-a-khb");
+  });
+
+  it("whole-fetches with plain (cacheable) requests, no cache bypass", async () => {
+    streamOpenBytes.mockResolvedValue(stub({ id: "khb-x", title: "X" }));
+    const fetchMock = vi.fn(async () => sqliteRes());
+    vi.stubGlobal("fetch", fetchMock);
+
+    await Collection.load([{ file: "docsets/x.khb?v=1" }], "en");
+
+    // No `cache` option → the docset caches and is reused across loads.
+    expect(fetchMock).toHaveBeenCalledWith("docsets/x.khb?v=1");
+  });
+});
+
+describe("rangeSupported", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("probes with cache: no-store so a 206 can't poison the cache", async () => {
+    const fetchMock = vi.fn(async () => ({
+      status: 206,
+      body: null,
+      headers: new Headers(),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const ok = await rangeSupported("docsets/x.khb?v=1");
+
+    expect(ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "docsets/x.khb?v=1",
+      expect.objectContaining({ cache: "no-store" }),
+    );
   });
 });
 

@@ -134,6 +134,10 @@ export async function fetchDocsetBytes(
   url: string,
   onProgress?: DownloadProgress,
 ): Promise<Uint8Array> {
+  // Normal HTTP caching: a whole-fetched docset is cached and reused across loads.
+  // It can't be poisoned by a stale Range partial because the Range reads use
+  // `cache: "no-store"` (see rangeSupported / HttpRangeReader) — nothing to
+  // mis-serve — so the full GET needs no cache bypass.
   const res = await fetch(url);
   if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
   // With a progress callback, stream the body so we can count bytes as they
@@ -171,7 +175,14 @@ export async function fetchDocsetBytes(
  */
 export async function rangeSupported(url: string): Promise<boolean> {
   try {
-    const res = await fetch(url, { headers: { Range: "bytes=0-0" } });
+    // `no-store`: don't cache this 206 probe. GitHub Pages shares one ETag between
+    // Range and full responses, so a cached partial can later be served for a full
+    // GET (a 304 of truncated bytes). Keeping the probe out of the cache prevents
+    // it from poisoning the whole-fetch fallback.
+    const res = await fetch(url, {
+      headers: { Range: "bytes=0-0" },
+      cache: "no-store",
+    });
     const ok = res.status === 206;
     // Stop the body download (a server that ignored Range sent the whole file).
     await res.body?.cancel().catch(() => undefined);
@@ -259,10 +270,13 @@ export class Collection {
             // a streamed open that passed the cheap peek still reads a malformed
             // image. Whole-file GETs are unaffected (the app shell itself loads
             // that way), so fall back to fetching the book and its packs whole
-            // before giving up. If that also fails, the outer catch surfaces it.
+            // before giving up. The Range reads used `cache: "no-store"`, so no
+            // 206 was cached to poison this full GET — and it caches normally. If
+            // the whole fetch also fails, the outer catch surfaces it.
             const bytes = await fetchDocsetBytes(src.url, reportFor());
             const packBytes: Uint8Array[] = [];
-            for (const a of src.attachments ?? []) packBytes.push(await fetchPack(a));
+            for (const a of src.attachments ?? [])
+              packBytes.push(await fetchPack(a));
             docsets.push(await StreamingDocset.openBytes(bytes, packBytes));
           }
           continue;
