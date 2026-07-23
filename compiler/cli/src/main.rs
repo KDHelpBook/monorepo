@@ -136,6 +136,10 @@ enum Command {
         /// later loads open it from cache/offline. Users can still turn it off.
         #[arg(long)]
         prefetch: bool,
+        /// Hard-disable the offline-cache feature: the viewer hides the toggle and
+        /// never prefetches. For sites that don't want it at all.
+        #[arg(long = "no-prefetch", conflicts_with = "prefetch")]
+        no_prefetch: bool,
     },
     /// Add or replace docsets in an already-built distribution.
     Patch {
@@ -190,6 +194,7 @@ fn main() -> Result<()> {
             base_url,
             stream,
             prefetch,
+            no_prefetch,
         } => {
             let mut external_sources = profile == Profile::Reader;
             if lock {
@@ -214,6 +219,7 @@ fn main() -> Result<()> {
                 base_url,
                 stream,
                 prefetch,
+                prefetch_locked: no_prefetch,
             })
         }
         Command::Patch {

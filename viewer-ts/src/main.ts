@@ -69,6 +69,9 @@ interface Config {
   /** Default for the "keep streamed books offline" (prefetch-to-cache) toggle —
    *  a per-device user setting overrides it. Off when unset. */
   prefetch?: boolean;
+  /** Hard-disable prefetch (`khb pack --no-prefetch`): hide the toggle and never
+   *  prefetch, ignoring any per-device choice. */
+  prefetchLocked?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -494,7 +497,11 @@ async function bootstrap(): Promise<void> {
   // config default. When on, a streamed book that we've already downloaded whole
   // opens straight from IndexedDB; otherwise it streams now and is prefetched to
   // cache in the background (then hot-swapped) — see start()/runPrefetch.
-  const prefetchOn = loadPrefetch(config.prefetch ?? false);
+  // `--no-prefetch` hard-disables the feature (toggle hidden, never prefetches),
+  // overriding any per-device choice; otherwise the user setting wins over the
+  // config default.
+  const prefetchOn =
+    !config.prefetchLocked && loadPrefetch(config.prefetch ?? false);
   const prefetch = new Map<string, PrefetchItem>(); // streamed book id → how to cache it
   const validBlobKeys = new Set<string>(); // current keys, to prune stale ones
   for (const d of manifest.docsets) {
@@ -2465,7 +2472,7 @@ function start(
         break;
       }
       case "toggle-prefetch":
-        setPrefetch(!prefetchEnabled);
+        if (!config.prefetchLocked) setPrefetch(!prefetchEnabled);
         break;
       case "print":
         window.print();
@@ -2548,8 +2555,13 @@ function start(
 
   // Reflect the prefetch toggle, drop cache entries from superseded builds, and —
   // when enabled — start downloading streamed books whole in the background,
-  // hot-swapping each for its cached copy as it lands.
-  updatePrefetchUI();
+  // hot-swapping each for its cached copy as it lands. A `--no-prefetch` build
+  // hides the toggle entirely.
+  if (config.prefetchLocked)
+    document
+      .querySelectorAll<HTMLElement>('[data-action="toggle-prefetch"]')
+      .forEach((el) => (el.style.display = "none"));
+  else updatePrefetchUI();
   void pruneBlobs(prefetchPlan.validKeys);
   if (prefetchEnabled) void runPrefetch();
 
