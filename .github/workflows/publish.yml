@@ -118,7 +118,7 @@ jobs:
             ID=$(sed -n 's/^id = "\(.*\)"$/\1/p' "$T" | head -n1)
             sed -i 's/^version = ".*"$/version = "latest"/' "$T"
             grep -q '^version = "latest"$' "$T"
-            "$BIN" compile "$DIR" -o "out/${ID}.khb"
+            "$BIN" compile "$DIR" -o "out/${ID}.khb" --allow-extensions
           done
 
       # The bundled profile locks the dist (no open/manage-docsets UI — the

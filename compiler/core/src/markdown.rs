@@ -180,7 +180,56 @@ pub fn render_html(markdown: &str, highlighter: Option<&SyntectAdapter>) -> Stri
     if let Some(h) = highlighter {
         plugins.render.codefence_syntax_highlighter = Some(h);
     }
-    comrak::markdown_to_html_with_plugins(markdown, &options, &plugins)
+    let html = comrak::markdown_to_html_with_plugins(markdown, &options, &plugins);
+    normalize_code_attrs(&html)
+}
+
+/// comrak emits a fenced block's `<code>` attributes from a `HashMap`, so their order
+/// (`class` vs `data-meta`) is randomised per process (`std` HashMap's per-run seed) — two
+/// identical compiles then produce byte-different HTML for a fence that has *both* a
+/// language and a meta (`` ```md [file] ``). Re-emit each `<code …>` tag's attributes in a
+/// stable (alphabetical) order so builds are reproducible. Downstream transforms read these
+/// attributes order-independently (via `attr_value`), so this is safe to apply up front.
+fn normalize_code_attrs(html: &str) -> String {
+    const TAG: &str = "<code ";
+    let mut out = String::with_capacity(html.len());
+    let mut i = 0;
+    while let Some(rel) = html[i..].find(TAG) {
+        let start = i + rel;
+        let attrs_start = start + TAG.len();
+        let Some(gt) = html[attrs_start..].find('>') else {
+            break;
+        };
+        out.push_str(&html[i..attrs_start]);
+        out.push_str(&sorted_attrs(&html[attrs_start..attrs_start + gt]));
+        out.push('>');
+        i = attrs_start + gt + 1;
+    }
+    out.push_str(&html[i..]);
+    out
+}
+
+/// Parse `name="value"` attribute pairs (comrak HTML-escapes values, so no raw `"`/`>`
+/// appears inside one) and re-serialise them sorted by name.
+fn sorted_attrs(attrs: &str) -> String {
+    let mut pairs: Vec<(&str, &str)> = Vec::new();
+    let mut rest = attrs.trim();
+    while let Some(eq) = rest.find('=') {
+        let name = rest[..eq].trim();
+        let after = &rest[eq + 1..];
+        let Some(q1) = after.find('"') else { break };
+        let Some(q2) = after[q1 + 1..].find('"') else {
+            break;
+        };
+        pairs.push((name, &after[q1 + 1..q1 + 1 + q2]));
+        rest = after[q1 + 1 + q2 + 1..].trim_start();
+    }
+    pairs.sort_by(|a, b| a.0.cmp(b.0));
+    pairs
+        .iter()
+        .map(|(n, v)| format!("{n}=\"{v}\""))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// Best-effort conversion of rendered HTML to searchable plain text: drop tags,
@@ -230,6 +279,27 @@ mod tests {
         let html = render_html("# Title\n\nSome **bold** text.", None);
         let plain = html_to_plain(&html);
         assert_eq!(plain, "Title Some bold text.");
+    }
+
+    #[test]
+    fn code_attrs_are_canonicalised() {
+        // Whatever order comrak's HashMap yields, we emit a stable one (sorted by name).
+        assert_eq!(
+            normalize_code_attrs(r#"<code data-meta="[README.md]" class="language-md">x</code>"#),
+            r#"<code class="language-md" data-meta="[README.md]">x</code>"#
+        );
+        // A single attribute is untouched; a bare inline <code> (no attrs) is left alone.
+        assert_eq!(
+            normalize_code_attrs(r#"<code class="language-rust">y</code>"#),
+            r#"<code class="language-rust">y</code>"#
+        );
+        assert_eq!(normalize_code_attrs("<code>z</code>"), "<code>z</code>");
+        // A real render of a fence with both a language and a meta puts class first.
+        let h = highlighter();
+        let html = render_html("```md [README.md]\n- a\n```\n", Some(&h));
+        let ci = html.find("class=\"language-md\"").expect("class present");
+        let mi = html.find("data-meta=").expect("data-meta present");
+        assert!(ci < mi, "class should precede data-meta: {html}");
     }
 
     #[test]

@@ -2,7 +2,7 @@
 title: Diagrams
 keywords: [diagram, graph, dot, graphviz, flowchart, svg]
 categories: [blocks]
-related: [code-blocks, math, images]
+related: [code-blocks, math, images, extensions]
 ---
 
 # Diagrams
@@ -52,5 +52,7 @@ pure-Rust engine bundled into the compiler, so no Graphviz install is needed.
   so pick node colours that read against both a light and a dark background.
 - **Mermaid** (` ```mermaid `) isn't supported: it's a JavaScript library that needs a
   headless browser to render, which would break the compiler's single-toolchain, offline
-  build. DOT gives the same static-SVG result without that dependency.
+  build. DOT gives the same static-SVG result without that dependency. If you do need to
+  shell out to an external renderer, that's what opt-in [extensions](extensions)
+  (`--allow-extensions`) are for — the one deliberate exception to the offline default.
 - The SVG scales down to fit narrow screens and scrolls if it's wider than the page.

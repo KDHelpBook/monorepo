@@ -41,6 +41,7 @@ languages, the `version`).
 | `language` | no (default `en`) | the content language and search tokenizer | [language](docset-language) |
 | `collection`, `collection_title` | no | the merge/family key | [collection](docset-collection) |
 | `[[products]]` | no | the product filter facet | [products](docset-products) |
+| `[extensions.<name>]` | no | external block transformers | [extensions](extensions) |
 
 The manifest is stored in the compiled `.khb`'s metadata — `khb inspect my.khb`
 prints it back (see [Compiling a book](compiling)).

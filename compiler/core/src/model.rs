@@ -27,6 +27,10 @@ pub struct SourcePage {
     /// Force the on-page TOC on/off (`None` = auto). Emitted as a marker the viewer
     /// reads; not stored as its own column.
     pub toc: Option<bool>,
+    /// The page's source-file path relative to the docset source dir, forward-slashed
+    /// (e.g. `pages/guide/intro.md`). `None` for pages not backed by a file. Lets
+    /// extensions resolve paths (from a block's info string) relative to the page.
+    pub source_path: Option<String>,
 }
 
 /// A complete docset with Markdown pages.
@@ -50,6 +54,26 @@ pub struct SourceDocset {
     pub categories: Vec<Category>,
     /// Binary attachments (images, downloadable files) collected from `assets/`.
     pub assets: Vec<Asset>,
+    /// Declared external block transformers (see [`Extension`]). Consumed entirely by
+    /// [`crate::render`]; not carried onto [`RenderedDocset`].
+    pub extensions: Vec<Extension>,
+}
+
+/// A declared external block transformer. An ` ```ext:<name> ` fenced block in a page has
+/// its verbatim body handed to `command` (a subprocess), which returns Markdown — and
+/// optionally generated image files — spliced back into the page. Declared per docset in
+/// `docset.toml` and only run under the compiler's `--allow-extensions` opt-in; see
+/// `docs/authoring/extensions.md`.
+#[derive(Debug, Clone)]
+pub struct Extension {
+    /// The `<name>` that triggers this extension (matched against an ` ```ext:<name> `
+    /// fence). Free of `:` and whitespace.
+    pub name: String,
+    /// The executable to run — a bare name resolved on `PATH`, or a path made absolute
+    /// against the source directory.
+    pub command: String,
+    /// Fixed CLI arguments passed to `command` on every invocation.
+    pub args: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------

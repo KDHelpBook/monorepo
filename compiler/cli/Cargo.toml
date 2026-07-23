@@ -6,10 +6,24 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
+# The optional `khb-ext-stub` test helper adds a second bin; keep `cargo run -p khb-cli`
+# unambiguous.
+default-run = "khb"
 
 [[bin]]
 name = "khb"
 path = "src/main.rs"
+
+# A tiny stub extension used only by the extension integration test. Behind a feature so
+# it never ships in the `khb` CLI; `tests/extensions.rs` is cfg-gated to match. Run the
+# e2e with `cargo test -p khb-cli --features ext-stub`.
+[[bin]]
+name = "khb-ext-stub"
+path = "src/bin/khb-ext-stub.rs"
+required-features = ["ext-stub"]
+
+[features]
+ext-stub = []
 
 [dependencies]
 khb-core = { path = "../core" }

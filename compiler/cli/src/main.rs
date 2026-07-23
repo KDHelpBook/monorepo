@@ -75,6 +75,11 @@ enum Command {
         /// Where attachments go: embedded in the `.khb`, or a sibling `.khba`.
         #[arg(long = "assets", value_enum, default_value = "embed")]
         assets: AssetsMode,
+        /// Run the docset's declared `[extensions]` block transformers (external
+        /// processes). Off by default: `docset.toml` may come from an untrusted source,
+        /// and extensions break the otherwise hermetic, offline build.
+        #[arg(long = "allow-extensions")]
+        allow_extensions: bool,
     },
     /// Convert between `.khb` and `.khbb` (direction inferred from file extensions).
     Convert {
@@ -178,7 +183,8 @@ fn main() -> Result<()> {
             out,
             format,
             assets,
-        } => compile(&src, &out, format, assets),
+            allow_extensions,
+        } => compile(&src, &out, format, assets, allow_extensions),
         Command::Convert { input, out } => convert(&input, &out),
         Command::Pack {
             viewer,
@@ -278,7 +284,13 @@ fn inspect(src: &str) -> Result<()> {
     Ok(())
 }
 
-fn compile(src: &Path, out: &Path, format: Format, assets: AssetsMode) -> Result<()> {
+fn compile(
+    src: &Path,
+    out: &Path,
+    format: Format,
+    assets: AssetsMode,
+    allow_extensions: bool,
+) -> Result<()> {
     let docset =
         source::load_dir(src).with_context(|| format!("loading source {}", src.display()))?;
     let (id, language, pages) = (
@@ -286,8 +298,12 @@ fn compile(src: &Path, out: &Path, format: Format, assets: AssetsMode) -> Result
         docset.language.clone(),
         docset.pages.len(),
     );
-    let mut rendered =
-        render::render(&docset).with_context(|| format!("rendering {}", src.display()))?;
+    let render_opts = render::RenderOptions {
+        allow_extensions,
+        source_dir: Some(src),
+    };
+    let mut rendered = render::render(&docset, &render_opts)
+        .with_context(|| format!("rendering {}", src.display()))?;
     match format {
         Format::Khb => {
             if assets == AssetsMode::Sidecar && !rendered.assets.is_empty() {

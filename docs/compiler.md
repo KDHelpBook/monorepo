@@ -120,15 +120,21 @@ them in a sibling `.khba` instead (see below).
 ### `compile` — source → docset
 
 ```bash
-khb compile <src-dir> -o out.khb            # SQLite docset (default)
+khb compile <src-dir> -o out.khb                    # SQLite docset (default)
 khb compile <src-dir> -o out.khbb --format khbb
 khb compile <src-dir> -o out.khb --assets sidecar   # attachments -> out.khba
+khb compile <src-dir> -o out.khb --allow-extensions # run declared [extensions]
 ```
 
 `--assets embed` (default) stores attachments inside the `.khb`; `--assets sidecar`
 writes them to a sibling `out.khba` and leaves the `.khb` lean. A docset may be
 backed by several `.khba` packs — `pack`/`patch` pick up `out.khba` and any
 `out.<tag>.khba` next to the `.khb`.
+
+`--allow-extensions` runs the external block transformers a book declares in its
+`docset.toml` (see [Extensions](authoring/extensions)). It's opt-in because those are
+arbitrary external processes; without it, `ext:` blocks are left as plain code and the
+build stays hermetic.
 
 ### `convert` — `.khb` ⇄ `.khbb`
 

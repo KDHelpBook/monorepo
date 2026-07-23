@@ -1,0 +1,9 @@
+id = "ext-swatch-demo"
+title = "Swatch extension demo"
+language = "en"
+
+# A source-relative command, so the docset ships its own tool (resolved against this
+# folder, runnable regardless of the child's working directory). Run the compile with
+# `--allow-extensions` for the block to be expanded.
+[extensions.swatch]
+command = "./swatch.py"

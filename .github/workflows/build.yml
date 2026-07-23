@@ -147,9 +147,9 @@ jobs:
               # current one in the viewer's version switcher (sample-sdk pattern).
               sed -i "s/^id = \"${ID}\"$/id = \"${ID}-v${VER}\"/" "$T"
               grep -q "^id = \"${ID}-v${VER}\"$" "$T"
-              "$BIN" compile "$DIR" -o "out/${ID}-v${VER}.khb"
+              "$BIN" compile "$DIR" -o "out/${ID}-v${VER}.khb" --allow-extensions
             else
-              "$BIN" compile "$DIR" -o "out/${ID}.khb"
+              "$BIN" compile "$DIR" -o "out/${ID}.khb" --allow-extensions
             fi
           done
 
