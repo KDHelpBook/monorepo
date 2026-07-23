@@ -492,11 +492,7 @@ async function bootstrap(): Promise<void> {
     // distinct build a distinct URL (probe/peek/reads stay consistent) while an
     // unchanged book keeps its cache.
     const url = stampDocset(resolveManifestUrl(d.file, document.baseURI), d.hash);
-    // A streaming-eligible book gets Range-probed; if it then whole-fetches, force
-    // a cache reload so a Range-poisoned cache entry (Chrome shares one ETag across
-    // Range/full — see rangeSupported) can't answer the full GET with truncated bytes.
-    const eligible = streamEligible(d, extraOf(d.id));
-    if (eligible && (await rangeSupported(url))) {
+    if (streamEligible(d, extraOf(d.id)) && (await rangeSupported(url))) {
       try {
         const { StreamingDocset } = await import("./data/streaming-docset");
         await StreamingDocset.peek(url); // validates engine + host end-to-end
@@ -521,9 +517,6 @@ async function bootstrap(): Promise<void> {
         // Same content-keyed cache-busting on the whole-fetch fallback; packs
         // carry no per-content hash in the manifest, so they stay on the build stamp.
         file: stampDocset(d.file, d.hash),
-        // Bypass a possibly Range-poisoned cache entry when this eligible book
-        // whole-fetches (peek failed / Range unsupported).
-        reload: eligible,
         // A `.gz` suffix (on the docset or a pack) decompresses on fetch.
         attachments: packs.map((file) => ({ file: fresh(file) })),
       },

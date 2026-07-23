@@ -390,10 +390,9 @@ describe("Collection.load streaming fallback", () => {
     expect(streamOpen).toHaveBeenCalledOnce(); // tried streaming first
     expect(streamOpenBytes).toHaveBeenCalledOnce(); // then the whole-fetch fallback
     expect(col.books().map((b) => b.id)).toEqual(["khb-x"]); // book kept, not failed
-    // The fallback must bypass the Range-poisoned cache.
-    expect(fetchMock).toHaveBeenCalledWith("docsets/khb-x.khb?v=1", {
-      cache: "reload",
-    });
+    // The fallback is a plain whole GET (cacheable) — no 206 poisons it because
+    // the Range reads used no-store.
+    expect(fetchMock).toHaveBeenCalledWith("docsets/khb-x.khb?v=1");
   });
 
   it("reports the failure only when the whole-fetch fallback also fails", async () => {
@@ -413,16 +412,15 @@ describe("Collection.load streaming fallback", () => {
     expect(errors[0]!.kind).toBe("not-a-khb");
   });
 
-  it("marks a whole-fetch source `reload` → fetches with cache: reload", async () => {
+  it("whole-fetches with plain (cacheable) requests, no cache bypass", async () => {
     streamOpenBytes.mockResolvedValue(stub({ id: "khb-x", title: "X" }));
     const fetchMock = vi.fn(async () => sqliteRes());
     vi.stubGlobal("fetch", fetchMock);
 
-    await Collection.load([{ file: "docsets/x.khb?v=1", reload: true }], "en");
+    await Collection.load([{ file: "docsets/x.khb?v=1" }], "en");
 
-    expect(fetchMock).toHaveBeenCalledWith("docsets/x.khb?v=1", {
-      cache: "reload",
-    });
+    // No `cache` option → the docset caches and is reused across loads.
+    expect(fetchMock).toHaveBeenCalledWith("docsets/x.khb?v=1");
   });
 });
 

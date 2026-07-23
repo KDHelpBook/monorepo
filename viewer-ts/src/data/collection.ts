@@ -23,10 +23,6 @@ export type AttachmentSource = { bytes: Uint8Array } | { file: string };
 export type DocsetSource =
   | (({ bytes: Uint8Array } | { file: string }) & {
       attachments?: AttachmentSource[];
-      /** Bypass the HTTP cache for the whole fetch (`cache: "reload"`) — set when
-       *  a streaming-eligible book falls back to a full download and the cache may
-       *  hold a Range-poisoned entry for the same URL. */
-      reload?: boolean;
     })
   | { url: string; mode: "streaming"; attachments?: string[] };
 
@@ -137,14 +133,12 @@ async function finalizeDocsetBytes(bytes: Uint8Array): Promise<Uint8Array> {
 export async function fetchDocsetBytes(
   url: string,
   onProgress?: DownloadProgress,
-  // Bypass the HTTP cache (`cache: "reload"`). Used by the streaming→whole-fetch
-  // fallback: the same URL was just read with `Range`, and a browser that cached
-  // those 206 partials can answer a later full GET from that poisoned entry (a
-  // 304 serving truncated bytes → "not a .khb"). A forced network reload gets a
-  // clean, complete body — full GETs are unaffected by the Range corruption.
-  reload = false,
 ): Promise<Uint8Array> {
-  const res = await fetch(url, reload ? { cache: "reload" } : undefined);
+  // Normal HTTP caching: a whole-fetched docset is cached and reused across loads.
+  // It can't be poisoned by a stale Range partial because the Range reads use
+  // `cache: "no-store"` (see rangeSupported / HttpRangeReader) — nothing to
+  // mis-serve — so the full GET needs no cache bypass.
+  const res = await fetch(url);
   if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
   // With a progress callback, stream the body so we can count bytes as they
   // arrive; without one (or without a readable body), the one-shot buffer is fine.
@@ -251,10 +245,9 @@ export class Collection {
           : undefined;
       // Fetch an attachment pack whole, re-tagging a failure as the *pack's* — so
       // the UI names the offending pack (with its book), not just the book.
-      // `reload` bypasses a Range-poisoned cache (see fetchDocsetBytes).
-      const fetchPack = async (url: string, reload = false): Promise<Uint8Array> => {
+      const fetchPack = async (url: string): Promise<Uint8Array> => {
         try {
-          return await fetchDocsetBytes(url, reportFor(url), reload);
+          return await fetchDocsetBytes(url, reportFor(url));
         } catch (cause) {
           const { kind, detail } = classifyLoadError(cause);
           throw new DocsetLoadError(
@@ -277,22 +270,19 @@ export class Collection {
             // a streamed open that passed the cheap peek still reads a malformed
             // image. Whole-file GETs are unaffected (the app shell itself loads
             // that way), so fall back to fetching the book and its packs whole
-            // before giving up. Force a cache reload: the same URLs were just
-            // Range-read, and the browser may otherwise answer the full GET from a
-            // 206-poisoned cache entry (a 304 of truncated bytes). If the reload
-            // also fails, the outer catch surfaces it.
-            const bytes = await fetchDocsetBytes(src.url, reportFor(), true);
+            // before giving up. The Range reads used `cache: "no-store"`, so no
+            // 206 was cached to poison this full GET — and it caches normally. If
+            // the whole fetch also fails, the outer catch surfaces it.
+            const bytes = await fetchDocsetBytes(src.url, reportFor());
             const packBytes: Uint8Array[] = [];
             for (const a of src.attachments ?? [])
-              packBytes.push(await fetchPack(a, true));
+              packBytes.push(await fetchPack(a));
             docsets.push(await StreamingDocset.openBytes(bytes, packBytes));
           }
           continue;
         }
         const bytes =
-          "bytes" in src
-            ? src.bytes
-            : await fetchDocsetBytes(src.file, reportFor(), src.reload);
+          "bytes" in src ? src.bytes : await fetchDocsetBytes(src.file, reportFor());
         const attachmentBytes: Uint8Array[] = [];
         for (const a of src.attachments ?? []) {
           attachmentBytes.push(
