@@ -16,12 +16,31 @@ export interface Strings {
   clearHighlight: string;
   largerText: string;
   smallerText: string;
+  // colour theme (View menu + toolbar)
+  themeMenu: string;
+  themeLight: string;
+  themeDark: string;
+  themeSystem: string;
   back: string;
   forward: string;
   about: string;
   share: string;
   linkCopied: string;
   refreshing: string;
+  /** Cold-start loading panel: indeterminate title, and the determinate-download title. */
+  loadingHelp: string;
+  downloadingHelp: string;
+  /** Load-failure panel: the headline, and a classified reason per LoadErrorKind. */
+  loadFailed: string;
+  loadErrorReason: (kind: string, detail: string) => string;
+  /** "(+N more)" appended when several books failed at once. */
+  loadErrorMore: (n: number) => string;
+  /** Non-blocking toast naming books that failed while others loaded. */
+  loadWarnSome: (names: string[]) => string;
+  /** Short "failed to load" tag for a book in About / the Manage list. */
+  bookFailed: string;
+  /** Hint on a failed book's reason page: how to remove/retry it. */
+  loadFailedHint: string;
   textSize: string;
   close: string;
   prevImage: string;
@@ -126,12 +145,38 @@ const en: Strings = {
   clearHighlight: "Clear search highlight",
   largerText: "Larger text",
   smallerText: "Smaller text",
+  themeMenu: "Theme",
+  themeLight: "Light",
+  themeDark: "Dark",
+  themeSystem: "Use system setting",
   back: "Back",
   forward: "Forward",
   about: "About KD Help Book",
   share: "Share…",
   linkCopied: "Link copied",
   refreshing: "Refreshing…",
+  loadingHelp: "Loading help…",
+  downloadingHelp: "Downloading help…",
+  loadFailed: "Couldn't load this help book",
+  loadErrorReason: (kind, detail) => {
+    switch (kind) {
+      case "web-page":
+        return "The server returned a web page instead of a help file — the file may be missing or the address is wrong.";
+      case "not-a-khb":
+        return "This file isn't a valid KD Help Book (.khb) — it may be damaged or the wrong file.";
+      case "http":
+        return `The server reported an error (${detail}).`;
+      case "network":
+        return "Couldn't reach the server — check your connection (it may also be blocked by CORS).";
+      default:
+        return detail;
+    }
+  },
+  loadErrorMore: (n) => `(+${n} more)`,
+  loadWarnSome: (names) =>
+    `Some help books couldn't be loaded: ${names.join(", ")}`,
+  bookFailed: "Failed to load",
+  loadFailedHint: "Open “Manage docsets” to remove it or try loading again.",
   textSize: "Text size",
   close: "Close",
   prevImage: "Previous image",
@@ -228,12 +273,39 @@ const pl: Strings = {
   clearHighlight: "Wyczyść podświetlenie wyszukiwania",
   largerText: "Większy tekst",
   smallerText: "Mniejszy tekst",
+  themeMenu: "Motyw",
+  themeLight: "Jasny",
+  themeDark: "Ciemny",
+  themeSystem: "Ustawienie systemu",
   back: "Wstecz",
   forward: "Dalej",
   about: "O programie KD Help Book",
   share: "Udostępnij…",
   linkCopied: "Skopiowano link",
   refreshing: "Odświeżanie…",
+  loadingHelp: "Wczytywanie pomocy…",
+  downloadingHelp: "Pobieranie pomocy…",
+  loadFailed: "Nie udało się wczytać tej książki pomocy",
+  loadErrorReason: (kind, detail) => {
+    switch (kind) {
+      case "web-page":
+        return "Serwer zwrócił stronę WWW zamiast pliku pomocy — plik może nie istnieć lub adres jest błędny.";
+      case "not-a-khb":
+        return "To nie jest prawidłowy plik pomocy (.khb) — może być uszkodzony lub to niewłaściwy plik.";
+      case "http":
+        return `Serwer zgłosił błąd (${detail}).`;
+      case "network":
+        return "Nie można połączyć się z serwerem — sprawdź połączenie (może to też blokować CORS).";
+      default:
+        return detail;
+    }
+  },
+  loadErrorMore: (n) => `(+${n} więcej)`,
+  loadWarnSome: (names) =>
+    `Nie udało się wczytać niektórych książek pomocy: ${names.join(", ")}`,
+  bookFailed: "Nie wczytano",
+  loadFailedHint:
+    "Otwórz „Zarządzaj dokumentacją”, aby usunąć lub spróbować ponownie.",
   textSize: "Rozmiar tekstu",
   close: "Zamknij",
   prevImage: "Poprzedni obraz",

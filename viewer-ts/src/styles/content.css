@@ -13,6 +13,8 @@
   --code-bg: #f4f7fb;
   --code-border: #d7e0ee;
   --text: #1b1b1b;
+  --content-fg: var(--text); /* referenced by .code-head etc.; was never defined */
+  --diagram-surface: #fff; /* node fill in build-time SVG diagrams (ink = currentColor) */
   --font-body: Verdana, "Segoe UI", Tahoma, sans-serif;
   --font-ui: Tahoma, "Segoe UI", Verdana, sans-serif;
   --font-mono: Consolas, "Lucida Console", "Courier New", monospace;
@@ -1028,4 +1030,122 @@ body {
 }
 .content .kw b {
   color: #42526b;
+}
+
+/* ===========================================================================
+   Dark theme for page bodies — active when the frame's <html> carries
+   data-theme="dark" (baked in by frameDoc(), toggled live via the bridge).
+   Overrides the palette, the body background, and the surfaces that hardcode
+   light colours. Syntax-highlighting has its own dark block in syntax.css.
+   Colours inlined inside untrusted docset HTML are best-effort.
+   =========================================================================== */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --content-h: #9ec2ee;
+  --swoosh: #f07a33;
+  --muted: #97a1af;
+  --rule: #333c47;
+  --link: #71a8e6;
+  --link-visited: #b58fd6;
+  --code-bg: #1b2029;
+  --code-border: #333c47;
+  --text: #d6dbe2;
+  /* Diagram node fill; ink (lines/text) rides currentColor = --text, so it flips too. */
+  --diagram-surface: #232a33;
+}
+[data-theme="dark"] body {
+  background: #1a1f27;
+}
+[data-theme="dark"] .content h3 {
+  color: #a9c4e8;
+}
+/* White surfaces → dark panels. */
+[data-theme="dark"] .content .code-head,
+[data-theme="dark"] .content .code-copy,
+[data-theme="dark"] .content .code-collapse-toggle,
+[data-theme="dark"] .content .code-group-tabs,
+[data-theme="dark"] .content .code-preview-example,
+[data-theme="dark"] .content .card {
+  background: #232a33;
+}
+[data-theme="dark"] .content .code-tree-aside {
+  background: #1f252e;
+}
+[data-theme="dark"] .content .tree-file:hover {
+  background: #2b333d;
+}
+[data-theme="dark"] .content .tree-file.active {
+  background: #2f3f52;
+}
+[data-theme="dark"] .content .page-toc,
+[data-theme="dark"] .content .tabs-bar {
+  background: #20262f;
+}
+[data-theme="dark"] .content th {
+  background: #232d3a;
+}
+/* Line-highlight tint inside code blocks. */
+[data-theme="dark"] .content .cl.hl {
+  background: #3a3620;
+}
+/* Blockquote + see-also share the soft-blue card look. */
+[data-theme="dark"] .content blockquote,
+[data-theme="dark"] .content .see-also {
+  background: #1e2634;
+  border-left-color: #3f5f86;
+  color: #c2ccd8;
+}
+/* Spoiler reveal + inserted-text tint + done-copy confirmation. */
+[data-theme="dark"] .content .spoiler.revealed {
+  background: #2b333d;
+}
+[data-theme="dark"] .content ins {
+  background: #1d3326;
+}
+[data-theme="dark"] .content .code-copy.done {
+  color: #7fca8f;
+  border-color: #3c6b47;
+}
+/* Math lightbox backdrop. */
+[data-theme="dark"] .math-overlay {
+  background: rgba(16, 20, 27, 0.97);
+}
+[data-theme="dark"] .content .kw b {
+  color: #aeb9c8;
+}
+/* Callouts — dark tints; --callout accent lightened for contrast. */
+[data-theme="dark"] .content .note,
+[data-theme="dark"] .content .markdown-alert-note {
+  --callout: #6fa8e6;
+  --callout-bg: #1a2432;
+  --callout-border: #2c4058;
+}
+[data-theme="dark"] .content .tip,
+[data-theme="dark"] .content .markdown-alert-tip {
+  --callout: #5fbf7a;
+  --callout-bg: #16281c;
+  --callout-border: #2b4a34;
+}
+[data-theme="dark"] .content .info {
+  --callout: #55b3cc;
+  --callout-bg: #142a30;
+  --callout-border: #274c56;
+}
+[data-theme="dark"] .content .warning,
+[data-theme="dark"] .content .markdown-alert-warning {
+  --callout: #d9a441;
+  --callout-bg: #2a2312;
+  --callout-border: #4d3f1c;
+}
+[data-theme="dark"] .content .caution,
+[data-theme="dark"] .content .danger,
+[data-theme="dark"] .content .markdown-alert-caution {
+  --callout: #e2857a;
+  --callout-bg: #2c1a1a;
+  --callout-border: #533030;
+}
+[data-theme="dark"] .content .markdown-alert-important {
+  --callout: #b58fd6;
+  --callout-bg: #241a30;
+  --callout-border: #402f54;
 }

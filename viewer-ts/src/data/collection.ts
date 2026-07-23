@@ -47,11 +47,116 @@ function isStreaming(s: DocsetSource): s is StreamingSource {
   return "mode" in s && s.mode === "streaming";
 }
 
-export async function fetchDocsetBytes(url: string): Promise<Uint8Array> {
+/**
+ * Report download progress: `loaded` bytes received so far, `total` from the
+ * `Content-Length` header (null when the server omits it — chunked/compressed).
+ * For a gzip'd docset the counts are the *compressed* size, so the percentage is
+ * against the transferred bytes — still a monotonic 0→100 %.
+ */
+export type DownloadProgress = (loaded: number, total: number | null) => void;
+
+/**
+ * Collection-load progress: the current whole-file download's byte counts, plus
+ * which source it is (`index`) and how many sources load in all (`count`) — so a
+ * UI can name the book and show `(2/3)`. Streaming sources report nothing.
+ */
+export type LoadProgress = (
+  loaded: number,
+  total: number | null,
+  index: number,
+  count: number,
+) => void;
+
+/** Coarse classification of why a docset failed to load, for a clear UI message. */
+export type LoadErrorKind =
+  | "web-page" // the server returned an HTML page (missing file / SPA fallback)
+  | "not-a-khb" // fetched, but the bytes aren't a valid `.khb`
+  | "http" // an HTTP error status (404, 500, …)
+  | "network" // the request never completed (offline, DNS, CORS)
+  | "unknown"; // anything else — show the raw message
+
+/** A load failure tied to one docset source, classified and carrying its origin. */
+export class DocsetLoadError extends Error {
+  constructor(
+    /** The URL (or a label) of the source that failed. */
+    readonly source: string,
+    readonly kind: LoadErrorKind,
+    /** The underlying message — shown verbatim when `kind` is "unknown". */
+    readonly detail: string,
+    /** The book's display title, when known (from the caller's labels). */
+    readonly title?: string,
+  ) {
+    super(`${kind}: ${detail} (${title ? `${title}, ` : ""}${source})`);
+    this.name = "DocsetLoadError";
+  }
+}
+
+/** Map a raw thrown value to a {@link LoadErrorKind} + its message. Exported for tests. */
+export function classifyLoadError(cause: unknown): {
+  kind: LoadErrorKind;
+  detail: string;
+} {
+  const detail = cause instanceof Error ? cause.message : String(cause);
+  if (/HTML page/i.test(detail)) return { kind: "web-page", detail };
+  if (/not a database|malformed|not a valid|encrypted|file is not/i.test(detail))
+    return { kind: "not-a-khb", detail };
+  if (/^HTTP \d{3}\b|\b[45]\d\d\b/.test(detail)) return { kind: "http", detail };
+  if (/failed to fetch|networkerror|load failed|ERR_|CORS/i.test(detail))
+    return { kind: "network", detail };
+  return { kind: "unknown", detail };
+}
+
+/** A short identifier for a source, for the error message. */
+function sourceLabel(src: DocsetSource): string {
+  if ("url" in src) return src.url;
+  if ("file" in src) return src.file;
+  return "an uploaded file";
+}
+
+/**
+ * Turn fetched bytes into a docset: gunzip if gzip-magic, else return as-is —
+ * but first catch the common "static host answered a missing file with a 200
+ * HTML page" case (a 404 page or an SPA fallback). Those bytes start with `<`
+ * and would otherwise fail deep in SQLite as the opaque "file is not a
+ * database"; flag them clearly so the caller can classify the failure.
+ */
+async function finalizeDocsetBytes(bytes: Uint8Array): Promise<Uint8Array> {
+  if (bytes[0] === 0x1f && bytes[1] === 0x8b) return gunzip(bytes);
+  if (bytes[0] === 0x3c) throw new Error("received an HTML page, not a .khb");
+  return bytes;
+}
+
+export async function fetchDocsetBytes(
+  url: string,
+  onProgress?: DownloadProgress,
+): Promise<Uint8Array> {
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-  const bytes = new Uint8Array(await res.arrayBuffer());
-  return bytes[0] === 0x1f && bytes[1] === 0x8b ? await gunzip(bytes) : bytes;
+  if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+  // With a progress callback, stream the body so we can count bytes as they
+  // arrive; without one (or without a readable body), the one-shot buffer is fine.
+  if (onProgress && res.body) {
+    const header = res.headers.get("Content-Length");
+    const total = header ? Number(header) : null;
+    const reader = res.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let loaded = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      loaded += value.length;
+      // A server may under-report Content-Length vs the real body; never show >total.
+      onProgress(loaded, total != null && total >= loaded ? total : null);
+    }
+    const bytes = new Uint8Array(loaded);
+    let at = 0;
+    for (const c of chunks) {
+      bytes.set(c, at);
+      at += c.length;
+    }
+    return finalizeDocsetBytes(bytes);
+  }
+  return finalizeDocsetBytes(new Uint8Array(await res.arrayBuffer()));
 }
 
 /**
@@ -97,27 +202,60 @@ export class Collection {
   static async load(
     sources: DocsetSource[],
     language: string,
+    opts: {
+      /** Whole-file download progress. */
+      onProgress?: LoadProgress;
+      /** Book titles, index-aligned with `sources`, to name a failed source. */
+      labels?: string[];
+      /** Called per failed source, with its index into `sources` (so the caller
+       *  can map it back to the chosen edition). A **bad book is skipped, not
+       *  fatal**: the others still load, and the caller decides how to surface the
+       *  failure. With no handler, a failure throws (legacy all-or-nothing). */
+      onError?: (err: DocsetLoadError, index: number) => void;
+    } = {},
   ): Promise<Collection> {
+    const { onProgress, labels, onError } = opts;
     const docsets: IDocset[] = [];
+    const count = sources.length;
     // One wa-sqlite engine backs every book — streamed over Range or whole-file from
     // memory. Code-split so it loads once, on first docset open, not in the app shell.
     const { StreamingDocset } = await import("./streaming-docset");
-    for (const src of sources) {
-      if (isStreaming(src)) {
-        docsets.push(
-          await StreamingDocset.open(src.url, src.attachments ?? []),
+    for (let index = 0; index < sources.length; index++) {
+      const src = sources[index]!;
+      try {
+        if (isStreaming(src)) {
+          docsets.push(
+            await StreamingDocset.open(src.url, src.attachments ?? []),
+          );
+          continue;
+        }
+        // Only a whole-file fetch has bytes to count; in-memory sources are instant.
+        const report: DownloadProgress | undefined = onProgress
+          ? (loaded, total) => onProgress(loaded, total, index, count)
+          : undefined;
+        const bytes =
+          "bytes" in src ? src.bytes : await fetchDocsetBytes(src.file, report);
+        const attachmentBytes: Uint8Array[] = [];
+        for (const a of src.attachments ?? []) {
+          attachmentBytes.push(
+            "bytes" in a ? a.bytes : await fetchDocsetBytes(a.file),
+          );
+        }
+        docsets.push(await StreamingDocset.openBytes(bytes, attachmentBytes));
+      } catch (cause) {
+        // Classify + tag with the source (and title) so the UI can explain which
+        // book failed and why, instead of a raw SQLite/fetch message.
+        const { kind, detail } = classifyLoadError(cause);
+        const err = new DocsetLoadError(
+          sourceLabel(src),
+          kind,
+          detail,
+          labels?.[index],
         );
-        continue;
+        // Skip a bad book and keep loading the rest when the caller handles errors.
+        if (onError) onError(err, index);
+        else throw err;
       }
-      const bytes =
-        "bytes" in src ? src.bytes : await fetchDocsetBytes(src.file);
-      const attachmentBytes: Uint8Array[] = [];
-      for (const a of src.attachments ?? []) {
-        attachmentBytes.push(
-          "bytes" in a ? a.bytes : await fetchDocsetBytes(a.file),
-        );
-      }
-      docsets.push(await StreamingDocset.openBytes(bytes, attachmentBytes));
     }
     return new Collection(language, docsets);
   }

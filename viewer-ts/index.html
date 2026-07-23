@@ -7,6 +7,24 @@
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
     <meta name="theme-color" content="#3c5f95" />
+    <!-- Apply the saved colour theme before first paint (no flash of light chrome
+         when reloading in dark). Mirrors loadTheme()/effectiveDark() in main.ts;
+         the reading iframe is themed separately via frameDoc(). -->
+    <script>
+      (function () {
+        try {
+          var m = localStorage.getItem("khb.theme");
+          var dark =
+            m === "dark" ||
+            ((m === "system" || m === null) &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (dark)
+            document.documentElement.setAttribute("data-theme", "dark");
+        } catch (e) {
+          /* storage/matchMedia unavailable — stay light */
+        }
+      })();
+    </script>
     <!-- Installable to the phone home screen (uses the existing service worker). -->
     <link rel="manifest" href="manifest.webmanifest" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -121,6 +139,34 @@
               data-i18n="smallerText"
             >
               Smaller text
+            </div>
+            <div class="menu-sep"></div>
+            <!-- Colour theme (three radio-style items; the active one shows a ✓,
+                 kept in sync by updateThemeUI() in main.ts). -->
+            <div class="menu-label-mini" data-i18n="themeMenu">Theme</div>
+            <div
+              class="menu-item menu-radio"
+              data-action="theme-light"
+              data-theme-opt="light"
+            >
+              <span class="menu-check" aria-hidden="true"></span
+              ><span data-i18n="themeLight">Light</span>
+            </div>
+            <div
+              class="menu-item menu-radio"
+              data-action="theme-dark"
+              data-theme-opt="dark"
+            >
+              <span class="menu-check" aria-hidden="true"></span
+              ><span data-i18n="themeDark">Dark</span>
+            </div>
+            <div
+              class="menu-item menu-radio"
+              data-action="theme-system"
+              data-theme-opt="system"
+            >
+              <span class="menu-check" aria-hidden="true"></span
+              ><span data-i18n="themeSystem">Use system setting</span>
             </div>
             <div class="menu-sep"></div>
             <div class="menu-item" data-action="back" data-i18n="back">
@@ -294,6 +340,50 @@
           A<span style="font-size: 9px">▼</span>
         </button>
         <button
+          class="tbtn theme-btn"
+          id="theme-btn"
+          data-action="theme-cycle"
+          title="Theme"
+          data-i18n-title="themeMenu"
+          aria-label="Theme"
+        >
+          <svg
+            class="ico-sun"
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            aria-hidden="true"
+          >
+            <circle cx="8" cy="8" r="3.1" fill="currentColor" />
+            <g
+              stroke="currentColor"
+              stroke-width="1.2"
+              stroke-linecap="round"
+            >
+              <line x1="8" y1="0.8" x2="8" y2="2.6" />
+              <line x1="8" y1="13.4" x2="8" y2="15.2" />
+              <line x1="0.8" y1="8" x2="2.6" y2="8" />
+              <line x1="13.4" y1="8" x2="15.2" y2="8" />
+              <line x1="2.8" y1="2.8" x2="4.1" y2="4.1" />
+              <line x1="11.9" y1="11.9" x2="13.2" y2="13.2" />
+              <line x1="2.8" y1="13.2" x2="4.1" y2="11.9" />
+              <line x1="11.9" y1="4.1" x2="13.2" y2="2.8" />
+            </g>
+          </svg>
+          <svg
+            class="ico-moon"
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            aria-hidden="true"
+          >
+            <path
+              d="M11 2.3a5.7 5.7 0 1 0 2.8 10.2A6.2 6.2 0 0 1 11 2.3z"
+              fill="currentColor"
+            />
+          </svg>
+        </button>
+        <button
           class="tbtn"
           data-action="sync"
           title="Sync with Contents"
@@ -373,6 +463,40 @@
                 data-i18n-title="largerText"
               >
                 A+
+              </button>
+            </span>
+          </div>
+          <!-- Theme picker (kept open on tap, like text size; active option gets
+               the .active class from updateThemeUI()). -->
+          <div class="more-size more-theme">
+            <span data-i18n="themeMenu">Theme</span>
+            <span class="more-size-btns">
+              <button
+                class="more-size-btn"
+                data-action="theme-light"
+                data-theme-opt="light"
+                title="Light"
+                data-i18n-title="themeLight"
+              >
+                ☀
+              </button>
+              <button
+                class="more-size-btn"
+                data-action="theme-dark"
+                data-theme-opt="dark"
+                title="Dark"
+                data-i18n-title="themeDark"
+              >
+                ☾
+              </button>
+              <button
+                class="more-size-btn"
+                data-action="theme-system"
+                data-theme-opt="system"
+                title="Use system setting"
+                data-i18n-title="themeSystem"
+              >
+                ⚙
               </button>
             </span>
           </div>
@@ -641,12 +765,38 @@
             ></iframe>
             <!-- App-generated UI (the Search results page) — not untrusted. -->
             <div class="content" id="content" style="display: none"></div>
+            <!-- Cold-start loading panel: shown from first paint until the docset
+                 is ready, so the empty shell never looks hung while the help file
+                 downloads. Indeterminate by default; becomes a determinate % bar
+                 when a whole-file download reports bytes (main.ts). -->
+            <div class="loading" id="loading">
+              <div class="loading-box">
+                <div
+                  class="loading-title"
+                  id="loading-title"
+                  data-i18n="loadingHelp"
+                >
+                  Loading help…
+                </div>
+                <div class="loading-name" id="loading-name"></div>
+                <div class="progress indeterminate" id="loading-progress">
+                  <div class="progress-bar" id="loading-bar"></div>
+                </div>
+                <div class="loading-pct" id="loading-pct"></div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
       <div class="statusbar">
         <span id="status">Ready</span>
+        <!-- Activity bar for in-flight background fetches (streamed page loads,
+             assets, search) — shown by beginBusy()/endBusy() in main.ts so slow
+             navigation/search doesn't look frozen. Hidden (out of layout) idle. -->
+        <span class="status-progress" id="status-progress" hidden>
+          <span class="status-progress-bar" id="status-progress-bar"></span>
+        </span>
         <span class="grow"></span>
         <span id="status-count"></span>
       </div>
