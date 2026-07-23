@@ -475,7 +475,11 @@ async function bootstrap(): Promise<void> {
     let source: DocsetSource | null = null;
     // The manifest `file` is dist-relative — resolve it (and the packs) against
     // the site base so the Range probe and the streaming engine get real URLs.
-    const url = resolveManifestUrl(d.file, document.baseURI);
+    // Build-stamp it too (as with config/docsets.json): a PR preview rebuilds the
+    // same-named `.khb` on every deploy, and a Range read that mixes a cached old
+    // range with a fresh one yields a malformed SQLite image. A per-build query
+    // makes each deploy a distinct cache key, so probe/peek/reads stay consistent.
+    const url = fresh(resolveManifestUrl(d.file, document.baseURI));
     if (streamEligible(d, extraOf(d.id)) && (await rangeSupported(url))) {
       try {
         const { StreamingDocset } = await import("./data/streaming-docset");
@@ -484,7 +488,7 @@ async function bootstrap(): Promise<void> {
           url,
           mode: "streaming",
           attachments: packs.map((p) =>
-            resolveManifestUrl(p, document.baseURI),
+            fresh(resolveManifestUrl(p, document.baseURI)),
           ),
         };
       } catch {
@@ -498,9 +502,10 @@ async function bootstrap(): Promise<void> {
       version: d.version ?? "",
       title: d.title,
       source: source ?? {
-        file: d.file,
+        // Same per-build cache key on the whole-fetch fallback and its packs.
+        file: fresh(d.file),
         // A `.gz` suffix (on the docset or a pack) decompresses on fetch.
-        attachments: packs.map((file) => ({ file })),
+        attachments: packs.map((file) => ({ file: fresh(file) })),
       },
       origin: { kind: "bundled", streaming: source != null, packs },
     });
