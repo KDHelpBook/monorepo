@@ -160,7 +160,7 @@ security boundary:
 - A small **trusted bridge** injected into the frame is the *only* channel across
   the boundary: it `postMessage`s link intents out (open page id / external URL,
   with the click's modifier for new-tab) and applies display-only messages in (font
-  size), and scrolls the first search hit into view. The app side treats every
+  size and colour theme), and scrolls the first search hit into view. The app side treats every
   inbound message as untrusted — it checks the source is the frame, requires a known
   shape, and keeps each action safe-by-design (an `open` just routes; unknown ids →
   "not found"; `ext` only opens vetted URL schemes).

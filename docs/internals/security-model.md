@@ -38,7 +38,7 @@ A small **trusted bridge** injected into the frame is the *only* channel across
 the boundary. Outbound, it `postMessage`s **link intents** — open a page id, or
 open an external URL, carrying the click's modifier keys so the app can honour
 "open in new tab" — plus scroll state (and scrolls the first search hit into
-view). Inbound, it accepts display-only messages such as font size.
+view). Inbound, it accepts display-only messages such as font size and colour theme.
 
 The app side treats every inbound message as hostile:
 

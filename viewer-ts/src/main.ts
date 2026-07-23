@@ -28,6 +28,7 @@ import {
   loadFontSize,
   loadSeenVersions,
   loadTabs,
+  loadTheme,
   saveDocsetLangs,
   saveDocsetVersions,
   saveExpanded,
@@ -35,6 +36,8 @@ import {
   saveFontSize,
   saveSeenVersions,
   saveTabs,
+  saveTheme,
+  type ThemeMode,
 } from "./data/uistate";
 import { languagesByCollection, pickLanguages } from "./data/langselect";
 import {
@@ -161,7 +164,8 @@ addEventListener('touchstart',function(e){pull=stop()<=0;py=e.touches[0].clientY
 addEventListener('touchmove',function(e){if(pull&&e.touches[0].clientY-py>72){pull=false;post({t:'khb',a:'pull'})}},{passive:true});
 addEventListener('touchend',function(){pull=false},{passive:true});
 addEventListener('message',function(e){var d=e.data;if(!d||d.t!=='khb-app')return;
- if(d.a==='font'&&typeof d.size==='number'){document.documentElement.style.setProperty('--content-size',d.size+'px')}});
+ if(d.a==='font'&&typeof d.size==='number'){document.documentElement.style.setProperty('--content-size',d.size+'px')}
+ else if(d.a==='theme'){var de=document.documentElement;if(d.dark){de.setAttribute('data-theme','dark')}else{de.removeAttribute('data-theme')}}});
 function ready(){var m=document.querySelector('mark.hl');if(m)m.scrollIntoView({block:'center'})}
 if(document.readyState!=='loading')ready();else addEventListener('DOMContentLoaded',ready);
 })();`;
@@ -708,6 +712,48 @@ function start(
   let filterCategory = "";
   let filterProduct = ""; // family/collection scope (union by default)
   let fontSize = loadFontSize(13);
+  // Colour theme: "light" | "dark" | "system" (system follows prefers-color-scheme).
+  let themeMode: ThemeMode = loadTheme();
+  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)");
+  const effectiveDark = (): boolean =>
+    themeMode === "dark" || (themeMode === "system" && prefersDark.matches);
+
+  // Push the theme to the sandboxed content frame — a display-only message (no
+  // srcdoc rebuild), mirroring setFrameFont. The frame's bridge sets/clears
+  // data-theme on its <html>; first paint is baked in by frameDoc().
+  const setFrameTheme = (): void => {
+    frame.contentWindow?.postMessage(
+      { t: "khb-app", a: "theme", dark: effectiveDark() },
+      "*",
+    );
+  };
+  // Reflect the active mode in the View-menu radios + mobile picker + toolbar.
+  const updateThemeUI = (): void => {
+    document.querySelectorAll<HTMLElement>("[data-theme-opt]").forEach((el) => {
+      const on = el.dataset.themeOpt === themeMode;
+      el.classList.toggle("active", on);
+      el.setAttribute("aria-checked", String(on));
+    });
+  };
+  // Apply the effective theme to the app chrome (data-theme on <html>), the
+  // reading frame, and the toggle UI.
+  const applyTheme = (): void => {
+    const de = document.documentElement;
+    if (effectiveDark()) de.setAttribute("data-theme", "dark");
+    else de.removeAttribute("data-theme");
+    setFrameTheme();
+    updateThemeUI();
+  };
+  const setTheme = (mode: ThemeMode): void => {
+    themeMode = mode;
+    saveTheme(mode);
+    applyTheme();
+  };
+  const THEME_CYCLE: ThemeMode[] = ["light", "dark", "system"];
+  // In "system" mode, follow the OS toggle live (a pinned light/dark ignores it).
+  prefersDark.addEventListener("change", () => {
+    if (themeMode === "system") applyTheme();
+  });
   // Terms to highlight in the opened page — set when a search result is clicked,
   // persisted across navigation (classic help-viewer behaviour) until explicitly cleared.
   let highlightTerms: string[] = [];
@@ -1700,10 +1746,12 @@ function start(
   // Wrap page-body HTML into a full document for the sandboxed frame: the theme CSS
   // (the frame can't see the app stylesheet) + our trusted bridge script.
   const frameDoc = (bodyHtml: string): string =>
-    `<!doctype html><html><head><meta charset="utf-8">` +
+    `<!doctype html><html${effectiveDark() ? ' data-theme="dark"' : ""}>` +
+    `<head><meta charset="utf-8">` +
     `<meta name="referrer" content="no-referrer">` +
     // Typography + the syntax-highlighting theme (colours the compiler's class-tagged
-    // code spans; the light theme, with a dormant [data-theme="dark"] block).
+    // code spans; the light theme, with the [data-theme="dark"] block activated when
+    // the frame's <html> carries data-theme="dark").
     `<style>${contentCss}\n${syntaxCss}\n:root{--content-size:${fontSize}px}</style>` +
     `</head><body class="content">${bodyHtml}<script>${FRAME_BRIDGE}</script></body></html>`;
 
@@ -1955,6 +2003,20 @@ function start(
         setFrameFont();
         saveFontSize(fontSize);
         break;
+      case "theme-light":
+        setTheme("light");
+        break;
+      case "theme-dark":
+        setTheme("dark");
+        break;
+      case "theme-system":
+        setTheme("system");
+        break;
+      case "theme-cycle": {
+        const i = THEME_CYCLE.indexOf(themeMode);
+        setTheme(THEME_CYCLE[(i + 1) % THEME_CYCLE.length] ?? "light");
+        break;
+      }
       case "print":
         window.print();
         break;
@@ -2030,11 +2092,15 @@ function start(
     if (el) runAction(el.dataset.action!);
   });
 
+  // Reconcile the toggle UI (and the frame, once it loads) with the saved theme.
+  // The <html> data-theme was already set pre-paint by the inline script in index.html.
+  applyTheme();
+
   // ---- About modal ----
   function showAbout(): void {
     const bg = document.createElement("div");
     bg.style.cssText =
-      "position:fixed;inset:0;background:rgba(20,35,60,.35);display:grid;place-items:center;z-index:50";
+      "position:fixed;inset:0;background:var(--backdrop);display:grid;place-items:center;z-index:50";
     // Loaded docsets with their versions (language shown too, since a fallback book
     // may differ from the UI language).
     const bookLines = collection
@@ -2045,13 +2111,13 @@ function start(
       )
       .join("");
     bg.innerHTML =
-      '<div style="width:420px;background:var(--chrome-top);border:1px solid #17335c;border-radius:3px;box-shadow:0 12px 40px rgba(0,0,0,.5);overflow:hidden">' +
+      '<div style="width:420px;background:var(--chrome-top);border:1px solid var(--modal-border);border-radius:3px;box-shadow:0 12px 40px rgba(0,0,0,.5);overflow:hidden">' +
       `<div style="background:linear-gradient(180deg,var(--title-top),var(--title-bot));color:#fff;font-weight:bold;padding:6px 10px">${esc(s.about)}</div>` +
       '<div style="padding:16px 18px;line-height:1.6"><div style="font-size:15px;font-weight:bold;color:var(--content-h)">KD Help Book</div>' +
       `<div>${esc(s.aboutTagline)}</div>` +
-      `<p style="color:#5b6675;margin:.8em 0 .3em">${esc(s.aboutLanguage)} <b>${esc(collection.language)}</b></p>` +
-      `<div style="font-size:11px;color:#5b6675">${bookLines}</div></div>` +
-      '<div style="padding:10px 16px;text-align:right;border-top:1px solid var(--chrome-border)"><button style="font-family:var(--font-ui);font-size:12px;padding:4px 16px;border:1px solid #16305a;border-radius:2px;background:linear-gradient(180deg,#eef4fd,#cbd9ec);cursor:pointer">OK</button></div></div>';
+      `<p style="color:var(--muted);margin:.8em 0 .3em">${esc(s.aboutLanguage)} <b>${esc(collection.language)}</b></p>` +
+      `<div style="font-size:11px;color:var(--muted)">${bookLines}</div></div>` +
+      '<div style="padding:10px 16px;text-align:right;border-top:1px solid var(--chrome-border)"><button style="font-family:var(--font-ui);font-size:12px;padding:4px 16px;border:1px solid var(--btn-border);border-radius:2px;background:var(--btn-face);cursor:pointer">OK</button></div></div>';
     const close = (): void => bg.remove();
     bg.addEventListener("click", (e) => {
       if (e.target === bg || (e.target as HTMLElement).tagName === "BUTTON")
@@ -2081,23 +2147,23 @@ function start(
   // CORS-reachable host serving the `.khb` uncompressed.
   function openUrl(): void {
     const btn =
-      "font-family:var(--font-ui);font-size:12px;padding:4px 16px;border:1px solid #16305a;border-radius:2px;cursor:pointer";
+      "font-family:var(--font-ui);font-size:12px;padding:4px 16px;border:1px solid var(--btn-border);border-radius:2px;cursor:pointer";
     const bg = document.createElement("div");
     bg.style.cssText =
-      "position:fixed;inset:0;background:rgba(20,35,60,.35);display:grid;place-items:center;z-index:50";
+      "position:fixed;inset:0;background:var(--backdrop);display:grid;place-items:center;z-index:50";
     bg.innerHTML =
-      '<div style="width:480px;max-width:92vw;background:var(--chrome-top);border:1px solid #17335c;border-radius:3px;box-shadow:0 12px 40px rgba(0,0,0,.5);overflow:hidden">' +
+      '<div style="width:480px;max-width:92vw;background:var(--chrome-top);border:1px solid var(--modal-border);border-radius:3px;box-shadow:0 12px 40px rgba(0,0,0,.5);overflow:hidden">' +
       `<div style="background:linear-gradient(180deg,var(--title-top),var(--title-bot));color:#fff;font-weight:bold;padding:6px 10px">${esc(s.openUrlTitle)}</div>` +
       `<div style="padding:14px 18px"><div style="color:var(--muted);margin-bottom:6px">${esc(s.openUrlHint)}</div>` +
-      '<input class="url-in" type="url" placeholder="https://…/docs.khb" spellcheck="false" style="width:100%;font-family:var(--font-mono);font-size:12px;padding:5px 7px;border:1px solid #7f9bc0;border-radius:2px;box-sizing:border-box">' +
+      '<input class="url-in" type="url" placeholder="https://…/docs.khb" spellcheck="false" style="width:100%;font-family:var(--font-mono);font-size:12px;padding:5px 7px;border:1px solid var(--input-border);border-radius:2px;box-sizing:border-box">' +
       `<label style="display:flex;align-items:center;gap:6px;margin-top:8px;color:var(--content-fg);font-size:12px;cursor:pointer"><input class="url-stream" type="checkbox" checked> ${esc(s.streamOption)}</label>` +
       `<div style="color:var(--muted);font-size:11px;margin-top:2px;margin-left:22px">${esc(s.streamHint)}</div>` +
       `<div class="url-sidecars-row" style="margin-top:8px"><div style="color:var(--muted);font-size:11px;margin-bottom:3px">${esc(s.streamSidecars)}</div>` +
-      '<textarea class="url-sidecars" rows="2" spellcheck="false" placeholder="https://…/docs.khba" style="width:100%;font-family:var(--font-mono);font-size:12px;padding:5px 7px;border:1px solid #7f9bc0;border-radius:2px;box-sizing:border-box;resize:vertical"></textarea></div>' +
-      '<div class="url-err" style="color:#a33;font-size:11px;min-height:15px;margin-top:5px"></div></div>' +
+      '<textarea class="url-sidecars" rows="2" spellcheck="false" placeholder="https://…/docs.khba" style="width:100%;font-family:var(--font-mono);font-size:12px;padding:5px 7px;border:1px solid var(--input-border);border-radius:2px;box-sizing:border-box;resize:vertical"></textarea></div>' +
+      '<div class="url-err" style="color:var(--danger);font-size:11px;min-height:15px;margin-top:5px"></div></div>' +
       '<div style="padding:10px 16px;border-top:1px solid var(--chrome-border);display:flex;gap:8px;justify-content:flex-end">' +
-      `<button class="url-cancel" style="${btn};background:#eef1f6">${esc(s.cancel)}</button>` +
-      `<button class="url-add" style="${btn};background:linear-gradient(180deg,#eef4fd,#cbd9ec)">${esc(s.add)}</button></div></div>`;
+      `<button class="url-cancel" style="${btn};background:var(--btn-cancel-face)">${esc(s.cancel)}</button>` +
+      `<button class="url-add" style="${btn};background:var(--btn-face)">${esc(s.add)}</button></div></div>`;
     const input = bg.querySelector<HTMLInputElement>(".url-in")!;
     const stream = bg.querySelector<HTMLInputElement>(".url-stream")!;
     const sidecarsRow = bg.querySelector<HTMLElement>(".url-sidecars-row")!;
