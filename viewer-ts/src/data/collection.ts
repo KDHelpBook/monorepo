@@ -133,8 +133,14 @@ async function finalizeDocsetBytes(bytes: Uint8Array): Promise<Uint8Array> {
 export async function fetchDocsetBytes(
   url: string,
   onProgress?: DownloadProgress,
+  // Bypass the HTTP cache (`cache: "reload"`). Used by the streaming→whole-fetch
+  // fallback: the same URL was just read with `Range`, and a browser that cached
+  // those 206 partials can answer a later full GET from that poisoned entry (a
+  // 304 serving truncated bytes → "not a .khb"). A forced network reload gets a
+  // clean, complete body — full GETs are unaffected by the Range corruption.
+  reload = false,
 ): Promise<Uint8Array> {
-  const res = await fetch(url);
+  const res = await fetch(url, reload ? { cache: "reload" } : undefined);
   if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
   // With a progress callback, stream the body so we can count bytes as they
   // arrive; without one (or without a readable body), the one-shot buffer is fine.
@@ -234,9 +240,10 @@ export class Collection {
           : undefined;
       // Fetch an attachment pack whole, re-tagging a failure as the *pack's* — so
       // the UI names the offending pack (with its book), not just the book.
-      const fetchPack = async (url: string): Promise<Uint8Array> => {
+      // `reload` bypasses a Range-poisoned cache (see fetchDocsetBytes).
+      const fetchPack = async (url: string, reload = false): Promise<Uint8Array> => {
         try {
-          return await fetchDocsetBytes(url, reportFor(url));
+          return await fetchDocsetBytes(url, reportFor(url), reload);
         } catch (cause) {
           const { kind, detail } = classifyLoadError(cause);
           throw new DocsetLoadError(
@@ -259,10 +266,14 @@ export class Collection {
             // a streamed open that passed the cheap peek still reads a malformed
             // image. Whole-file GETs are unaffected (the app shell itself loads
             // that way), so fall back to fetching the book and its packs whole
-            // before giving up. If that also fails, the outer catch surfaces it.
-            const bytes = await fetchDocsetBytes(src.url, reportFor());
+            // before giving up. Force a cache reload: the same URLs were just
+            // Range-read, and the browser may otherwise answer the full GET from a
+            // 206-poisoned cache entry (a 304 of truncated bytes). If the reload
+            // also fails, the outer catch surfaces it.
+            const bytes = await fetchDocsetBytes(src.url, reportFor(), true);
             const packBytes: Uint8Array[] = [];
-            for (const a of src.attachments ?? []) packBytes.push(await fetchPack(a));
+            for (const a of src.attachments ?? [])
+              packBytes.push(await fetchPack(a, true));
             docsets.push(await StreamingDocset.openBytes(bytes, packBytes));
           }
           continue;

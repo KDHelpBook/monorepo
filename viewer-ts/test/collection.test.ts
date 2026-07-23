@@ -378,7 +378,8 @@ describe("Collection.load streaming fallback", () => {
     const book = stub({ id: "khb-x", title: "X" });
     streamOpen.mockRejectedValue(new Error("database disk image is malformed"));
     streamOpenBytes.mockResolvedValue(book);
-    vi.stubGlobal("fetch", vi.fn(async () => sqliteRes()));
+    const fetchMock = vi.fn(async () => sqliteRes());
+    vi.stubGlobal("fetch", fetchMock);
 
     const col = await Collection.load(
       [{ url: "docsets/khb-x.khb?v=1", mode: "streaming", attachments: [] }],
@@ -388,6 +389,10 @@ describe("Collection.load streaming fallback", () => {
     expect(streamOpen).toHaveBeenCalledOnce(); // tried streaming first
     expect(streamOpenBytes).toHaveBeenCalledOnce(); // then the whole-fetch fallback
     expect(col.books().map((b) => b.id)).toEqual(["khb-x"]); // book kept, not failed
+    // The fallback must bypass the Range-poisoned cache.
+    expect(fetchMock).toHaveBeenCalledWith("docsets/khb-x.khb?v=1", {
+      cache: "reload",
+    });
   });
 
   it("reports the failure only when the whole-fetch fallback also fails", async () => {
