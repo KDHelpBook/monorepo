@@ -503,8 +503,11 @@ async function bootstrap(): Promise<void> {
             fresh(resolveManifestUrl(p, document.baseURI)),
           ),
         };
-      } catch {
-        /* streaming open failed despite Range — fall back to a whole fetch */
+      } catch (e) {
+        // TEMP diagnostic (remove after debugging the Chrome streaming failure):
+        // surface why the streamed peek failed instead of silently whole-fetching.
+        // eslint-disable-next-line no-console
+        console.warn(`[khb][peek] failed for ${url} — whole-fetch fallback:`, e);
       }
     }
     bundled.push({
