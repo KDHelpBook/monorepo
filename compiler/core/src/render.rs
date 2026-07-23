@@ -699,8 +699,23 @@ fn render_dot(dot: &str) -> Result<String> {
         Ok(inner) => inner?,
         Err(_) => anyhow::bail!("DOT diagram engine failed to lay out the graph"),
     };
-    // Drop the `<?xml …?>` prolog so the SVG embeds inline cleanly.
-    Ok(svg[svg.find("<svg").unwrap_or(0)..].to_string())
+    // Drop the `<?xml …?>` prolog so the SVG embeds inline cleanly, then recolour
+    // the engine's baked-in defaults so the diagram follows the viewer's theme.
+    Ok(themeable_diagram_svg(&svg[svg.find("<svg").unwrap_or(0)..]))
+}
+
+/// Make a laid-out diagram follow the viewer's colour theme. For a normal graph the
+/// `layout` engine (`StyleAttr::simple`) bakes in black lines/borders (`#000000ff`),
+/// white node fills (`#ffffffff`) and unfilled `<text>` (which defaults to black).
+/// Map the "ink" to `currentColor` — so it inherits the page text colour and flips in
+/// dark mode — and the node surface to a themeable CSS variable (light `#fff` fallback;
+/// the viewer overrides `--diagram-surface` in its dark block). Any author-set colour
+/// is a different value and is left untouched. Purely presentation attributes, so the
+/// result stays sandbox-safe (no `<style>`/script) and survives the viewer sanitiser.
+fn themeable_diagram_svg(svg: &str) -> String {
+    svg.replace("stroke=\"#000000ff\"", "stroke=\"currentColor\"")
+        .replace("fill=\"#ffffffff\"", "fill=\"var(--diagram-surface,#fff)\"")
+        .replace("<text ", "<text fill=\"currentColor\" ")
 }
 
 /// Apply the `{2,4-6}` line-highlight flag: for each highlighted code block whose
@@ -1172,6 +1187,12 @@ mod tests {
         assert!(out.contains("<figure class=\"diagram\"><svg"));
         assert!(!out.contains("language-dot")); // opaque block consumed
         assert!(!out.contains("<script") && !out.contains("<?xml")); // sandbox-safe, no prolog
+
+        // Colours are tokenised so the diagram follows the viewer theme: the engine's
+        // black ink → currentColor, its white node fill → a themeable CSS variable.
+        assert!(out.contains("currentColor"));
+        assert!(out.contains("var(--diagram-surface,#fff)"));
+        assert!(!out.contains("#000000ff") && !out.contains("#ffffffff"));
 
         // A non-diagram code block is left untouched.
         let code = markdown::render_html("```rust\nlet x = 1;\n```\n", Some(&h));

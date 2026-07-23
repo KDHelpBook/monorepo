@@ -4,11 +4,13 @@ import {
   loadFavorites,
   loadFontSize,
   loadTabs,
+  loadTheme,
   parseTabs,
   saveExpanded,
   saveFavorites,
   saveFontSize,
   saveTabs,
+  saveTheme,
 } from "../src/data/uistate";
 
 // A tiny in-memory localStorage so the persistence helpers can round-trip in the
@@ -87,6 +89,28 @@ describe("font size persistence", () => {
     expect(loadFontSize(13)).toBe(13);
     localStorage.setItem("khb.fontSize", "huge");
     expect(loadFontSize(12)).toBe(12);
+  });
+});
+
+describe("theme persistence", () => {
+  it("defaults to 'system' when unset and round-trips each mode", () => {
+    expect(loadTheme()).toBe("system");
+    saveTheme("dark");
+    expect(loadTheme()).toBe("dark");
+    saveTheme("light");
+    expect(loadTheme()).toBe("light");
+  });
+
+  it("falls back to 'system' for an unknown stored value", () => {
+    localStorage.setItem("khb.theme", "sepia");
+    expect(loadTheme()).toBe("system");
+  });
+
+  it("stores the value raw (no JSON quotes) so a plain compare reads it", () => {
+    // The pre-paint inline script in index.html reads this with `=== "dark"`,
+    // so the stored form must be the bare string, not a JSON-encoded one.
+    saveTheme("dark");
+    expect(localStorage.getItem("khb.theme")).toBe("dark");
   });
 });
 

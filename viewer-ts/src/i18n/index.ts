@@ -16,6 +16,11 @@ export interface Strings {
   clearHighlight: string;
   largerText: string;
   smallerText: string;
+  // colour theme (View menu + toolbar)
+  themeMenu: string;
+  themeLight: string;
+  themeDark: string;
+  themeSystem: string;
   back: string;
   forward: string;
   about: string;
@@ -126,6 +131,10 @@ const en: Strings = {
   clearHighlight: "Clear search highlight",
   largerText: "Larger text",
   smallerText: "Smaller text",
+  themeMenu: "Theme",
+  themeLight: "Light",
+  themeDark: "Dark",
+  themeSystem: "Use system setting",
   back: "Back",
   forward: "Forward",
   about: "About KD Help Book",
@@ -228,6 +237,10 @@ const pl: Strings = {
   clearHighlight: "Wyczyść podświetlenie wyszukiwania",
   largerText: "Większy tekst",
   smallerText: "Mniejszy tekst",
+  themeMenu: "Motyw",
+  themeLight: "Jasny",
+  themeDark: "Ciemny",
+  themeSystem: "Ustawienie systemu",
   back: "Wstecz",
   forward: "Dalej",
   about: "O programie KD Help Book",
