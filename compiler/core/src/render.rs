@@ -151,6 +151,13 @@ fn extract_headings(html: &str) -> Vec<(u8, String, String)> {
     let mut out = Vec::new();
     let mut i = 0;
     while i + 3 < bytes.len() {
+        // Skip a code-preview widget's whole subtree: a heading rendered inside an
+        // `example`'s result is example content, not page structure, so it must not leak
+        // into the "On this page" nav. (Byte compare — `i` isn't always a char boundary.)
+        if bytes[i..].starts_with(b"<div class=\"code-preview") {
+            i = skip_element(html, i, "div");
+            continue;
+        }
         let is_h = bytes[i] == b'<'
             && bytes[i + 1] == b'h'
             && matches!(bytes[i + 2], b'2' | b'3')
@@ -177,6 +184,35 @@ fn extract_headings(html: &str) -> Vec<(u8, String, String)> {
         i = open_end + inner_len + close.len();
     }
     out
+}
+
+/// Given `html[start..]` beginning at an opening `<tag`, return the index just past its
+/// matching `</tag>`, honouring nesting. Falls back to the end of `html` if unbalanced.
+fn skip_element(html: &str, start: usize, tag: &str) -> usize {
+    let open = format!("<{tag}");
+    let close = format!("</{tag}>");
+    let (ob, cb) = (open.as_bytes(), close.as_bytes());
+    let bytes = html.as_bytes();
+    let mut depth = 0usize;
+    let mut i = start;
+    while i < bytes.len() {
+        // Byte compare throughout — `i` may land inside a multi-byte char.
+        if bytes[i..].starts_with(ob)
+            && matches!(bytes.get(i + ob.len()), Some(b' ' | b'>' | b'\t' | b'\n'))
+        {
+            depth += 1;
+            i += ob.len();
+        } else if bytes[i..].starts_with(cb) {
+            i += cb.len();
+            depth -= 1;
+            if depth == 0 {
+                return i;
+            }
+        } else {
+            i += 1;
+        }
+    }
+    bytes.len()
 }
 
 /// The value of the first `attr="…"` in `html`, if any.
@@ -1455,6 +1491,22 @@ mod tests {
         assert!(nav.contains("<li><a href=\"#a\">Alpha</a></li>"));
         assert!(nav.contains("<li class=\"sub\"><a href=\"#a1\">Sub</a></li>")); // H3 nested
         assert!(nav.contains("<li><a href=\"#b\">Beta</a></li>"));
+    }
+
+    #[test]
+    fn page_toc_skips_headings_inside_code_preview() {
+        // A heading rendered inside an `example` widget is example content, not page
+        // structure — it must never appear in the "On this page" nav.
+        let html = "<h2><a id=\"real\"></a>Real Section</h2>\
+            <div class=\"code-preview code-preview-example\"><div class=\"code-preview-result\">\
+            <h2><a id=\"leaked\"></a>Leaked heading</h2></div></div>\
+            <h2><a id=\"real2\"></a>Second Section</h2>";
+        let nav = build_page_toc(html, None, "en").expect("2 real H2s → auto TOC");
+        assert!(nav.contains("Real Section") && nav.contains("Second Section"));
+        assert!(
+            !nav.contains("Leaked"),
+            "widget-internal heading leaked into nav: {nav}"
+        );
     }
 
     #[test]

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 140" role="img" aria-label="docset pipeline placeholder">
+  <rect width="640" height="140" fill="#f2f3f6"/>
+  <style>text{font:14px sans-serif;fill:#334}</style>
+  <g fill="#dfe3ea" stroke="#9aa3b2">
+    <rect x="16"  y="46" width="110" height="48" rx="6"/>
+    <rect x="186" y="46" width="110" height="48" rx="6"/>
+    <rect x="356" y="46" width="110" height="48" rx="6"/>
+    <rect x="526" y="46" width="98"  height="48" rx="6"/>
+  </g>
+  <g text-anchor="middle">
+    <text x="71"  y="75">Source</text>
+    <text x="241" y="75">Compile</text>
+    <text x="411" y="75">.khb</text>
+    <text x="575" y="75">Viewer</text>
+  </g>
+  <g stroke="#9aa3b2" stroke-width="2" marker-end="url(#a)">
+    <line x1="126" y1="70" x2="186" y2="70"/>
+    <line x1="296" y1="70" x2="356" y2="70"/>
+    <line x1="466" y1="70" x2="526" y2="70"/>
+  </g>
+  <defs><marker id="a" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+    <path d="M0,0 L6,3 L0,6 Z" fill="#9aa3b2"/></marker></defs>
+  <text x="320" y="126" text-anchor="middle" fill="#8892a0" font-style="italic" font-size="12">placeholder</text>
+</svg>
