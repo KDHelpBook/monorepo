@@ -8,9 +8,10 @@ related: [hosting, getting-published, pack, versioning]
 # CI with GitHub Actions
 
 Publishing is a build you can automate: fetch the `khb` CLI and the prebuilt
-viewer, compile the book, `pack`, deploy. There are two ways to wire it up — a
-**reusable workflow** that does all of that in a few lines, or the **full
-workflow** spelled out step by step when you want more control (or another CI).
+viewer, compile the book, `pack`, deploy. There are three ways to wire it up,
+trading brevity for control: a **reusable workflow** that does it all in a few
+lines, the **composite actions** it's built from when you want your own job, or
+the **full workflow** spelled out step by step (handy for other CI systems).
 
 ## The quick way: a reusable workflow
 
@@ -78,11 +79,70 @@ jobs:
 One-time setup for previews: **Settings → Pages → Source → Deploy from a branch
 → gh-pages**.
 
+## The building blocks: setup-khb + build-book
+
+The reusable workflows are thin wrappers over two composite actions. Reach for
+the actions directly when you want your own job — custom triggers, extra steps,
+a deploy target that isn't GitHub Pages — without re-deriving the
+compile-and-pack dance.
+
+**`setup-khb`** downloads the khb CLI (and, by default, the prebuilt viewer)
+from a release and puts `khb` on `PATH`:
+
+| Input | Default | Meaning |
+|-------|---------|---------|
+| `version` | `latest` | release to fetch — a tag (`vX.Y.Z`) or `latest` |
+| `viewer` | `true` | also download the prebuilt viewer |
+| `repository` | `KDHelpBook/monorepo` | where to fetch the release from |
+
+Outputs: `khb` (binary path, also added to `PATH`), `viewer-dir`, and `version`
+(the concrete tag fetched — a real `vX.Y.Z` even when you asked for `latest`).
+
+**`build-book`** compiles every source directory that has a `docset.toml` (globs
+expand, so `docs/*` picks up each volume) and packs a distribution:
+
+| Input | Default | Meaning |
+|-------|---------|---------|
+| `viewer-dir` | *(required)* | prebuilt viewer — e.g. `setup-khb`'s `viewer-dir` output |
+| `khb` | `khb` | binary path; defaults to the one `setup-khb` put on `PATH` |
+| `sources` | `.` | source dirs, whitespace/newline separated; shell globs expand |
+| `out` | `publish` | output distribution directory |
+| `profile` | `bundled` | `reader` or `bundled` (see [Profiles](pack-profiles)) |
+| `home` | — | cold-start [landing page](pack-home) id or `search` |
+| `base-url` | — | absolute deploy URL (trailing slash); with `llms`, writes sitemap + robots |
+| `stream` | `true` | mark books for [streaming](pack-stream) |
+| `llms` | `true` | emit the [AI export](pack-llms) |
+| `allow-extensions` | `false` | run each docset's `[extensions]` transformers |
+| `extra-pack-args` | — | appended verbatim to `khb pack` |
+
+Output: `dist`, the packed directory. A custom job wiring the two together, then
+deploying however you like:
+
+```yaml [.github/workflows/docs.yml]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: KDHelpBook/monorepo/.github/actions/setup-khb@v1
+        id: khb
+        with:
+          version: v1.2.0 # pin a tag for reproducible builds
+      - uses: KDHelpBook/monorepo/.github/actions/build-book@v1
+        with:
+          viewer-dir: ${{ steps.khb.outputs.viewer-dir }}
+          sources: docs/*
+          home: my-book:index
+      # …then deploy the `publish/` directory to any static host.
+```
+
+Both actions run on Linux and macOS runners.
+
 ## The full workflow
 
-When you want full control — a different host, extra build steps, or another CI
-system — spell it out. This is exactly what the reusable workflow runs under the
-hood (and the fetch-the-toolchain step is what the `setup-khb` action wraps):
+When you'd rather not depend on the actions at all — another CI system, or the
+most explicit possible pipeline — call the CLI directly. This is what
+`setup-khb` and `build-book` do under the hood:
 
 ```yaml [.github/workflows/publish-book.yml]
 name: Publish the book
