@@ -104,47 +104,40 @@ jobs:
       # Compiled here (not taken from the docs-khb artifact) because the
       # release build of that artifact carries version-suffixed ids — those
       # are the archive assets, not the current books.
-      - name: Compile the documentation volumes
+      #
+      # The current books are published as version "latest" (workspace-only
+      # sed, never committed): non-numeric strings sort above numeric versions
+      # in the viewer's compareVersions, so "latest" is the default pick in the
+      # version switcher, with the released X.Y.Z books merged below selectable
+      # behind it.
+      - name: Mark the current books as "latest"
         shell: bash
         run: |
-          mkdir -p out
-          # The current books are published as version "latest" (workspace-only
-          # sed, never committed): non-numeric strings sort above numeric
-          # versions in the viewer's compareVersions, so "latest" is the
-          # default pick in the version switcher, with the released X.Y.Z
-          # books from the step below selectable behind it.
           for T in docs/*/docset.toml; do
-            DIR=$(dirname "$T")
-            ID=$(sed -n 's/^id = "\(.*\)"$/\1/p' "$T" | head -n1)
             sed -i 's/^version = ".*"$/version = "latest"/' "$T"
             grep -q '^version = "latest"$' "$T"
-            "$BIN" compile "$DIR" -o "out/${ID}.khb" --allow-extensions
           done
 
-      # The bundled profile locks the dist (no open/manage-docsets UI — the
-      # site serves exactly the books packed here) and keeps the PWA off (no
-      # service worker — every deploy is picked up immediately, no stale
-      # offline copies). --home lands cold starts on the authoring volume's
-      # overview instead of Search. --stream marks the books for page-level
-      # streaming: Pages honours HTTP Range, so the viewer reads only the
-      # pages it touches (and falls back to a whole fetch where Range isn't
-      # available). --llms writes the AI-facing export, and --base-url (the
-      # org-root Pages URL) adds sitemap.xml + robots.txt so the exported
-      # per-page Markdown is crawler-discoverable, not just linked from
-      # llms.txt. robots.txt is honoured because this deploy is at the host
-      # root; a project-subpath deploy would set its own /sub/ base-url.
-      - name: Pack the distribution
-        shell: bash
-        run: |
-          DOCSETS=()
-          for F in out/*.khb; do DOCSETS+=(--docset "$F"); done
-          "$BIN" pack --profile bundled --viewer viewer-dist \
-            "${DOCSETS[@]}" \
-            --home khb-authoring:index \
-            --stream \
-            --llms \
-            --base-url https://kdhelpbook.github.io/ \
-            -o publish
+      # Compile every volume and pack the bundled dist through the shared
+      # build-book action (fed the build.yml CLI + viewer artifacts) — the same
+      # compile-and-pack the consumer reusable workflows run. The bundled
+      # profile locks the dist (no manage-docsets UI) and keeps the PWA off
+      # (every deploy is picked up immediately). --home lands cold starts on the
+      # authoring overview. --stream: Pages honours HTTP Range, so the viewer
+      # reads only touched pages. --llms + --base-url (org-root) write the
+      # AI-facing export plus sitemap.xml + robots.txt, crawler-discoverable
+      # because this deploy is at the host root (a subpath deploy would set its
+      # own /sub/ base-url).
+      - name: Compile and pack the distribution
+        uses: ./.github/actions/build-book
+        with:
+          khb: ${{ env.BIN }}
+          viewer-dir: ${{ github.workspace }}/viewer-dist
+          sources: docs/*
+          out: publish
+          home: khb-authoring:index
+          allow-extensions: true
+          base-url: https://kdhelpbook.github.io/
 
       - name: Merge archived doc versions from releases
         shell: bash

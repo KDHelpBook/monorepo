@@ -1,0 +1,105 @@
+# Compiles one or more source directories into `.khb` docsets and packs a
+# publishable viewer distribution — the shared core of every KD Help Book build.
+# It needs a `khb` binary (see setup-khb) and a prebuilt viewer directory, and
+# is deliberately agnostic about where those come from: the consumer reusable
+# workflows feed it setup-khb's downloads, while this repo's own publish.yml /
+# pr-preview.yml feed it a same-commit CLI + viewer. That shared use is the
+# point — the pipeline consumers run is the pipeline we run.
+name: Build a KD Help Book site
+description: Compile source directories into .khb docsets and pack a viewer distribution.
+
+inputs:
+  viewer-dir:
+    description: Prebuilt viewer directory (e.g. setup-khb's `viewer-dir` output, or viewer-ts/dist).
+    required: true
+  khb:
+    description: Path to the khb binary. Defaults to `khb` on PATH (as placed by setup-khb).
+    default: khb
+  sources:
+    description: >-
+      Whitespace/newline-separated source directories, each with a docset.toml.
+      Shell globs are expanded (e.g. `docs/*`). Default: the repository root.
+    default: "."
+  out:
+    description: Output distribution directory.
+    default: publish
+  profile:
+    description: Distribution profile — `reader` or `bundled`.
+    default: bundled
+  home:
+    description: Cold-start landing page id (`docsetId:localId`) or `search`. Optional.
+    default: ""
+  base-url:
+    description: Absolute deploy URL with a trailing slash. With `llms`, enables sitemap.xml + robots.txt. Optional.
+    default: ""
+  stream:
+    description: Mark books for page-level streaming (`khb pack --stream`).
+    default: "true"
+  llms:
+    description: Emit the AI-facing export — llms.txt, llms-full.txt, md/ (`khb pack --llms`).
+    default: "true"
+  allow-extensions:
+    description: Run each docset's declared `[extensions]` transformers during compile (trusted sources only).
+    default: "false"
+  extra-pack-args:
+    description: Extra arguments appended verbatim to `khb pack` (e.g. `--mode compact --prefetch`).
+    default: ""
+
+outputs:
+  dist:
+    description: The packed distribution directory.
+    value: ${{ steps.build.outputs.dist }}
+
+runs:
+  using: composite
+  steps:
+    - id: build
+      shell: bash
+      env:
+        KHB: ${{ inputs.khb }}
+        VIEWER: ${{ inputs.viewer-dir }}
+        SOURCES: ${{ inputs.sources }}
+        OUT: ${{ inputs.out }}
+        PROFILE: ${{ inputs.profile }}
+        HOME_PAGE: ${{ inputs.home }}
+        BASE_URL: ${{ inputs.base-url }}
+        STREAM: ${{ inputs.stream }}
+        LLMS: ${{ inputs.llms }}
+        ALLOW_EXT: ${{ inputs.allow-extensions }}
+        EXTRA_PACK_ARGS: ${{ inputs.extra-pack-args }}
+      run: |
+        set -euo pipefail
+
+        [[ -e "$VIEWER/index.html" ]] || { echo "::error::viewer-dir '$VIEWER' has no index.html"; exit 1; }
+
+        COMPILE_ARGS=()
+        [[ "$ALLOW_EXT" == "true" ]] && COMPILE_ARGS+=(--allow-extensions)
+
+        # Compile every source directory that carries a docset.toml. `$SOURCES`
+        # is intentionally unquoted so shell globs (docs/*) expand and multiple
+        # entries word-split; non-directories and folders without a docset.toml
+        # are skipped, so a glob like `docs/*` picks only the real volumes.
+        mkdir -p khb-out
+        DOCSETS=()
+        FOUND=0
+        for DIR in $SOURCES; do
+          [[ -f "$DIR/docset.toml" ]] || { echo "skipping $DIR (no docset.toml)"; continue; }
+          ID=$(sed -n 's/^id = "\(.*\)"$/\1/p' "$DIR/docset.toml" | head -n1)
+          [[ -n "$ID" ]] || { echo "::error::no id in $DIR/docset.toml"; exit 1; }
+          "$KHB" compile "$DIR" -o "khb-out/${ID}.khb" "${COMPILE_ARGS[@]}"
+          DOCSETS+=(--docset "khb-out/${ID}.khb")
+          FOUND=$((FOUND + 1))
+        done
+        [[ "$FOUND" -gt 0 ]] || { echo "::error::no docset.toml found under: $SOURCES"; exit 1; }
+
+        PACK_ARGS=(pack --profile "$PROFILE" --viewer "$VIEWER" "${DOCSETS[@]}" -o "$OUT")
+        [[ -n "$HOME_PAGE" ]] && PACK_ARGS+=(--home "$HOME_PAGE")
+        [[ -n "$BASE_URL" ]] && PACK_ARGS+=(--base-url "$BASE_URL")
+        [[ "$STREAM" == "true" ]] && PACK_ARGS+=(--stream)
+        [[ "$LLMS" == "true" ]] && PACK_ARGS+=(--llms)
+        # Extra args are split on whitespace (simple flags only, no quoting).
+        # shellcheck disable=SC2206
+        [[ -n "$EXTRA_PACK_ARGS" ]] && PACK_ARGS+=($EXTRA_PACK_ARGS)
+
+        "$KHB" "${PACK_ARGS[@]}"
+        echo "dist=$OUT" >> "$GITHUB_OUTPUT"

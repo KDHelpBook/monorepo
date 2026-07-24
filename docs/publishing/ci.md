@@ -1,6 +1,6 @@
 ---
 title: CI with GitHub Actions
-keywords: [CI, GitHub Actions, automation, workflow, deploy, Pages]
+keywords: [CI, GitHub Actions, automation, workflow, deploy, Pages, reusable]
 categories: [hosting]
 related: [hosting, getting-published, pack, versioning]
 ---
@@ -8,8 +8,81 @@ related: [hosting, getting-published, pack, versioning]
 # CI with GitHub Actions
 
 Publishing is a build you can automate: fetch the `khb` CLI and the prebuilt
-viewer, compile the book, `pack`, deploy. The workflow below rebuilds a book
-repository's site on every push to `main` and deploys it to GitHub Pages.
+viewer, compile the book, `pack`, deploy. There are two ways to wire it up — a
+**reusable workflow** that does all of that in a few lines, or the **full
+workflow** spelled out step by step when you want more control (or another CI).
+
+## The quick way: a reusable workflow
+
+KD Help Book ships a reusable workflow, `book-pages.yml`, that fetches the
+toolchain, compiles every book in your repository, packs a bundled site, and
+deploys it to *your* repository's GitHub Pages. Your workflow just calls it:
+
+```yaml [.github/workflows/docs.yml]
+name: Docs
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  docs:
+    uses: KDHelpBook/monorepo/.github/workflows/book-pages.yml@v1
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    with:
+      sources: "."          # dirs with a docset.toml (globs OK, e.g. docs/*)
+      home: my-book:index   # cold-start landing page
+```
+
+One-time setup: **Settings → Pages → Source → GitHub Actions**. Then every push
+to `main` rebuilds and redeploys — no secrets, no boilerplate.
+
+The inputs mirror the [`pack`](pack) flags:
+
+| Input | Default | Meaning |
+|-------|---------|---------|
+| `version` | `latest` | khb release to build with — pin a tag (`v1.2.0`) for reproducible builds |
+| `sources` | `.` | source dirs, whitespace/newline separated; shell globs expand |
+| `home` | — | cold-start [landing page](pack-home) id, or `search` |
+| `stream` | `true` | mark books for [streaming](pack-stream) |
+| `llms` | `true` | emit the [AI export](pack-llms) |
+| `base-url` | the Pages URL | override the deploy URL (needs a trailing slash) |
+| `extra-pack-args` | — | any extra `pack` flags, e.g. `--mode compact` |
+
+Pin `@v1` for the latest v1.x, or a full `@vX.Y.Z` to lock a specific release.
+
+### PR previews
+
+A companion reusable workflow, `book-pr-preview.yml`, publishes a compiled
+preview to `pr-preview/pr-<N>/` for any pull request carrying a `preview` label,
+and tears it down when the label is removed or the PR closes:
+
+```yaml [.github/workflows/pr-preview.yml]
+on:
+  pull_request:
+    types: [opened, reopened, labeled, unlabeled, synchronize, closed]
+
+jobs:
+  preview:
+    uses: KDHelpBook/monorepo/.github/workflows/book-pr-preview.yml@v1
+    permissions:
+      contents: write
+      pull-requests: write
+    with:
+      home: my-book:index
+```
+
+One-time setup for previews: **Settings → Pages → Source → Deploy from a branch
+→ gh-pages**.
+
+## The full workflow
+
+When you want full control — a different host, extra build steps, or another CI
+system — spell it out. This is exactly what the reusable workflow runs under the
+hood (and the fetch-the-toolchain step is what the `setup-khb` action wraps):
 
 ```yaml [.github/workflows/publish-book.yml]
 name: Publish the book
