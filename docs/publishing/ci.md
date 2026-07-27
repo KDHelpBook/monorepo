@@ -45,7 +45,7 @@ The inputs mirror the [`pack`](pack) flags:
 
 | Input | Default | Meaning |
 |-------|---------|---------|
-| `version` | `latest` | khb release to build with — pin a tag (`v1.2.0`) for reproducible builds |
+| `version` | workflow version | khb release to build with; an exact workflow tag uses the matching release, while `@v1`/branches use `latest` |
 | `sources` | `.` | source dirs, whitespace/newline separated; shell globs expand |
 | `home` | — | cold-start [landing page](pack-home) id, or `search` |
 | `stream` | `true` | mark books for [streaming](pack-stream) |
@@ -53,7 +53,9 @@ The inputs mirror the [`pack`](pack) flags:
 | `base-url` | the Pages URL | override the deploy URL (needs a trailing slash) |
 | `extra-pack-args` | — | any extra `pack` flags, e.g. `--mode compact` |
 
-Pin `@v1` for the latest v1.x, or a full `@vX.Y.Z` to lock a specific release.
+Pin `@v1` for the latest v1.x, or a full `@vX.Y.Z` to lock the workflow,
+composite actions, CLI, and viewer to the same release. Set `version` explicitly
+only when you intentionally want a different CLI/viewer release.
 
 ### PR previews
 
