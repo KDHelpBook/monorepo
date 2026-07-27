@@ -60,7 +60,8 @@ The distribution profile:
 {
   "externalSources": false,
   "pwa": false,
-  "home": "my-docs:index"
+  "home": "my-docs:index",
+  "prefetch": true
 }
 ```
 
@@ -69,6 +70,8 @@ The distribution profile:
 | `externalSources` | `false` hides all docset management (open / URL / manage) and skips persisted uploads and remotes — see [Profiles](pack-profiles) |
 | `pwa` | register the service worker for best-effort offline use |
 | `home` | cold-start landing: a page id or `"search"`; omitted → the Search page — see [The landing page](pack-home) |
+| `prefetch` | default the per-device “Keep books offline” toggle to on for streamed books |
+| `prefetchLocked` | hide and hard-disable offline prefetch (`khb pack --no-prefetch`) |
 
 ## How the viewer consumes them
 

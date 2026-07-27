@@ -1,0 +1,97 @@
+import { env } from "cloudflare:test";
+import { beforeAll, describe, expect, it } from "vitest";
+import { buildManifest, configResponse } from "../src/manifest";
+import type { LatestPointer } from "../src/types";
+import { TEST_CONFIG } from "./fixtures";
+
+const pointer = (id: string, over: Partial<LatestPointer> = {}): string =>
+  JSON.stringify({
+    id,
+    title: id.toUpperCase(),
+    language: "en",
+    collection: id,
+    version: "1.0.0",
+    file: `${id}.khb`,
+    attachments: [],
+    publishedAt: "2026-01-01T00:00:00Z",
+    repository: "acme/demo",
+    versions: [],
+    ...over,
+  } satisfies LatestPointer);
+
+beforeAll(async () => {
+  // site.json orders khb-authoring first; zzz is unlisted and must trail.
+  await env.DOCSETS.put("docsets/zzz/latest.json", pointer("zzz"));
+  await env.DOCSETS.put(
+    "docsets/khb-authoring/latest.json",
+    pointer("khb-authoring", {
+      collection: "khb-docs",
+      hash: "etag-khb-authoring",
+      attachments: ["khb-authoring.khba"],
+    }),
+  );
+});
+
+describe("buildManifest", () => {
+  it("lists pointers as streaming entries with versioned serve paths", async () => {
+    const manifest = await buildManifest(env, TEST_CONFIG.site);
+    const entry = manifest.docsets.find((d) => d.id === "khb-authoring")!;
+    expect(entry).toMatchObject({
+      file: "d/khb-authoring/1.0.0/khb-authoring.khb",
+      collection: "khb-docs",
+      version: "1.0.0",
+      hash: "etag-khb-authoring",
+      streaming: true,
+      attachments: ["d/khb-authoring/1.0.0/khb-authoring.khba"],
+    });
+  });
+
+  it("orders entries per site.json, unlisted last", async () => {
+    const ids = (await buildManifest(env, TEST_CONFIG.site)).docsets.map(
+      (d) => d.id,
+    );
+    expect(ids.indexOf("khb-authoring")).toBeLessThan(ids.indexOf("zzz"));
+  });
+
+  it("attaches the site.json folders tree verbatim", async () => {
+    const manifest = await buildManifest(env, TEST_CONFIG.site);
+    expect(manifest.folders).toBeDefined();
+    expect((manifest.folders as { id: string }[])[0]!.id).toBe("khb");
+  });
+
+  it("keeps legacy pointers without a hash compatible", async () => {
+    const entry = (await buildManifest(env, TEST_CONFIG.site)).docsets.find(
+      (d) => d.id === "zzz",
+    )!;
+    expect(entry).not.toHaveProperty("hash");
+  });
+});
+
+describe("configResponse", () => {
+  it("mirrors the CLI's config.json shape", async () => {
+    const res = configResponse(TEST_CONFIG.site.config);
+    expect(res.headers.get("Content-Type")).toBe("application/json");
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(typeof body.externalSources).toBe("boolean");
+    expect(typeof body.pwa).toBe("boolean");
+    expect(body).not.toHaveProperty("prefetch");
+    expect(body).not.toHaveProperty("prefetchLocked");
+  });
+
+  it("passes through the optional offline-prefetch settings", async () => {
+    const res = configResponse({
+      externalSources: false,
+      pwa: true,
+      home: "docs:index",
+      prefetch: true,
+      prefetchLocked: true,
+    });
+    expect(await res.json()).toEqual({
+      externalSources: false,
+      pwa: true,
+      home: "docs:index",
+      prefetch: true,
+      prefetchLocked: true,
+    });
+  });
+});

@@ -1,0 +1,5 @@
+node_modules/
+.wrangler/
+dist/
+# Filled from viewer-ts/dist only while packing the npm release.
+viewer/

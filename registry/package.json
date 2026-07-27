@@ -1,0 +1,62 @@
+{
+  "name": "@kdhelpbook/cf-registry",
+  "version": "0.1.0",
+  "description": "Central .khb docs registry: OIDC publish from GitHub Actions, Range streaming from R2, dynamic docsets.json.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KDHelpBook/monorepo.git",
+    "directory": "registry"
+  },
+  "homepage": "https://github.com/KDHelpBook/monorepo/tree/main/registry",
+  "bugs": "https://github.com/KDHelpBook/monorepo/issues",
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dist",
+    "schema",
+    "viewer",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./config": {
+      "types": "./dist/config.d.ts",
+      "import": "./dist/config.js"
+    },
+    "./schema": "./schema/khb-registry.schema.json"
+  },
+  "bin": {
+    "khb-cf-registry": "./dist/cli.js"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsup src/index.ts src/config.ts src/cli.ts --format esm --dts --clean --sourcemap",
+    "stage-viewer": "node scripts/stage-viewer.mjs",
+    "prepack": "npm run build",
+    "test": "npm run build && vitest run && vitest run --config vitest.node.config.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "jose": "^5.9.6",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.8.19",
+    "@cloudflare/workers-types": "^5.20260722.1",
+    "@types/node": "^22.18.6",
+    "tsup": "^8.5.0",
+    "typescript": "^5.6.3",
+    "vitest": "~3.0.9",
+    "wrangler": "~4.114.0"
+  }
+}

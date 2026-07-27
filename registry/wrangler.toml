@@ -1,0 +1,9 @@
+# Unit-test bindings for the reusable registry package. Deployable instances
+# keep their own wrangler.jsonc in cf-registry-template.
+name = "khb-registry-tests"
+main = "test/worker.ts"
+compatibility_date = "2025-09-06"
+
+[[r2_buckets]]
+binding = "DOCSETS"
+bucket_name = "khb-registry-test-docsets"

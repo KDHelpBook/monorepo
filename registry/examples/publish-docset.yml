@@ -1,0 +1,25 @@
+# Example: publish a docset to the KD Help Book registry from a content repo.
+#
+# Copy into .github/workflows/ of the repository that owns the documentation
+# sources and adjust the `env` block. No secrets are needed: the job authorizes
+# itself with a GitHub Actions OIDC token (audience = the registry origin), and
+# the registry instance's khb-registry.yml decides which docset ids this
+# repository may write — it cannot touch any other project's.
+
+name: Publish docs
+
+on:
+  push:
+    branches: [main]
+    paths: ["docs/**"]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    uses: KDHelpBook/monorepo/.github/workflows/publish-registry.yml@v1
+    with:
+      registry-url: https://your-registry.workers.dev
+      source: docs
+    permissions:
+      contents: read
+      id-token: write

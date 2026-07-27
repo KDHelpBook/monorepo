@@ -250,4 +250,9 @@ reports how little it downloaded.
 ```bash
 khb inspect out.khb
 khb inspect https://example.com/docs/en.khb    # streamed; needs a Range-capable host
+khb inspect out.khb --json                     # stable machine-readable metadata
 ```
+
+`--json` emits camel-case fields such as `id`, `title`, `version`, `language`,
+`collection`, and `collectionTitle`; publishing automation should use this
+instead of parsing the aligned human-readable summary.

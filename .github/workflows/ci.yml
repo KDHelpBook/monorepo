@@ -42,3 +42,20 @@ jobs:
       - run: npx tsc --noEmit
       - run: npm run test
       - run: npm run build
+
+  registry:
+    name: registry (Cloudflare Workers)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: registry
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: registry/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test

@@ -46,10 +46,17 @@ import {
   saveTheme,
   type ThemeMode,
 } from "./data/uistate";
+import {
+  applyFolders,
+  folderCollections,
+  sanitizeFolders,
+  SHELF_PREFIX,
+} from "./data/folders";
 import { languagesByCollection, pickLanguages } from "./data/langselect";
 import {
   resolveManifestUrl,
   streamEligible,
+  type FolderNode,
   type Manifest,
 } from "./data/manifest";
 import {
@@ -197,7 +204,7 @@ const LANG_KEY = "khb.lang";
 function readSavedLang(): string | null {
   try {
     return localStorage.getItem(LANG_KEY);
-  } catch {
+  } catch (e) {
     return null;
   }
 }
@@ -231,7 +238,7 @@ async function loadConfig(): Promise<Config> {
   try {
     const res = await fetch(fresh("config.json"));
     if (res.ok) return (await res.json()) as Config;
-  } catch {
+  } catch (e) {
     /* no config.json → defaults */
   }
   return { externalSources: true, pwa: true };
@@ -441,8 +448,10 @@ async function bootstrap(): Promise<void> {
               attachments: entry.attachments,
             });
             streamed = true;
-          } catch {
-            /* streaming open failed despite Range — fall back to a whole fetch */
+          } catch (e) {
+            // Fall back to a whole fetch — but say why, or a host/engine bug
+            // hides behind a silently slower load.
+            console.warn("khb: streaming open failed, fetching whole", e);
           }
         }
         if (!streamed) {
@@ -461,7 +470,7 @@ async function bootstrap(): Promise<void> {
             attachments: entry.attachments, // fetched whole alongside the .khb
           });
         }
-      } catch {
+      } catch (e) {
         /* unreachable/invalid remote — skip; the user can remove it */
       }
     }
@@ -536,8 +545,9 @@ async function bootstrap(): Promise<void> {
         source = { url, mode: "streaming", attachments: packUrls };
         // Remember how to prefetch this streamed book whole in the background.
         if (d.hash) prefetch.set(d.id, { url, hash: d.hash, packUrls });
-      } catch {
-        /* streaming open failed despite Range — fall back to a whole fetch */
+      } catch (e) {
+        // Same fallback as remotes: whole fetch, with the reason logged.
+        console.warn("khb: streaming open failed, fetching whole", e);
       }
     }
     bundled.push({
@@ -631,23 +641,42 @@ async function bootstrap(): Promise<void> {
     variants,
     lang,
   );
-  if (!sources.length) throw new Error("no docsets to show");
-
   if (config.pwa) registerServiceWorker(strings(lang));
   else unregisterServiceWorker();
   // A bad book is skipped, not fatal: collect per-source failures (paired with the
   // chosen edition) and keep loading the rest. Only an empty result blocks the app.
   const failed: FailedBook[] = [];
-  const collection = await Collection.load(sources, lang, {
-    onProgress: (l, t, i, n, part) =>
-      setDownloadProgress(l, t, titles[i] ?? "", i, n, lang, part),
-    labels: titles,
-    onError: (e, i) => {
-      const variant = books[i];
-      if (variant) failed.push({ variant, error: e });
-    },
-  });
+  // A freshly-created registry legitimately has no sources. Build an empty
+  // collection without loading wa-sqlite so start() still wires the menus and
+  // opens the Manage page, where the first book can be added.
+  const collection = sources.length
+    ? await Collection.load(sources, lang, {
+        onProgress: (l, t, i, n, part) =>
+          setDownloadProgress(l, t, titles[i] ?? "", i, n, lang, part),
+        labels: titles,
+        onError: (e, i) => {
+          const variant = books[i];
+          if (variant) failed.push({ variant, error: e });
+        },
+      })
+    : Collection.of([], lang);
   if (!collection.books().length) {
+    if (!sources.length) {
+      start(
+        collection,
+        lang,
+        available,
+        config,
+        langInfo,
+        versionInfo,
+        updates,
+        variants,
+        sanitizeFolders(manifest.folders),
+        failed,
+        { on: prefetchOn, items: prefetch, validKeys: validBlobKeys },
+      );
+      return;
+    }
     // Nothing loaded — show the full error panel (naming the first failure).
     showLoadError(failed[0]?.error ?? new Error("no docsets to show"), {
       more: Math.max(0, failed.length - 1),
@@ -663,6 +692,7 @@ async function bootstrap(): Promise<void> {
     versionInfo,
     updates,
     variants,
+    sanitizeFolders(manifest.folders),
     failed,
     { on: prefetchOn, items: prefetch, validKeys: validBlobKeys },
   );
@@ -921,6 +951,7 @@ function start(
   versionInfo: CollectionVersionInfo[],
   updates: { title: string; from: string; to: string }[],
   variants: DocVariant[],
+  folders: FolderNode[],
   failed: FailedBook[],
   prefetchPlan: PrefetchPlan,
 ): void {
@@ -1195,6 +1226,20 @@ function start(
   let verByCol = new Map(versionInfo.map((v) => [v.collection, v]));
   let langByCol = new Map(langInfo.map((l) => [l.collection, l]));
   let switchableCols = new Set([...verByCol.keys(), ...langByCol.keys()]);
+  // A family placed in a manifest folder must render as a folder even when it is
+  // the only family loaded — force its `@collection:` wrapper, then re-parent the
+  // family roots into `@shelf:` nodes per the manifest's folders tree.
+  const folderCols = folderCollections(folders);
+  const computeToc = (): TocNode[] => {
+    const forced = new Set([
+      ...switchableCols,
+      ...collection
+        .families()
+        .map((f) => f.id)
+        .filter((id) => folderCols.has(id)),
+    ]);
+    return applyFolders(collection.tocTree(forced), folders, lang);
+  };
   // A synthetic, clickable top-level leaf per failed book (`@failed:<id>`) — it
   // registers in `pages` like any leaf and opens a reason page (see loadContent).
   const failedTocNodes = (): TocNode[] =>
@@ -1203,7 +1248,7 @@ function start(
       title: f.variant.title,
       children: [],
     }));
-  let toc = [...collection.tocTree(switchableCols), ...failedTocNodes()];
+  let toc = [...computeToc(), ...failedTocNodes()];
 
   // (Re)build the page-info and keyword maps from the current `collection`/`toc`.
   function buildPages(nodes: TocNode[], path: string[]): void {
@@ -1242,6 +1287,10 @@ function start(
   // A stack of books for a product/family folder.
   const groupIcon = (): string =>
     '<svg class="ico" viewBox="0 0 16 16"><rect x="2.2" y="2.5" width="3.2" height="11" rx=".4" fill="#7fa8dd" stroke="#33608f"/><rect x="6.1" y="3" width="3.2" height="10.5" rx=".4" fill="#a9c6ea" stroke="#33608f"/><rect x="10" y="2.5" width="3.6" height="11" rx=".4" fill="#d6e5f7" stroke="#33608f"/></svg>';
+  // A closed folder (bookshelf) for a manifest `folders` node, in the same
+  // blue palette as the family books so the two levels read as one system.
+  const shelfIcon = (): string =>
+    '<svg class="ico" viewBox="0 0 16 16"><path d="M1.5 3.5h4.5l1.2 1.5h7.3v8H1.5z" fill="#a9c6ea" stroke="#33608f"/><path d="M1.5 6.5h13" fill="none" stroke="#33608f"/></svg>';
 
   // ---- Contents tree ----
   // Reveal the current page: expand the folders on its path (adding them to the
@@ -1282,7 +1331,9 @@ function start(
       (failedNode
         ? '<span class="ico fail-ico" aria-hidden="true">⚠</span>'
         : n.group
-          ? groupIcon()
+          ? n.pageId.startsWith(SHELF_PREFIX)
+            ? shelfIcon()
+            : groupIcon()
           : pageIcon(kids)) +
       `<span class="label">${esc(n.title)}</span>`;
     // A switchable product folder shows its current version/language in parens and a
@@ -1461,7 +1512,7 @@ function start(
       verByCol = new Map(versionInfo.map((v) => [v.collection, v]));
       langByCol = new Map(langInfo.map((l) => [l.collection, l]));
       switchableCols = new Set([...verByCol.keys(), ...langByCol.keys()]);
-      toc = [...collection.tocTree(switchableCols), ...failedTocNodes()];
+      toc = [...computeToc(), ...failedTocNodes()];
       deriveMaps();
       fillFilters();
 
@@ -2639,7 +2690,7 @@ function start(
         await navigator.clipboard.writeText(url);
         status.textContent = s.linkCopied;
       }
-    } catch {
+    } catch (e) {
       /* user dismissed the share sheet */
     }
   }
@@ -2745,13 +2796,14 @@ function start(
           `<div>${esc(f.variant.title)} <span style="color:var(--danger)">· ${esc(s.bookFailed)}</span></div>`,
       )
       .join("");
+    const bookList = bookLines + failedLines || `<div>${esc(s.noDocsets)}</div>`;
     bg.innerHTML =
       '<div style="width:420px;background:var(--chrome-top);border:1px solid var(--modal-border);border-radius:3px;box-shadow:0 12px 40px rgba(0,0,0,.5);overflow:hidden">' +
       `<div style="background:linear-gradient(180deg,var(--title-top),var(--title-bot));color:#fff;font-weight:bold;padding:6px 10px">${esc(s.about)}</div>` +
       '<div style="padding:16px 18px;line-height:1.6"><div style="font-size:15px;font-weight:bold;color:var(--content-h)">KD Help Book</div>' +
       `<div>${esc(s.aboutTagline)}</div>` +
       `<p style="color:var(--muted);margin:.8em 0 .3em">${esc(s.aboutLanguage)} <b>${esc(collection.language)}</b></p>` +
-      `<div style="font-size:11px;color:var(--muted)">${bookLines}${failedLines}</div></div>` +
+      `<div style="font-size:11px;color:var(--muted)">${bookList}</div></div>` +
       '<div style="padding:10px 16px;text-align:right;border-top:1px solid var(--chrome-border)"><button style="font-family:var(--font-ui);font-size:12px;padding:4px 16px;border:1px solid var(--btn-border);border-radius:2px;background:var(--btn-face);cursor:pointer">OK</button></div></div>';
     const close = (): void => bg.remove();
     bg.addEventListener("click", (e) => {
@@ -2827,7 +2879,7 @@ function start(
             const { StreamingDocset } = await import("./data/streaming-docset");
             await StreamingDocset.peek(url);
             validated = true;
-          } catch {
+          } catch (e) {
             /* not Range-streamable after all — validate by fetching it whole */
           }
         }
@@ -2837,7 +2889,7 @@ function start(
         }
         addRemote(url, streaming, packs);
         location.reload();
-      } catch {
+      } catch (e) {
         err.style.color = "#a33";
         err.textContent = s.openUrlError;
         add.disabled = false;
@@ -2880,12 +2932,12 @@ function start(
       if (meta.language !== lang) {
         try {
           localStorage.setItem(LANG_KEY, meta.language);
-        } catch {
+        } catch (e) {
           /* ignore */
         }
       }
       location.reload();
-    } catch {
+    } catch (e) {
       status.textContent = s.uploadError;
     }
   }
@@ -3159,7 +3211,7 @@ function start(
       sel.addEventListener("change", () => {
         try {
           localStorage.setItem(LANG_KEY, sel.value);
-        } catch {
+        } catch (e) {
           /* ignore storage errors */
         }
         location.reload();
@@ -3642,6 +3694,10 @@ function start(
       if (openIdx !== -1) active = openIdx; // focus the deep-linked tab if present
       void loadContent(tabs[active]!.id);
     }
+  } else if (!pages.size && config.externalSources) {
+    // First-run registry: land on the actionable empty library instead of an
+    // inert search page. File → Open and Help → About are already wired above.
+    openManagePage();
   } else if (deepLink) {
     openPage(deepLink);
   } else {

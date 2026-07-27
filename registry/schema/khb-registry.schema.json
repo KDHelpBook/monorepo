@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/KDHelpBook/monorepo/blob/main/registry/schema/khb-registry.schema.json",
+  "title": "KD Help Book Cloudflare registry configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "site", "publishers"],
+  "properties": {
+    "schema": {
+      "const": 1
+    },
+    "site": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "order": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/docsetId"
+          }
+        },
+        "folders": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "config": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "externalSources": {
+              "type": "boolean"
+            },
+            "pwa": {
+              "type": "boolean"
+            },
+            "home": {
+              "type": "string",
+              "minLength": 1
+            },
+            "prefetch": {
+              "type": "boolean"
+            },
+            "prefetchLocked": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "publishers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["repository", "docsets"],
+        "properties": {
+          "repository": {
+            "type": "string",
+            "pattern": "^[^/\\s]+/[^/\\s]+$"
+          },
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^refs/.+"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "environment": {
+            "type": ["string", "null"],
+            "minLength": 1
+          },
+          "docsets": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/$defs/docsetId"
+            }
+          },
+          "force": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "docsetId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    }
+  }
+}
