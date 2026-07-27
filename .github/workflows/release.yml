@@ -158,7 +158,8 @@ jobs:
             printf '  %s\n' "${REGISTRY_TARBALLS[@]}" >&2
             exit 1
           fi
-          npm publish "${REGISTRY_TARBALLS[0]}"
+          REGISTRY_TARBALL="$(realpath "${REGISTRY_TARBALLS[0]}")"
+          npm publish "$REGISTRY_TARBALL"
 
   registry-docs:
     name: Publish ${{ matrix.id }} to the official registry
