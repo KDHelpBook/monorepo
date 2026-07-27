@@ -5,7 +5,7 @@
       "id": "khb",
       "title": "KD Help Book",
       "titles": { "pl": "KD Help Book" },
-      "children": [{ "collection": "khb" }]
+      "children": [{ "collection": "khb-docs" }]
     }
   ],
   "config": {

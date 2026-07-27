@@ -24,7 +24,7 @@ beforeAll(async () => {
   await env.DOCSETS.put(
     "docsets/khb-authoring/latest.json",
     pointer("khb-authoring", {
-      collection: "khb",
+      collection: "khb-docs",
       hash: "etag-khb-authoring",
       attachments: ["khb-authoring.khba"],
     }),
@@ -37,7 +37,7 @@ describe("buildManifest", () => {
     const entry = manifest.docsets.find((d) => d.id === "khb-authoring")!;
     expect(entry).toMatchObject({
       file: "d/khb-authoring/1.0.0/khb-authoring.khb",
-      collection: "khb",
+      collection: "khb-docs",
       version: "1.0.0",
       hash: "etag-khb-authoring",
       streaming: true,
