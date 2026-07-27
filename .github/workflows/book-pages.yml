@@ -1,0 +1,163 @@
+name: Book → Pages
+
+# Reusable end-to-end pipeline for a *consumer* documentation repository: fetch
+# the khb toolchain, compile the repo's book(s), pack a bundled site, and deploy
+# it to that repository's own GitHub Pages via the official Pages actions (no
+# secrets — just the `pages`/`id-token` permissions the caller grants). This is
+# the copy-paste recipe from docs/publishing/ci.md turned into a one-liner.
+#
+# A consumer wires it up like this:
+#
+#   # .github/workflows/docs.yml
+#   on:
+#     push:
+#       branches: [main]
+#   jobs:
+#     docs:
+#       uses: KDHelpBook/monorepo/.github/workflows/book-pages.yml@v1
+#       with:
+#         sources: "."
+#         home: my-book:index
+#       permissions:
+#         contents: read
+#         pages: write
+#         id-token: write
+#
+# One-time setup on the consumer repo: Settings → Pages → Source = GitHub Actions.
+# Pin `@v1`: this workflow references setup-khb@v1 / build-book@v1 internally, so
+# the moving `v1` alias must resolve — release.yml creates and advances it on
+# every release. Exact `@vX.Y.Z` pins work too. (Both need a release to exist;
+# setup-khb downloads the CLI + viewer from release assets.)
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: khb release to build with (tag vX.Y.Z or "latest"). Empty follows an exact workflow tag, otherwise latest.
+        type: string
+        default: ""
+      sources:
+        description: Source directories (whitespace/newline separated; globs expanded).
+        type: string
+        default: "."
+      home:
+        description: Cold-start landing page id or "search".
+        type: string
+        default: ""
+      profile:
+        description: Distribution profile — reader or bundled.
+        type: string
+        default: bundled
+      stream:
+        description: Mark books for page-level streaming.
+        type: boolean
+        default: true
+      llms:
+        description: Emit the AI-facing export (llms.txt + md/).
+        type: boolean
+        default: true
+      allow-extensions:
+        description: Run docset [extensions] transformers during compile.
+        type: boolean
+        default: false
+      base-url:
+        description: Override the deploy base URL (trailing slash). Default — the Pages URL.
+        type: string
+        default: ""
+      extra-pack-args:
+        description: Extra arguments appended to `khb pack`.
+        type: string
+        default: ""
+      runs-on:
+        description: Runner label for the build/deploy job.
+        type: string
+        default: ubuntu-latest
+      khb-repository:
+        description: Repository to fetch the khb release from.
+        type: string
+        default: KDHelpBook/monorepo
+
+# Reusable workflows can't widen the caller's token — the caller must grant these.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: book-pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ${{ inputs.runs-on }}
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Configure Pages
+        id: pages
+        uses: actions/configure-pages@v6
+
+      # Materialise the actions from the same ref as this reusable workflow.
+      # Referencing @v1 here would silently mix an exactly pinned workflow
+      # (for example @v1.2.0) with the newest v1 actions.
+      - name: Resolve the toolchain ref and release
+        id: toolchain
+        shell: bash
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          REF="${GITHUB_WORKFLOW_REF##*@}"
+          VERSION="$REQUESTED_VERSION"
+          if [[ -z "$VERSION" ]]; then
+            TAG="${REF#refs/tags/}"
+            if [[ "$REF" == refs/tags/v* && "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              VERSION="$TAG"
+            else
+              VERSION=latest
+            fi
+          fi
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check out the pinned KD Help Book actions
+        uses: actions/checkout@v7
+        with:
+          repository: KDHelpBook/monorepo
+          ref: ${{ steps.toolchain.outputs.ref }}
+          path: _khb-toolchain
+
+      - name: Set up khb
+        id: khb
+        uses: ./_khb-toolchain/.github/actions/setup-khb
+        with:
+          version: ${{ steps.toolchain.outputs.version }}
+          repository: ${{ inputs.khb-repository }}
+
+      - name: Compile and pack
+        uses: ./_khb-toolchain/.github/actions/build-book
+        with:
+          khb: ${{ steps.khb.outputs.khb }}
+          viewer-dir: ${{ steps.khb.outputs.viewer-dir }}
+          sources: ${{ inputs.sources }}
+          out: publish
+          profile: ${{ inputs.profile }}
+          home: ${{ inputs.home }}
+          stream: ${{ inputs.stream }}
+          llms: ${{ inputs.llms }}
+          allow-extensions: ${{ inputs.allow-extensions }}
+          # Default to the Pages URL (with a trailing slash) so --llms writes a
+          # correct sitemap/robots for the actual deploy path; overridable.
+          base-url: ${{ inputs.base-url != '' && inputs.base-url || format('{0}/', steps.pages.outputs.base_url) }}
+          extra-pack-args: ${{ inputs.extra-pack-args }}
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: publish
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v5

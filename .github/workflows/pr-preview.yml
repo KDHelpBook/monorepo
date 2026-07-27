@@ -58,31 +58,29 @@ jobs:
           cache: npm
           cache-dependency-path: viewer-ts/package-lock.json
 
-      # Same pipeline as publish.yml, built from the PR ref: compile every
-      # documentation volume (docs/*/docset.toml), then pack the bundled dist.
-      # --base-url points sitemap/robots + the discovery hooks at this PR's
-      # subpath; --stream keeps page-level streaming (Pages honours Range).
-      - name: Build and pack the preview
+      - name: Build the khb CLI and viewer from the PR ref
         if: github.event.action != 'closed' && contains(github.event.pull_request.labels.*.name, 'preview')
         run: |
           set -euo pipefail
           cargo build --release -p khb-cli --manifest-path compiler/Cargo.toml
-          BIN="$PWD/compiler/target/release/khb"
           ( cd viewer-ts && npm ci && npm run build )
-          mkdir -p out
-          DOCSETS=()
-          for T in docs/*/docset.toml; do
-            DIR=$(dirname "$T")
-            ID=$(sed -n 's/^id = "\(.*\)"$/\1/p' "$T" | head -n1)
-            "$BIN" compile "$DIR" -o "out/${ID}.khb" --allow-extensions
-            DOCSETS+=(--docset "out/${ID}.khb")
-          done
-          "$BIN" pack --profile bundled --viewer viewer-ts/dist \
-            "${DOCSETS[@]}" \
-            --home khb-authoring:index \
-            --stream --llms \
-            --base-url "https://kdhelpbook.github.io/monorepo/pr-preview/pr-${{ github.event.number }}/" \
-            -o preview
+
+      # Compile every documentation volume (docs/*/docset.toml) and pack the
+      # bundled dist — via the same build-book action the consumer reusable
+      # workflows use, so our own preview dogfoods it (fed a same-commit CLI +
+      # viewer). --base-url points sitemap/robots + the discovery hooks at this
+      # PR's subpath; --stream keeps page-level streaming (Pages honours Range).
+      - name: Compile and pack the preview
+        if: github.event.action != 'closed' && contains(github.event.pull_request.labels.*.name, 'preview')
+        uses: ./.github/actions/build-book
+        with:
+          khb: ${{ github.workspace }}/compiler/target/release/khb
+          viewer-dir: ${{ github.workspace }}/viewer-ts/dist
+          sources: docs/*
+          out: preview
+          home: khb-authoring:index
+          allow-extensions: true
+          base-url: https://kdhelpbook.github.io/monorepo/pr-preview/pr-${{ github.event.number }}/
 
       # Deploys ./preview to gh-pages under pr-preview/pr-<N>/ and comments the
       # URL; on close or when the label is removed it removes that subfolder.

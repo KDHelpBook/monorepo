@@ -1,0 +1,92 @@
+# Fetches the `khb` CLI (and, by default, the prebuilt viewer) from a KD Help
+# Book release and puts `khb` on PATH. This is the reusable primitive every
+# book-publishing pipeline starts with: a consumer repository holds only its
+# Markdown, and this action supplies the toolchain. The binaries come from the
+# release assets built by build.yml (asset names are the stable contract:
+# `khb-v*-<target>.tar.gz` and `khb-viewer-*.tar.gz`).
+name: Set up khb
+description: Download the khb CLI and prebuilt viewer from a KD Help Book release and add khb to PATH.
+
+inputs:
+  version:
+    description: Release to fetch — a tag (vX.Y.Z) or "latest".
+    default: latest
+  viewer:
+    description: Also download the prebuilt viewer (needed by `khb pack`).
+    default: "true"
+  repository:
+    description: Repository to fetch the release from.
+    default: KDHelpBook/monorepo
+  token:
+    description: Token for `gh release download` (needs read access to `repository`).
+    default: ${{ github.token }}
+
+outputs:
+  khb:
+    description: Path to the khb binary (also added to PATH).
+    value: ${{ steps.install.outputs.khb }}
+  viewer-dir:
+    description: Path to the extracted viewer dist ("" when viewer=false).
+    value: ${{ steps.install.outputs.viewer-dir }}
+  version:
+    description: The release tag actually fetched (a concrete vX.Y.Z, even when "latest" was asked for).
+    value: ${{ steps.install.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - id: install
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        KHB_VERSION: ${{ inputs.version }}
+        KHB_REPO: ${{ inputs.repository }}
+        KHB_VIEWER: ${{ inputs.viewer }}
+      run: |
+        set -euo pipefail
+
+        # Map the runner to the target triple baked into the release asset names
+        # by build.yml. The viewer is arch-independent (static files); only the
+        # CLI is platform-specific.
+        case "${{ runner.os }}-${{ runner.arch }}" in
+          Linux-X64)   TARGET=x86_64-unknown-linux-gnu ;;
+          Linux-ARM64) TARGET=aarch64-unknown-linux-gnu ;;
+          macOS-X64)   TARGET=x86_64-apple-darwin ;;
+          macOS-ARM64) TARGET=aarch64-apple-darwin ;;
+          *) echo "::error::setup-khb supports Linux and macOS runners; got ${{ runner.os }}-${{ runner.arch }}"; exit 1 ;;
+        esac
+
+        # Resolve "latest" to a concrete tag so the output (and any pin the caller
+        # records) is reproducible.
+        if [[ -z "$KHB_VERSION" || "$KHB_VERSION" == "latest" ]]; then
+          KHB_VERSION=$(gh release view -R "$KHB_REPO" --json tagName --jq .tagName)
+        fi
+        echo "Fetching khb $KHB_VERSION ($TARGET) from $KHB_REPO"
+
+        DEST="$RUNNER_TEMP/khb"
+        mkdir -p "$DEST"
+        cd "$DEST"
+
+        gh release download "$KHB_VERSION" -R "$KHB_REPO" --pattern "khb-v*-${TARGET}.tar.gz"
+        tar xzf khb-v*-"${TARGET}".tar.gz --strip-components=1
+        rm -f khb-v*-"${TARGET}".tar.gz
+        BIN="$DEST/khb"
+        chmod +x "$BIN"
+        echo "$DEST" >> "$GITHUB_PATH"
+        "$BIN" --version
+
+        VIEWER_DIR=""
+        if [[ "$KHB_VIEWER" == "true" ]]; then
+          VIEWER_DIR="$DEST/viewer"
+          mkdir -p "$VIEWER_DIR"
+          gh release download "$KHB_VERSION" -R "$KHB_REPO" --pattern 'khb-viewer-*.tar.gz'
+          tar xzf khb-viewer-*.tar.gz -C "$VIEWER_DIR" --strip-components=1
+          rm -f khb-viewer-*.tar.gz
+          [[ -e "$VIEWER_DIR/index.html" ]] || { echo "::error::viewer archive had no index.html"; exit 1; }
+        fi
+
+        {
+          echo "khb=$BIN"
+          echo "viewer-dir=$VIEWER_DIR"
+          echo "version=$KHB_VERSION"
+        } >> "$GITHUB_OUTPUT"
