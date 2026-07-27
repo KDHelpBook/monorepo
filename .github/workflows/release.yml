@@ -67,6 +67,7 @@ jobs:
           grep -q "^version = \"${NEW}\"$" compiler/Cargo.toml
           (cd compiler && cargo update --workspace)
           (cd viewer-ts && npm version "$NEW" --no-git-tag-version)
+          (cd registry && npm version "$NEW" --no-git-tag-version)
           # Every published documentation volume (docs/*/docset.toml); the
           # compiler/examples/* fixtures keep their static demo versions.
           for T in docs/*/docset.toml; do
@@ -126,3 +127,48 @@ jobs:
       contents: read
       actions: read
     secrets: inherit
+
+  registry-package:
+    name: Publish @kdhelpbook/cf-registry
+    needs: [tag, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: cf-registry-package
+          path: package
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Publish with npm trusted publishing
+        run: npm publish package/*.tgz
+
+  registry-docs:
+    name: Publish ${{ matrix.id }} to the official registry
+    if: vars.KHB_REGISTRY_URL != ''
+    needs: [tag, build]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: khb-authoring
+            source: docs/authoring
+            allow-extensions: true
+          - id: khb-publishing
+            source: docs/publishing
+            allow-extensions: false
+    uses: ./.github/workflows/publish-registry.yml
+    with:
+      registry-url: ${{ vars.KHB_REGISTRY_URL }}
+      source: ${{ matrix.source }}
+      ref: ${{ needs.tag.outputs.tag }}
+      version: ${{ needs.tag.outputs.tag }}
+      allow-extensions: ${{ matrix.allow-extensions }}
+    permissions:
+      contents: read
+      id-token: write

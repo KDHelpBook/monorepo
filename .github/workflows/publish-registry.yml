@@ -1,0 +1,154 @@
+name: Publish to a KHB registry
+
+on:
+  workflow_call:
+    inputs:
+      registry-url:
+        description: Public origin of the Cloudflare registry.
+        type: string
+        required: true
+      source:
+        description: Docset source directory containing docset.toml.
+        type: string
+        required: true
+      ref:
+        description: Content ref to check out. Empty uses the caller commit.
+        type: string
+        default: ""
+      version:
+        description: KHB release tag, or latest. Empty follows an exact workflow tag.
+        type: string
+        default: ""
+      allow-extensions:
+        description: Run docset extension transformers while compiling.
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publish-registry-${{ github.repository }}-${{ inputs.source }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - name: Resolve the pinned KHB toolchain
+        id: toolchain
+        shell: bash
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          TOOLCHAIN_REF="${GITHUB_WORKFLOW_REF##*@}"
+          VERSION="$REQUESTED_VERSION"
+          if [[ -z "$VERSION" ]]; then
+            TAG="${TOOLCHAIN_REF#refs/tags/}"
+            if [[ "$TOOLCHAIN_REF" == refs/tags/v* && "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              VERSION="$TAG"
+            else
+              VERSION=latest
+            fi
+          fi
+          echo "ref=$TOOLCHAIN_REF" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check out the pinned KHB actions
+        uses: actions/checkout@v7
+        with:
+          repository: KDHelpBook/monorepo
+          ref: ${{ steps.toolchain.outputs.ref }}
+          path: _khb-toolchain
+
+      - name: Set up khb
+        uses: ./_khb-toolchain/.github/actions/setup-khb
+        with:
+          version: ${{ steps.toolchain.outputs.version }}
+          viewer: "false"
+
+      - name: Compile and inspect the docset
+        shell: bash
+        env:
+          SOURCE: ${{ inputs.source }}
+          ALLOW_EXTENSIONS: ${{ inputs.allow-extensions }}
+        run: |
+          set -euo pipefail
+          ARGS=()
+          if [[ "$ALLOW_EXTENSIONS" == "true" ]]; then
+            ARGS+=(--allow-extensions)
+          fi
+          khb compile "$SOURCE" -o "$RUNNER_TEMP/book.khb" "${ARGS[@]}"
+          khb inspect "$RUNNER_TEMP/book.khb" --json > "$RUNNER_TEMP/inspect.json"
+          jq . "$RUNNER_TEMP/inspect.json"
+
+          ID=$(jq -er '.id | select(length > 0)' "$RUNNER_TEMP/inspect.json")
+          VERSION=$(jq -er '.version | select(length > 0)' "$RUNNER_TEMP/inspect.json")
+          TITLE=$(jq -er '.title' "$RUNNER_TEMP/inspect.json")
+          LANGUAGE=$(jq -er '.language | select(length > 0)' "$RUNNER_TEMP/inspect.json")
+          COLLECTION=$(jq -er '.collection | select(length > 0)' "$RUNNER_TEMP/inspect.json")
+          mv "$RUNNER_TEMP/book.khb" "$RUNNER_TEMP/$ID.khb"
+          {
+            echo "DOCSET_ID=$ID"
+            echo "DOCSET_VERSION=$VERSION"
+            echo "DOCSET_TITLE=$TITLE"
+            echo "DOCSET_LANGUAGE=$LANGUAGE"
+            echo "DOCSET_COLLECTION=$COLLECTION"
+            echo "DOCSET_FILE=$RUNNER_TEMP/$ID.khb"
+          } >> "$GITHUB_ENV"
+
+      - name: Resolve registry origin and mint the OIDC token
+        shell: bash
+        env:
+          REGISTRY_URL: ${{ inputs.registry-url }}
+        run: |
+          set -euo pipefail
+          ORIGIN=$(node -e 'console.log(new URL(process.argv[1]).origin)' "$REGISTRY_URL")
+          AUDIENCE=$(jq -rn --arg value "$ORIGIN" '$value | @uri')
+          TOKEN=$(curl -fsSL \
+            -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$AUDIENCE" | jq -er .value)
+          echo "::add-mask::$TOKEN"
+          {
+            echo "REGISTRY_ORIGIN=$ORIGIN"
+            echo "OIDC_TOKEN=$TOKEN"
+          } >> "$GITHUB_ENV"
+
+      - name: Upload and finalize
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error --retry 3 \
+            -X PUT --data-binary "@$DOCSET_FILE" \
+            -H "Authorization: Bearer $OIDC_TOKEN" \
+            "$REGISTRY_ORIGIN/publish/$DOCSET_ID/$DOCSET_VERSION/$DOCSET_ID.khb"
+
+          jq -n \
+            --arg title "$DOCSET_TITLE" \
+            --arg language "$DOCSET_LANGUAGE" \
+            --arg collection "$DOCSET_COLLECTION" \
+            --arg file "$DOCSET_ID.khb" \
+            '{title: $title, language: $language, collection: $collection,
+              file: $file, attachments: []}' \
+          | curl --fail-with-body --silent --show-error --retry 3 \
+              -X POST --data-binary @- \
+              -H "Authorization: Bearer $OIDC_TOKEN" \
+              -H "Content-Type: application/json" \
+              "$REGISTRY_ORIGIN/publish/$DOCSET_ID/$DOCSET_VERSION"
+
+      - name: Verify the streaming contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error \
+            -D "$RUNNER_TEMP/probe-headers.txt" -o /dev/null \
+            -H "Range: bytes=0-0" \
+            "$REGISTRY_ORIGIN/d/$DOCSET_ID/$DOCSET_VERSION/$DOCSET_ID.khb"
+          grep -qi "^HTTP/.* 206" "$RUNNER_TEMP/probe-headers.txt"
+          grep -qi "^content-range: bytes 0-0/" "$RUNNER_TEMP/probe-headers.txt"

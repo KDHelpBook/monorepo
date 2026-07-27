@@ -13,7 +13,6 @@
  */
 
 import type { JWTVerifyGetKey } from "jose";
-import permissionsJson from "../config/permissions.json";
 import { checkKhbHead, HEAD_BYTES } from "./khb-check";
 import { verifyActionsToken } from "./oidc";
 import { allowedDocsets, forceAllowed } from "./permissions";
@@ -25,8 +24,6 @@ import type {
   PermissionsConfig,
   PublishedVersion,
 } from "./types";
-
-const permissions = permissionsJson as PermissionsConfig;
 
 /** Docset ids and versions stay path- and key-safe; filenames carry no dirs. */
 const ID_RE = /^[a-z0-9][a-z0-9._-]*$/i;
@@ -41,6 +38,7 @@ async function authorize(
   request: Request,
   env: Env,
   docsetId: string,
+  permissions: PermissionsConfig,
   getKey?: JWTVerifyGetKey,
 ): Promise<AuthResult | Response> {
   const auth = request.headers.get("Authorization") ?? "";
@@ -48,7 +46,11 @@ async function authorize(
   if (!token) return json(401, { error: "missing bearer token" });
   let claims: ActionsClaims;
   try {
-    claims = await verifyActionsToken(token, env.REGISTRY_AUDIENCE, getKey);
+    claims = await verifyActionsToken(
+      token,
+      new URL(request.url).origin,
+      getKey,
+    );
   } catch (e) {
     return json(401, { error: `invalid token: ${(e as Error).message}` });
   }
@@ -68,6 +70,7 @@ export async function handleUpload(
   id: string,
   version: string,
   filename: string,
+  permissions: PermissionsConfig,
   getKey?: JWTVerifyGetKey,
 ): Promise<Response> {
   if (!ID_RE.test(id) || !ID_RE.test(version) || version === "latest") {
@@ -76,7 +79,7 @@ export async function handleUpload(
   if (!FILE_RE.test(filename)) {
     return json(400, { error: "filename must be a plain *.khb or *.khba name" });
   }
-  const auth = await authorize(request, env, id, getKey);
+  const auth = await authorize(request, env, id, permissions, getKey);
   if (auth instanceof Response) return auth;
 
   const key = `docsets/${id}/${version}/${filename}`;
@@ -116,12 +119,13 @@ export async function handleFinalize(
   env: Env,
   id: string,
   version: string,
+  permissions: PermissionsConfig,
   getKey?: JWTVerifyGetKey,
 ): Promise<Response> {
   if (!ID_RE.test(id) || !ID_RE.test(version) || version === "latest") {
     return json(400, { error: "invalid docset id or version" });
   }
-  const auth = await authorize(request, env, id, getKey);
+  const auth = await authorize(request, env, id, permissions, getKey);
   if (auth instanceof Response) return auth;
 
   let meta: FinalizeBody;

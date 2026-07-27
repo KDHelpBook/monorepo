@@ -2,6 +2,7 @@ import { env } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
 import { buildManifest, configResponse } from "../src/manifest";
 import type { LatestPointer } from "../src/types";
+import { TEST_CONFIG } from "./fixtures";
 
 const pointer = (id: string, over: Partial<LatestPointer> = {}): string =>
   JSON.stringify({
@@ -33,7 +34,7 @@ beforeAll(async () => {
 
 describe("buildManifest", () => {
   it("lists pointers as streaming entries with versioned serve paths", async () => {
-    const manifest = await buildManifest(env);
+    const manifest = await buildManifest(env, TEST_CONFIG.site);
     const entry = manifest.docsets.find((d) => d.id === "khb-authoring")!;
     expect(entry).toMatchObject({
       file: "d/khb-authoring/1.0.0/khb-authoring.khb",
@@ -46,18 +47,20 @@ describe("buildManifest", () => {
   });
 
   it("orders entries per site.json, unlisted last", async () => {
-    const ids = (await buildManifest(env)).docsets.map((d) => d.id);
+    const ids = (await buildManifest(env, TEST_CONFIG.site)).docsets.map(
+      (d) => d.id,
+    );
     expect(ids.indexOf("khb-authoring")).toBeLessThan(ids.indexOf("zzz"));
   });
 
   it("attaches the site.json folders tree verbatim", async () => {
-    const manifest = await buildManifest(env);
+    const manifest = await buildManifest(env, TEST_CONFIG.site);
     expect(manifest.folders).toBeDefined();
     expect((manifest.folders as { id: string }[])[0]!.id).toBe("khb");
   });
 
   it("keeps legacy pointers without a hash compatible", async () => {
-    const entry = (await buildManifest(env)).docsets.find(
+    const entry = (await buildManifest(env, TEST_CONFIG.site)).docsets.find(
       (d) => d.id === "zzz",
     )!;
     expect(entry).not.toHaveProperty("hash");
@@ -66,7 +69,7 @@ describe("buildManifest", () => {
 
 describe("configResponse", () => {
   it("mirrors the CLI's config.json shape", async () => {
-    const res = configResponse();
+    const res = configResponse(TEST_CONFIG.site.config);
     expect(res.headers.get("Content-Type")).toBe("application/json");
     const body = (await res.json()) as Record<string, unknown>;
     expect(typeof body.externalSources).toBe("boolean");

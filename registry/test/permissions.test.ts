@@ -3,8 +3,6 @@ import { allowedDocsets, forceAllowed } from "../src/permissions";
 import type { PermissionsConfig } from "../src/types";
 
 const CONFIG: PermissionsConfig = {
-  schema: 1,
-  audience: "https://docs.example.com",
   publishers: [
     {
       repository: "acme/widgets",

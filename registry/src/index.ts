@@ -16,48 +16,76 @@
 import { configResponse, manifestResponse } from "./manifest";
 import { handleFinalize, handleUpload } from "./publish";
 import { json, preflight, serveDocset } from "./serve";
-import type { Env } from "./types";
+import type { Env, PermissionsConfig, RegistryConfig } from "./types";
 
-export default {
-  async fetch(
-    request: Request,
-    env: Env,
-    ctx: ExecutionContext,
-  ): Promise<Response> {
-    const path = new URL(request.url).pathname;
-    if (request.method === "OPTIONS") return preflight();
+export type {
+  Env,
+  LatestPointer,
+  PermissionsConfig,
+  PublishedVersion,
+  Publisher,
+  RegistryConfig,
+  SiteConfig,
+} from "./types";
 
-    if (path === "/docsets.json" && request.method === "GET") {
-      return manifestResponse(request, env, ctx);
-    }
-    if (path === "/config.json" && request.method === "GET") {
-      return configResponse();
-    }
+/** Build an isolated Worker handler for one validated registry instance. */
+export function createRegistry(
+  config: RegistryConfig,
+): ExportedHandler<Env> {
+  const permissions: PermissionsConfig = { publishers: config.publishers };
 
-    const d = /^\/d\/([^/]+)\/([^/]+)\/([^/]+)$/.exec(path);
-    if (d && request.method === "GET") {
-      return serveDocset(request, env, d[1]!, d[2]!, d[3]!);
-    }
+  return {
+    async fetch(
+      request: Request,
+      env: Env,
+      ctx: ExecutionContext,
+    ): Promise<Response> {
+      const path = new URL(request.url).pathname;
+      if (request.method === "OPTIONS") return preflight();
 
-    const up = /^\/publish\/([^/]+)\/([^/]+)\/([^/]+)$/.exec(path);
-    if (up && request.method === "PUT") {
-      return handleUpload(request, env, up[1]!, up[2]!, up[3]!);
-    }
-    const fin = /^\/publish\/([^/]+)\/([^/]+)$/.exec(path);
-    if (fin && request.method === "POST") {
-      return handleFinalize(request, env, fin[1]!, fin[2]!);
-    }
-    if (path.startsWith("/publish")) {
-      return json(405, { error: "use PUT (upload) or POST (finalize)" });
-    }
+      if (path === "/docsets.json" && request.method === "GET") {
+        return manifestResponse(request, env, ctx, config.site);
+      }
+      if (path === "/config.json" && request.method === "GET") {
+        return configResponse(config.site.config);
+      }
 
-    // Reserved: a future MCP server exposing search/get_page over the same R2
-    // data (the .khb `pages.md` column is its content source).
-    if (path === "/mcp" || path.startsWith("/mcp/")) {
-      return json(501, { error: "MCP server not implemented yet" });
-    }
+      const d = /^\/d\/([^/]+)\/([^/]+)\/([^/]+)$/.exec(path);
+      if (d && request.method === "GET") {
+        return serveDocset(request, env, d[1]!, d[2]!, d[3]!);
+      }
 
-    if (env.ASSETS) return env.ASSETS.fetch(request);
-    return json(404, { error: "not found" });
-  },
-} satisfies ExportedHandler<Env>;
+      const up = /^\/publish\/([^/]+)\/([^/]+)\/([^/]+)$/.exec(path);
+      if (up && request.method === "PUT") {
+        return handleUpload(
+          request,
+          env,
+          up[1]!,
+          up[2]!,
+          up[3]!,
+          permissions,
+        );
+      }
+      const fin = /^\/publish\/([^/]+)\/([^/]+)$/.exec(path);
+      if (fin && request.method === "POST") {
+        return handleFinalize(
+          request,
+          env,
+          fin[1]!,
+          fin[2]!,
+          permissions,
+        );
+      }
+      if (path.startsWith("/publish")) {
+        return json(405, { error: "use PUT (upload) or POST (finalize)" });
+      }
+
+      if (path === "/mcp" || path.startsWith("/mcp/")) {
+        return json(501, { error: "MCP server not implemented yet" });
+      }
+
+      if (env.ASSETS) return env.ASSETS.fetch(request);
+      return json(404, { error: "not found" });
+    },
+  };
+}

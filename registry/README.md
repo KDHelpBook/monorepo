@@ -1,122 +1,118 @@
-# KD Help Book registry
+# `@kdhelpbook/cf-registry`
 
-A central documentation site many projects publish to **from their own CI,
-without shared secrets, and without being able to touch each other's books**.
-A Cloudflare Worker + R2 bucket that:
+Reusable Cloudflare Worker for a self-hosted KD Help Book registry. It serves
+the web viewer, stores immutable `.khb` editions in R2, streams SQLite pages
+with HTTP Range requests, and accepts secretless publishes from explicitly
+allowed GitHub Actions repositories.
 
-- accepts docset publishes authorized by **GitHub Actions OIDC** — a versioned
-  permission map says which repository may write which docset ids;
-- **serves `.khb`/`.khba` from R2 with HTTP `Range` → `206`**, exactly the
-  contract the viewer's page-level streaming expects (`docs/streaming.md`);
-- generates **`docsets.json`** on the fly from what's published, plus a central
-  `folders` tree and ordering (`config/site.json`), and serves the built viewer
-  as static assets;
-- reserves `/mcp` for a future MCP server over the same data (currently `501`).
+Most users should not clone this package source. Start from
+[`KDHelpBook/cf-registry-template`](https://github.com/KDHelpBook/cf-registry-template),
+which creates a repository, Worker, and R2 bucket through Cloudflare:
 
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/KDHelpBook/cf-registry-template)
+
+## Instance configuration
+
+Each deployed instance has one `khb-registry.yml`:
+
+```yaml
+# yaml-language-server: $schema=./node_modules/@kdhelpbook/cf-registry/schema/khb-registry.schema.json
+schema: 1
+
+site:
+  order: [product-docs]
+  folders: []
+  config:
+    externalSources: true
+    pwa: false
+    prefetch: false
+    prefetchLocked: false
+
+publishers:
+  - repository: acme/product
+    ref: refs/heads/main
+    environment: null
+    docsets: [product-docs]
+    force: false
 ```
-GitHub Actions (repo X)                     Cloudflare
-┌───────────────────────┐   OIDC JWT   ┌──────────────────────────────┐
-│ khb compile → .khb    │ ───────────► │ Worker                       │
-│ khb inspect id gate   │              │  /publish/* verify + store   │
-│ PUT + POST /publish   │              │  /d/*        Range 206 serve │
-└───────────────────────┘              │  /docsets.json  from R2+site │
-                                       │  /*          viewer assets   │
-                                       └──────────────┬───────────────┘
-                                     R2: docsets/<id>/<version>/*.khb
-                                         docsets/<id>/latest.json
+
+`publishers` is the authorization boundary. The Worker verifies GitHub's OIDC
+signature and claims, then derives every R2 key from the allowed docset id.
+There are no publishing tokens or shared Cloudflare credentials.
+
+The OIDC audience is the registry URL origin. A publishing workflow only needs
+the public `registry-url`; there is no separate audience setting.
+
+## Package interface
+
+```ts
+import { createRegistry } from "@kdhelpbook/cf-registry";
+import config from "../.khb-registry/config.json";
+
+export default createRegistry(config);
 ```
 
-## Why repos can't overwrite each other
+The package exports `createRegistry`, `RegistryConfig`, the public registry
+types, and the editor schema at `@kdhelpbook/cf-registry/schema`. Its CLI
+provides:
 
-Authorization is a **map, not a token**: `config/permissions.json` pairs a
-`repository` (and optionally a `ref`/`environment`) with the docset ids it may
-publish. The worker derives every R2 key from that map plus the URL — never
-from request content — so an authorized repo can only ever write under
-`docsets/<its-own-id>/…`. Published versions are **immutable** (re-publishing a
-version is `409`; `?force=1` needs an explicit `force: true` permission), and
-the only mutable object per docset is its `latest.json` pointer — one atomic
-write, so concurrent publishes of different docsets cannot conflict at all.
+```sh
+khb-cf-registry validate khb-registry.yml
+khb-cf-registry prepare khb-registry.yml
+```
 
-The worker's `.khb` check is a cheap SQLite-header sanity check, **not** the id
-gate: the strong check is `khb inspect` in the publishing workflow (see
-`examples/publish-docset.yml`), which reads the real meta table and refuses to
-upload a book whose internal id differs from the publish target. (An in-worker
-meta read is a possible follow-up; the security boundary is the permission map
-either way.)
+`prepare` validates the YAML, writes `.khb-registry/config.json`, and copies the
+version-matched viewer into `.khb-registry/public` for Wrangler Static Assets.
 
-## Setup (manual, once)
+## Publishing a docset
 
-1. Cloudflare account + `wrangler login` (or an API token).
-2. Create the bucket: `wrangler r2 bucket create khb-registry-docsets`.
-3. Pick the public origin (custom domain or `*.workers.dev`) and set
-   `REGISTRY_AUDIENCE` in `wrangler.toml` to it — publishing workflows must
-   request their OIDC token with exactly this audience.
-4. Fill `config/permissions.json` (who may publish what) and `config/site.json`
-   (entry order, the `folders` tree, viewer profile). Both are bundled at
-   deploy: **changing permissions = a redeploy**, which keeps the whole
-   authorization history in git.
-5. Deploy: build the viewer (`cd ../viewer-ts && npm ci && npm run build`),
-   copy `viewer-ts/dist` → `registry/public/`, then `npm run deploy`.
-   Or run the `Registry deploy` workflow (`.github/workflows/registry-deploy.yml`)
-   after adding `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` secrets.
+Consumer repositories call the reusable workflow:
 
-## Publish API
+```yaml
+jobs:
+  publish:
+    uses: KDHelpBook/monorepo/.github/workflows/publish-registry.yml@v1
+    with:
+      registry-url: https://your-registry.workers.dev
+      source: docs
+    permissions:
+      contents: read
+      id-token: write
+```
 
-| Call | Meaning |
-|------|---------|
-| `PUT /publish/<id>/<version>/<file>` | upload one `.khb`/`.khba` (Bearer = OIDC JWT). Stored, not yet visible |
-| `POST /publish/<id>/<version>` | finalize: body `{title, language, collection, file, attachments}` (from `khb inspect`); flips `latest.json` |
-| `GET /d/<id>/<version>/<file>` | the bytes, Range-capable, immutable-cached |
-| `GET /d/<id>/latest/<file>` | same via the pointer (`no-cache`) |
-| `GET /docsets.json` / `GET /config.json` | the viewer manifest + profile |
+The workflow compiles the source, reads metadata through `khb inspect --json`,
+mints an origin-scoped GitHub OIDC token, uploads and finalizes the edition,
+then verifies that the published file answers a `Range: bytes=0-0` request with
+`206 Partial Content`.
 
-Publishing repos copy `examples/publish-docset.yml`: compile → `khb inspect`
-gate → mint the OIDC token (`audience=REGISTRY_AUDIENCE`) → `PUT` each file →
-`POST` finalize → probe `Range: bytes=0-0` for `206`. Use a workflow
-`concurrency` group per docset — same-docset publishes are last-writer-wins on
-the pointer.
+## HTTP contract
 
-## Serving contract (what the viewer needs)
+| Route | Purpose |
+| --- | --- |
+| `PUT /publish/<id>/<version>/<file>` | Upload an authorized `.khb`/`.khba` |
+| `POST /publish/<id>/<version>` | Atomically update `latest.json` |
+| `GET /d/<id>/<version\|latest>/<file>` | Raw, Range-capable docset bytes |
+| `GET /docsets.json` | Dynamic viewer manifest derived from R2 |
+| `GET /config.json` | Viewer profile from the instance YAML |
 
-- `GET` with `Range: bytes=a-b` → `206` + `Content-Range: bytes a-b/<total>`
-  (the probe is `bytes=0-0`; R2 returns the bytes, the worker synthesizes the
-  header). Unsatisfiable → `416` with `bytes */<total>`.
-- Bodies are always **raw** — no `Content-Encoding`; Range addresses SQLite
-  pages, so never store `.gz` here.
-- CORS on everything: `Access-Control-Allow-Origin: *`, `Content-Range`/
-  `Content-Length` exposed, and `Range` allowed on preflight (it is not a
-  CORS-safelisted header — cross-origin viewers do preflight).
+Published version objects are immutable unless both the request and publisher
+permission explicitly allow `force`. The main object's R2 ETag becomes the
+optional manifest `hash` used by the viewer's HTTP and offline caches. Older
+pointers without `hash` remain compatible.
 
-## docsets.json generation
-
-`GET /docsets.json` lists `docsets/*/latest.json`, orders entries per
-`site.json.order` (unlisted append last), marks everything `streaming: true`
-with versioned `/d/…` paths, exposes the main R2 object's ETag as the manifest
-`hash` used by the viewer's HTTP/offline cache, and attaches
-`site.json.folders` verbatim (schema: `docs/internals/manifest-schemas.md`).
-Older pointers without a hash remain valid. `site.json.config` also accepts the
-viewer's optional `prefetch` and `prefetchLocked` settings; both default off.
-The manifest is cached ~60 s in the edge cache and purged best-effort on
-finalize. Because placement lives here — centrally — a publishing repo has no
-say in where its books appear in the tree.
-
-## Local development
+## Package development
 
 ```sh
 npm ci
-npm test                 # vitest + workers pool (workerd-local R2; no account)
-npm run dev              # wrangler dev on :8787
+npm run typecheck
+npm test
+npm run build
 
-# Seed local R2 and try the contract:
-wrangler r2 object put --local khb-registry-docsets/docsets/demo/1.0.0/demo.khb \
-  --file ../compiler/examples.en.khb
-# (write docsets/demo/latest.json the same way, or exercise /publish directly)
-curl -sD- -o /dev/null -H "Range: bytes=0-0" \
-  http://localhost:8787/d/demo/1.0.0/demo.khb     # expect 206 + Content-Range
-curl http://localhost:8787/docsets.json
+# Build the real viewer before checking the release package:
+(cd ../viewer-ts && npm ci && npm run build)
+npm run stage-viewer
+npm pack
 ```
 
-To see the viewer streaming from the local registry, copy `viewer-ts/dist` into
-`registry/public/` and open `http://localhost:8787/` — the network tab shows
-Range requests instead of a whole-file fetch, and the `folders` tree from
-`site.json` renders in the Contents panel.
+Worker tests use a local workerd R2 binding. Deployable instance configuration
+belongs in the template or an instance repository, never in this package.

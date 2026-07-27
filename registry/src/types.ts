@@ -2,7 +2,6 @@
 
 export interface Env {
   DOCSETS: R2Bucket;
-  REGISTRY_AUDIENCE: string;
   /** Static-assets binding (the built viewer). Absent in unit tests. */
   ASSETS?: Fetcher;
 }
@@ -36,7 +35,7 @@ export interface LatestPointer extends PublishedVersion {
   versions: PublishedVersion[];
 }
 
-/** An entry of config/permissions.json: what one repository may publish. */
+/** What one repository may publish in a registry instance. */
 export interface Publisher {
   repository: string;
   /** Exact ref to require (e.g. `refs/heads/main`); null/absent = any ref. */
@@ -50,14 +49,10 @@ export interface Publisher {
 }
 
 export interface PermissionsConfig {
-  schema: number;
-  /** Documentation copy of the OIDC audience (the binding `REGISTRY_AUDIENCE`
-   *  is what the worker actually enforces). */
-  audience: string;
   publishers: Publisher[];
 }
 
-/** config/site.json — central presentation config for the generated manifest. */
+/** Central presentation config for the generated viewer manifest. */
 export interface SiteConfig {
   /** Manifest entry order by docset id; unlisted ids append in listing order. */
   order?: string[];
@@ -73,6 +68,16 @@ export interface SiteConfig {
     /** Hide and hard-disable the offline-prefetch feature. */
     prefetchLocked?: boolean;
   };
+}
+
+/**
+ * khb-registry.yml — the complete, versioned configuration of one registry
+ * instance. It is validated by the package CLI before Wrangler sees it.
+ */
+export interface RegistryConfig {
+  schema: 1;
+  site: SiteConfig;
+  publishers: Publisher[];
 }
 
 /** The subset of GitHub Actions OIDC claims the registry authorizes on. */

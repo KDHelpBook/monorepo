@@ -46,6 +46,7 @@ viewer, `khb inspect` prints a docset's metadata and table-of-contents summary:
 
 ```bash
 khb inspect my.khb
+khb inspect my.khb --json   # for CI and other automation
 ```
 
 ## From a docset to a website

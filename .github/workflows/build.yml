@@ -112,6 +112,48 @@ jobs:
           path: viewer-ts/dist
           if-no-files-found: error
 
+  registry-package:
+    name: Registry (npm package)
+    needs: viewer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.release_tag || github.ref }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: registry/package-lock.json
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: viewer-dist
+          path: viewer-dist
+
+      - name: Build and pack the registry
+        working-directory: registry
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+          npm run stage-viewer -- --viewer ../viewer-dist
+          mkdir -p ../registry-package
+          npm pack --pack-destination ../registry-package
+
+      - name: Verify package contents
+        run: |
+          tar tzf registry-package/*.tgz | grep -q 'package/dist/index.js'
+          tar tzf registry-package/*.tgz | grep -q 'package/schema/khb-registry.schema.json'
+          tar tzf registry-package/*.tgz | grep -q 'package/viewer/index.html'
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: cf-registry-package
+          path: registry-package/*.tgz
+          if-no-files-found: error
+
   docs:
     name: Docs (.khb)
     runs-on: ubuntu-latest

@@ -165,7 +165,12 @@ enum Command {
     },
     /// Print a docset's metadata. `src` is a local `.khb` path or an `http(s)://`
     /// URL — a remote docset is **streamed** over `Range` (only the pages read).
-    Inspect { src: String },
+    Inspect {
+        src: String,
+        /// Emit stable machine-readable metadata instead of the human summary.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 /// Rust ignores SIGPIPE by default, so `khb inspect … | head` panics with
@@ -241,11 +246,35 @@ fn main() -> Result<()> {
             mode,
             stream,
         } => patch(&dist, &docsets, mode == PackMode::Compact, &stream),
-        Command::Inspect { src } => inspect(&src),
+        Command::Inspect { src, json } => inspect(&src, json),
     }
 }
 
-fn inspect(src: &str) -> Result<()> {
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InspectOutput {
+    id: String,
+    title: String,
+    version: String,
+    language: String,
+    collection: String,
+    collection_title: String,
+    toc_entries: usize,
+    toc_top_level: usize,
+    categories: usize,
+    keywords: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    streamed: Option<InspectStreamed>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InspectStreamed {
+    bytes_read: u64,
+    total_bytes: u64,
+}
+
+fn inspect(src: &str, json: bool) -> Result<()> {
     let is_url = src.starts_with("http://") || src.starts_with("https://");
     let reader = if is_url {
         Some(Arc::new(HttpRangeReader::open(src)?))
@@ -257,35 +286,54 @@ fn inspect(src: &str) -> Result<()> {
         None => Docset::open(Path::new(src))?,
     };
 
-    println!("id:         {}", ds.id()?);
-    println!("title:      {}", ds.meta("title")?.unwrap_or_default());
-    println!("version:    {}", ds.meta("version")?.unwrap_or_default());
-    println!("language:   {}", ds.language()?);
+    let toc = ds.toc_tree()?;
+    let output = InspectOutput {
+        id: ds.id()?,
+        title: ds.meta("title")?.unwrap_or_default(),
+        version: ds.meta("version")?.unwrap_or_default(),
+        language: ds.language()?,
+        collection: ds.collection()?,
+        collection_title: ds.collection_title()?,
+        toc_entries: ds.toc()?.len(),
+        toc_top_level: toc.len(),
+        categories: ds.categories()?.len(),
+        keywords: ds.keywords()?.len(),
+        streamed: reader.as_ref().map(|r| InspectStreamed {
+            bytes_read: r.bytes_read(),
+            total_bytes: r.size(),
+        }),
+    };
+    if json {
+        println!("{}", serde_json::to_string_pretty(&output)?);
+        return Ok(());
+    }
+
+    println!("id:         {}", output.id);
+    println!("title:      {}", output.title);
+    println!("version:    {}", output.version);
+    println!("language:   {}", output.language);
     println!(
         "collection: {} ({})",
-        ds.collection()?,
-        ds.collection_title()?
+        output.collection, output.collection_title
     );
-    let toc = ds.toc_tree()?;
     println!(
         "toc:        {} entries ({} top-level)",
-        ds.toc()?.len(),
-        toc.len()
+        output.toc_entries, output.toc_top_level
     );
-    println!("categories: {}", ds.categories()?.len());
-    println!("keywords:   {}", ds.keywords()?.len());
+    println!("categories: {}", output.categories);
+    println!("keywords:   {}", output.keywords);
     for node in toc.iter().take(8) {
         println!("  - {}", node.title);
     }
     if toc.len() > 8 {
         println!("  … ({} top-level)", toc.len());
     }
-    if let Some(r) = reader {
+    if let Some(streamed) = output.streamed {
         println!(
             "streamed {} of {} bytes over HTTP ({}%)",
-            r.bytes_read(),
-            r.size(),
-            r.bytes_read() * 100 / r.size().max(1)
+            streamed.bytes_read,
+            streamed.total_bytes,
+            streamed.bytes_read * 100 / streamed.total_bytes.max(1)
         );
     }
     Ok(())
@@ -372,4 +420,31 @@ fn convert(input: &Path, out: &Path) -> Result<()> {
 fn has_ext(path: &Path, ext: &str) -> bool {
     path.extension()
         .is_some_and(|e| e.eq_ignore_ascii_case(ext))
+}
+
+#[cfg(test)]
+mod inspect_tests {
+    use super::InspectOutput;
+
+    #[test]
+    fn json_contract_uses_stable_camel_case_fields() {
+        let value = serde_json::to_value(InspectOutput {
+            id: "demo".into(),
+            title: "Demo".into(),
+            version: "1.2.3".into(),
+            language: "en".into(),
+            collection: "examples".into(),
+            collection_title: "Examples".into(),
+            toc_entries: 4,
+            toc_top_level: 2,
+            categories: 1,
+            keywords: 3,
+            streamed: None,
+        })
+        .unwrap();
+        assert_eq!(value["id"], "demo");
+        assert_eq!(value["collectionTitle"], "Examples");
+        assert_eq!(value["tocEntries"], 4);
+        assert!(value.get("streamed").is_none());
+    }
 }

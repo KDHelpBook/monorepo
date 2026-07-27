@@ -641,23 +641,42 @@ async function bootstrap(): Promise<void> {
     variants,
     lang,
   );
-  if (!sources.length) throw new Error("no docsets to show");
-
   if (config.pwa) registerServiceWorker(strings(lang));
   else unregisterServiceWorker();
   // A bad book is skipped, not fatal: collect per-source failures (paired with the
   // chosen edition) and keep loading the rest. Only an empty result blocks the app.
   const failed: FailedBook[] = [];
-  const collection = await Collection.load(sources, lang, {
-    onProgress: (l, t, i, n, part) =>
-      setDownloadProgress(l, t, titles[i] ?? "", i, n, lang, part),
-    labels: titles,
-    onError: (e, i) => {
-      const variant = books[i];
-      if (variant) failed.push({ variant, error: e });
-    },
-  });
+  // A freshly-created registry legitimately has no sources. Build an empty
+  // collection without loading wa-sqlite so start() still wires the menus and
+  // opens the Manage page, where the first book can be added.
+  const collection = sources.length
+    ? await Collection.load(sources, lang, {
+        onProgress: (l, t, i, n, part) =>
+          setDownloadProgress(l, t, titles[i] ?? "", i, n, lang, part),
+        labels: titles,
+        onError: (e, i) => {
+          const variant = books[i];
+          if (variant) failed.push({ variant, error: e });
+        },
+      })
+    : Collection.of([], lang);
   if (!collection.books().length) {
+    if (!sources.length) {
+      start(
+        collection,
+        lang,
+        available,
+        config,
+        langInfo,
+        versionInfo,
+        updates,
+        variants,
+        sanitizeFolders(manifest.folders),
+        failed,
+        { on: prefetchOn, items: prefetch, validKeys: validBlobKeys },
+      );
+      return;
+    }
     // Nothing loaded — show the full error panel (naming the first failure).
     showLoadError(failed[0]?.error ?? new Error("no docsets to show"), {
       more: Math.max(0, failed.length - 1),
@@ -2777,13 +2796,14 @@ function start(
           `<div>${esc(f.variant.title)} <span style="color:var(--danger)">· ${esc(s.bookFailed)}</span></div>`,
       )
       .join("");
+    const bookList = bookLines + failedLines || `<div>${esc(s.noDocsets)}</div>`;
     bg.innerHTML =
       '<div style="width:420px;background:var(--chrome-top);border:1px solid var(--modal-border);border-radius:3px;box-shadow:0 12px 40px rgba(0,0,0,.5);overflow:hidden">' +
       `<div style="background:linear-gradient(180deg,var(--title-top),var(--title-bot));color:#fff;font-weight:bold;padding:6px 10px">${esc(s.about)}</div>` +
       '<div style="padding:16px 18px;line-height:1.6"><div style="font-size:15px;font-weight:bold;color:var(--content-h)">KD Help Book</div>' +
       `<div>${esc(s.aboutTagline)}</div>` +
       `<p style="color:var(--muted);margin:.8em 0 .3em">${esc(s.aboutLanguage)} <b>${esc(collection.language)}</b></p>` +
-      `<div style="font-size:11px;color:var(--muted)">${bookLines}${failedLines}</div></div>` +
+      `<div style="font-size:11px;color:var(--muted)">${bookList}</div></div>` +
       '<div style="padding:10px 16px;text-align:right;border-top:1px solid var(--chrome-border)"><button style="font-family:var(--font-ui);font-size:12px;padding:4px 16px;border:1px solid var(--btn-border);border-radius:2px;background:var(--btn-face);cursor:pointer">OK</button></div></div>';
     const close = (): void => bg.remove();
     bg.addEventListener("click", (e) => {
@@ -3674,6 +3694,10 @@ function start(
       if (openIdx !== -1) active = openIdx; // focus the deep-linked tab if present
       void loadContent(tabs[active]!.id);
     }
+  } else if (!pages.size && config.externalSources) {
+    // First-run registry: land on the actionable empty library instead of an
+    // inert search page. File → Open and Help → About are already wired above.
+    openManagePage();
   } else if (deepLink) {
     openPage(deepLink);
   } else {

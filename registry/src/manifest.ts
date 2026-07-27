@@ -1,17 +1,14 @@
 /**
  * The dynamic `docsets.json` (and `config.json`): generated on request from
- * the per-docset `latest.json` pointers plus config/site.json — the same
+ * the per-docset `latest.json` pointers plus the instance config — the same
  * manifest shape `khb pack` writes (compiler/cli/src/publish.rs), with every
  * entry marked `streaming: true` and `file` pointing at the worker's Range-
  * capable `/d/…` routes (relative paths: the viewer resolves them against its
  * own origin, and the manifest is served same-origin with the viewer assets).
  */
 
-import siteJson from "../config/site.json";
 import { corsHeaders } from "./serve";
 import type { Env, LatestPointer, SiteConfig } from "./types";
-
-const site = siteJson as SiteConfig;
 
 interface ManifestEntry {
   file: string;
@@ -41,6 +38,7 @@ async function listPointers(env: Env): Promise<LatestPointer[]> {
 
 export async function buildManifest(
   env: Env,
+  site: SiteConfig,
 ): Promise<{ docsets: ManifestEntry[]; folders?: unknown[] }> {
   const pointers = await listPointers(env);
   const order = site.order ?? [];
@@ -81,6 +79,7 @@ export async function manifestResponse(
   request: Request,
   env: Env,
   ctx: ExecutionContext,
+  site: SiteConfig,
 ): Promise<Response> {
   const cacheKey = new URL(request.url).origin + "/docsets.json";
   try {
@@ -89,7 +88,7 @@ export async function manifestResponse(
   } catch {
     /* no cache API (unit tests) — build every time */
   }
-  const res = jsonResponse(await buildManifest(env));
+  const res = jsonResponse(await buildManifest(env, site));
   try {
     ctx.waitUntil(caches.default.put(cacheKey, res.clone()));
   } catch {
@@ -101,7 +100,7 @@ export async function manifestResponse(
 /** `GET /config.json` — the viewer profile, from site.json. The optional
  *  argument keeps the shape directly testable without mutating imported config. */
 export function configResponse(
-  config: SiteConfig["config"] = site.config,
+  config?: SiteConfig["config"],
 ): Response {
   const {
     externalSources = true,

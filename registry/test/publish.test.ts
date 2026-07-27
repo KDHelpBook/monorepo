@@ -2,17 +2,16 @@ import { env } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
 import { handleFinalize, handleUpload } from "../src/publish";
 import type { LatestPointer } from "../src/types";
+import { TEST_CONFIG, TEST_ORIGIN } from "./fixtures";
 import { fakeKhb, makeIssuer, type TestIssuer } from "./helpers";
 
-// These tests authorize against the real config/permissions.json — its first
-// entry allows KDHelpBook/monorepo (refs/heads/main) to publish khb-authoring.
 const REPO = "KDHelpBook/monorepo";
 const REF = "refs/heads/main";
 const ID = "khb-authoring";
 
 let issuer: TestIssuer;
 beforeAll(async () => {
-  issuer = await makeIssuer(env.REGISTRY_AUDIENCE);
+  issuer = await makeIssuer(TEST_ORIGIN);
 });
 
 const upload = async (opts: {
@@ -22,6 +21,7 @@ const upload = async (opts: {
   body?: Uint8Array;
   token?: string;
   query?: string;
+  origin?: string;
 }): Promise<Response> => {
   const id = opts.id ?? ID;
   const version = opts.version ?? "1.0.0";
@@ -30,7 +30,7 @@ const upload = async (opts: {
     opts.token ?? (await issuer.sign({ repository: REPO, ref: REF }));
   return handleUpload(
     new Request(
-      `https://registry.test/publish/${id}/${version}/${file}${opts.query ?? ""}`,
+      `${opts.origin ?? TEST_ORIGIN}/publish/${id}/${version}/${file}${opts.query ?? ""}`,
       {
         method: "PUT",
         headers: { Authorization: `Bearer ${token}` },
@@ -41,6 +41,7 @@ const upload = async (opts: {
     id,
     version,
     file,
+    { publishers: TEST_CONFIG.publishers },
     issuer.getKey,
   );
 };
@@ -56,7 +57,7 @@ const finalize = async (opts: {
   const token =
     opts.token ?? (await issuer.sign({ repository: REPO, ref: REF }));
   return handleFinalize(
-    new Request(`https://registry.test/publish/${id}/${version}`, {
+    new Request(`${TEST_ORIGIN}/publish/${id}/${version}`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
       body: JSON.stringify(
@@ -71,6 +72,7 @@ const finalize = async (opts: {
     env,
     id,
     version,
+    { publishers: TEST_CONFIG.publishers },
     issuer.getKey,
   );
 };
@@ -92,6 +94,7 @@ describe("publish upload", () => {
       "x",
       "1",
       "x.khb",
+      { publishers: TEST_CONFIG.publishers },
       issuer.getKey,
     );
     expect(anon.status).toBe(401);
@@ -106,6 +109,25 @@ describe("publish upload", () => {
     });
     const res = await upload({ token, version: "0.1.1" });
     expect(res.status).toBe(403);
+  });
+
+  it("derives the OIDC audience from the request origin", async () => {
+    const customOrigin = "https://docs.acme.example";
+    const accepted = await upload({
+      version: "0.1.3",
+      origin: customOrigin,
+      token: await issuer.sign(
+        { repository: REPO, ref: REF },
+        { audience: customOrigin },
+      ),
+    });
+    expect(accepted.status).toBe(200);
+
+    const rejected = await upload({
+      version: "0.1.4",
+      origin: customOrigin,
+    });
+    expect(rejected.status).toBe(401);
   });
 
   it("400s a non-SQLite body and a path-ish filename", async () => {
