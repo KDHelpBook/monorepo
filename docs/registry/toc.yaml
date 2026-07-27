@@ -1,0 +1,7 @@
+- page: index
+  children:
+    - page: deploy
+    - page: configuration
+    - page: publishing
+    - page: updates
+    - page: troubleshooting

@@ -12,6 +12,9 @@ Reference for the KD Help Book format and tooling.
   and online/hybrid modes (the format is already streaming-ready).
 - **[desktop.md](desktop.md)** — running the viewer as an offline Tauri app.
 
+The compiled documentation collection contains separate Authoring, Publishing,
+Registry, and Internals docsets under `docs/*/docset.toml`.
+
 For the running demo content itself, open the viewer — the bundled docset
 documents KD Help Book from a reader's point of view. This folder is the developer-facing
 specification.
