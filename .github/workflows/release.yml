@@ -146,7 +146,19 @@ jobs:
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
       - name: Publish with npm trusted publishing
-        run: npm publish package/*.tgz
+        shell: bash
+        run: |
+          REGISTRY_TARBALLS=()
+          while IFS= read -r REGISTRY_TARBALL; do
+            REGISTRY_TARBALLS+=("$REGISTRY_TARBALL")
+          done < <(find package -type f -name '*.tgz' -print)
+          if [[ "${#REGISTRY_TARBALLS[@]}" -ne 1 ]]; then
+            printf 'Expected exactly one registry tarball, found %s:\n' \
+              "${#REGISTRY_TARBALLS[@]}" >&2
+            printf '  %s\n' "${REGISTRY_TARBALLS[@]}" >&2
+            exit 1
+          fi
+          npm publish "${REGISTRY_TARBALLS[0]}"
 
   registry-docs:
     name: Publish ${{ matrix.id }} to the official registry
