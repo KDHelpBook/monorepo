@@ -38,6 +38,14 @@ struct ManifestEntry {
     /// when the host doesn't honour Range. Streamed files ship uncompressed.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     streaming: bool,
+    /// Short content hash of the shipped file (of the exact bytes the viewer
+    /// fetches). The viewer appends it to the docset URL as `?v=<hash>`, so a
+    /// rebuilt same-named book gets a distinct HTTP-cache key — a cached stale
+    /// byte range can't then mix with a fresh one into a malformed SQLite image
+    /// (the failure that blanks a re-deployed streamed preview) — while an
+    /// *unchanged* book keeps its key, and its cache, across deploys.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    hash: String,
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -151,6 +159,17 @@ struct Config {
     /// literal `"search"`. Omitted → the viewer defaults to the Search page.
     #[serde(skip_serializing_if = "Option::is_none")]
     home: Option<String>,
+    /// Default for the viewer's "keep streamed books offline" toggle: when true, a
+    /// streamed book is also downloaded whole in the background and cached, so
+    /// later loads open it from cache/offline. A per-device user setting overrides
+    /// it. Omitted when false so older viewers ignore it.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    prefetch: bool,
+    /// Hard-disable the prefetch feature: the viewer hides the toggle and never
+    /// prefetches, ignoring any per-device choice. For sites that don't want the
+    /// offline cache at all (e.g. metered bandwidth). Omitted when false.
+    #[serde(rename = "prefetchLocked", skip_serializing_if = "std::ops::Not::not")]
+    prefetch_locked: bool,
 }
 
 /// Options for [`pack`].
@@ -176,6 +195,11 @@ pub struct PackOptions {
     /// `--folders`: a JSON file with a `folders` tree grouping product families
     /// into nested TOC folders, copied into the manifest after validation.
     pub folders: Option<PathBuf>,
+    /// `--prefetch`: the default for the viewer's "keep streamed books offline"
+    /// toggle (written into `config.json`).
+    pub prefetch: bool,
+    /// `--no-prefetch`: hard-disable the offline-cache feature (hide the toggle).
+    pub prefetch_locked: bool,
 }
 
 /// Assemble a fresh distribution at `out`.
@@ -210,6 +234,8 @@ pub fn pack(opts: &PackOptions) -> Result<()> {
             external_sources: opts.external_sources,
             pwa: opts.pwa,
             home: opts.home.clone(),
+            prefetch: opts.prefetch,
+            prefetch_locked: opts.prefetch_locked,
         },
     )?;
     if opts.llms {
@@ -516,14 +542,17 @@ fn add_docset(
             .with_context(|| format!("indexing assets in {}", dest_khb.display()))?;
     }
 
-    let file = if compact {
+    // Hash the *shipped* bytes (what the viewer actually fetches: the gzip'd blob
+    // when compact, else the plain `.khb`) so the cache key tracks the transferred
+    // content exactly.
+    let (file, shipped) = if compact {
         let gz = gzip(&fs::read(&dest_khb)?)?;
         let gz_name = format!("{name}.gz"); // foo.khb -> foo.khb.gz
-        fs::write(docsets_dir.join(&gz_name), gz)?;
+        fs::write(docsets_dir.join(&gz_name), &gz)?;
         fs::remove_file(&dest_khb)?;
-        format!("docsets/{gz_name}")
+        (format!("docsets/{gz_name}"), gz)
     } else {
-        format!("docsets/{name}")
+        (format!("docsets/{name}"), fs::read(&dest_khb)?)
     };
 
     Ok(ManifestEntry {
@@ -535,6 +564,7 @@ fn add_docset(
         version,
         attachments,
         streaming: stream,
+        hash: content_hash(&shipped),
     })
 }
 
@@ -601,6 +631,21 @@ fn gzip(data: &[u8]) -> Result<Vec<u8>> {
     let mut encoder = GzEncoder::new(Vec::new(), Compression::best());
     encoder.write_all(data)?;
     Ok(encoder.finish()?)
+}
+
+/// A short content hash (FNV-1a, 64-bit, as 16 hex digits) of a shipped file.
+/// Not cryptographic — it only needs to change when the bytes change, giving each
+/// build of a file a stable cache key for `docsets.json`. Fully specified (unlike
+/// `DefaultHasher`), so the same bytes hash identically across platforms and
+/// toolchains: an unchanged docset keeps its key — and the viewer's cache — deploy
+/// to deploy, and only a real content change re-keys it.
+fn content_hash(bytes: &[u8]) -> String {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325; // FNV offset basis
+    for &b in bytes {
+        h ^= u64::from(b);
+        h = h.wrapping_mul(0x0000_0100_0000_01b3); // FNV prime
+    }
+    format!("{h:016x}")
 }
 
 fn copy_dir(src: &Path, dst: &Path) -> Result<()> {
@@ -708,6 +753,7 @@ mod tests {
             version: String::new(),
             attachments: Vec::new(),
             streaming: false,
+            hash: String::new(),
         });
         let json = serde_json::to_value(&manifest).unwrap();
         assert_eq!(json["docsets"][0]["title"], "A v2");
@@ -716,6 +762,21 @@ mod tests {
             json["folders"][0]["children"][1]["children"][0]["collection"],
             "oldapp"
         );
+    }
+
+    #[test]
+    fn content_hash_is_stable_and_content_sensitive() {
+        // Fixed vectors pin the algorithm — a regression here silently re-keys
+        // every docset URL (mass cache-bust), so the constants must not drift.
+        assert_eq!(content_hash(b""), "cbf29ce484222325");
+        assert_eq!(content_hash(b"a"), "af63dc4c8601ec8c");
+        // Same bytes → same hash; a one-byte change → a different hash.
+        assert_eq!(
+            content_hash(b"SQLite format 3"),
+            content_hash(b"SQLite format 3")
+        );
+        assert_ne!(content_hash(b"khb-v1"), content_hash(b"khb-v2"));
+        assert_eq!(content_hash(b"khb").len(), 16); // always 16 hex digits
     }
 
     #[test]

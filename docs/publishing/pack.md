@@ -41,4 +41,5 @@ update an existing distribution without re-packing everything, use
 | `--home <id\|search>` | the cold-start landing view — see [The landing page](pack-home) |
 | `--llms` | also emit the AI-facing `llms.txt` export — see [AI export](pack-llms) |
 | `--stream [<path>…]` | mark docset(s) for page-level streaming — see [Streaming](pack-stream) |
+| `--prefetch` / `--no-prefetch` | default the offline cache on, or hard-disable it — see [Streaming](pack-stream) |
 | `--folders <file.json>` | copy a validated `folders` tree (nested TOC folders grouping product families) into `docsets.json` — schema in [manifest schemas](khb-internals:manifest-schemas). `patch` preserves it untouched |

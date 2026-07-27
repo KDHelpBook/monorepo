@@ -12,25 +12,15 @@ the browser renders it natively — no KaTeX or MathJax at runtime.
 
 Inline math uses single `$…$`:
 
-~~~code-preview example
-```md
+```ext:example
 The relation $E = mc^2$ links mass and energy.
 ```
-```md
-The relation $E = mc^2$ links mass and energy.
-```
-~~~
 
 Display math (its own centred block) uses `$$…$$`:
 
-~~~code-preview example
-```md
+```ext:example
 $$\int_0^1 x^2 \, dx = \frac{1}{3}$$
 ```
-```md
-$$\int_0^1 x^2 \, dx = \frac{1}{3}$$
-```
-~~~
 
 ## Code-fence syntax
 

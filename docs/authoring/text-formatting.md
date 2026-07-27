@@ -22,83 +22,53 @@ inline components — see [Differences from GitHub Markdown](differences).
 Double asterisks make strong emphasis — key terms on first use, UI labels, the one
 word a skimming reader must not miss.
 
-~~~code-preview example
-```md
+```ext:example
 Press **Compile** to build the book.
 ```
-```md
-Press **Compile** to build the book.
-```
-~~~
 
 ## Italic
 
 Single asterisks make light emphasis — a stressed word, a book title, a term used
 in a borrowed sense.
 
-~~~code-preview example
-```md
+```ext:example
 The id is *stable*: links keep working after a rename.
 ```
-```md
-The id is *stable*: links keep working after a rename.
-```
-~~~
 
 ## Bold italic
 
 Triple asterisks combine both — rare, for the strongest inline stress.
 
-~~~code-preview example
-```md
+```ext:example
 Back up the file ***before*** converting it.
 ```
-```md
-Back up the file ***before*** converting it.
-```
-~~~
 
 ## Strikethrough
 
 Double tildes cross text out — something that no longer applies but should stay
 visible, like a superseded value or a corrected claim.
 
-~~~code-preview example
-```md
+```ext:example
 The limit is ~~10~~ 25 attachments.
 ```
-```md
-The limit is ~~10~~ 25 attachments.
-```
-~~~
 
 ## Insert
 
 Double pluses mark text as an addition — the counterpart of strikethrough, for
 diff-style edits where the old and the new stand side by side.
 
-~~~code-preview example
-```md
+```ext:example
 The limit is ~~10~~ ++25++ attachments.
 ```
-```md
-The limit is ~~10~~ ++25++ attachments.
-```
-~~~
 
 ## Inline code
 
 Backticks typeset identifiers verbatim in monospace — file names, ids, field values,
 anything a reader might type.
 
-~~~code-preview example
-```md
+```ext:example
 Set `language = "en"` in `docset.toml`.
 ```
-```md
-Set `language = "en"` in `docset.toml`.
-```
-~~~
 
 ## Inline code attributes
 
@@ -121,28 +91,18 @@ a space is just text.
 Double equals signs mark text like a highlighter pen — for drawing the eye to the
 key fragment of a sentence, a value in a longer line, the part that changed.
 
-~~~code-preview example
-```md
+```ext:example
 Set the ==id== field before anything else.
 ```
-```md
-Set the ==id== field before anything else.
-```
-~~~
 
 ## Underline
 
 Double underscores underline text — useful for terms that carry a defined meaning,
 or wherever house style calls for underlining instead of italics.
 
-~~~code-preview example
-```md
+```ext:example
 A __docset__ is one compiled book.
 ```
-```md
-A __docset__ is one compiled book.
-```
-~~~
 
 > [!IMPORTANT]
 > In plain Markdown `__x__` means bold — here it means underline. Write bold with
@@ -152,27 +112,17 @@ A __docset__ is one compiled book.
 
 Carets raise text — exponents, ordinals, footnote-style markers in prose.
 
-~~~code-preview example
-```md
+```ext:example
 E = mc^2^, the 4^th^ edition
 ```
-```md
-E = mc^2^, the 4^th^ edition
-```
-~~~
 
 ## Subscript
 
 Single tildes lower text — chemical formulas, variable indices.
 
-~~~code-preview example
-```md
+```ext:example
 H~2~O, x~1~ … x~n~
 ```
-```md
-H~2~O, x~1~ … x~n~
-```
-~~~
 
 > [!IMPORTANT]
 > In GitHub Markdown a single tilde can mean strikethrough — here it means
@@ -183,14 +133,9 @@ H~2~O, x~1~ … x~n~
 Double pipes black out text until the reader clicks it — for hiding answers, solutions,
 or plot points.
 
-~~~code-preview example
-```md
+```ext:example
 The answer is ||42||.
 ```
-```md
-The answer is ||42||.
-```
-~~~
 
 ## Literal characters
 
@@ -200,14 +145,9 @@ the *character*, a backslash before it turns the syntax off: `\~`, `\*`, `\_`,
 (a single `~` is subscript syntax), asterisks and underscores occasionally, the
 rest rarely.
 
-~~~code-preview example
-```md
+```ext:example
 Takes \~5 minutes; required fields are marked with \*.
 ```
-```md
-Takes \~5 minutes; required fields are marked with \*.
-```
-~~~
 
 Inside `inline code` and code blocks nothing is ever escaped — write `~/books`,
 `a * b` or `__init__` there as-is.
@@ -217,27 +157,16 @@ Inside `inline code` and code blocks nothing is ever escaped — write `~/books`
 A blank line starts a new paragraph. For a **hard line break** inside one — an
 address, a verse — end the line with a backslash (or two trailing spaces):
 
-~~~code-preview example
-```md
+```ext:example
 First line\
 forced onto a new line.
 ```
-```md
-First line\
-forced onto a new line.
-```
-~~~
 
 ## Horizontal rules
 
 Three or more `-`, `*`, or `_` alone on a line draw a divider — a scene change
 between passages that don't deserve separate headings:
 
-~~~code-preview example
-```md
+```ext:example
 ---
 ```
-```md
----
-```
-~~~

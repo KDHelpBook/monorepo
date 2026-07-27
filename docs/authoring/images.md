@@ -13,7 +13,7 @@ renders inline, a link to any other file becomes a download. Use forward slashes
 and keep files under `assets/`; other relative paths are left as plain links,
 which won't resolve in the rendered page.
 
-```md
+```ext:example
 ![How a docset is built](assets/khb-pipeline.svg)
 
 Download the [quick-reference card](assets/quick-reference.txt).
@@ -25,7 +25,7 @@ Standard image syntax. An image renders inline, and the viewer offers a
 **lightbox** (click to enlarge). Write meaningful `alt` text — it's what screen
 readers announce and what search sees.
 
-```md
+```ext:example
 ![How a docset is built](assets/khb-pipeline.svg)
 ```
 
@@ -38,7 +38,7 @@ readers announce and what search sees.
 Give an image a **title** — the quoted text after the URL — and it renders as a
 `<figure>` with the title shown as a `<figcaption>` beneath it.
 
-```md
+```ext:example
 ![Architecture](assets/khb-pipeline.svg "How a docset is built")
 ```
 
@@ -49,7 +49,7 @@ full-resolution phone screenshot fills the whole page. Cap the *displayed* size
 with hints on the path: `#w=` takes pixels or a percentage of the column, `#h=`
 takes pixels or a share of the reading pane (`vh`), and `&` combines them.
 
-```md
+```ext:example
 ![Tap the card](assets/tap-screen.png#w=300)
 ![Result, half-width](assets/result.png#w=50%)
 ![Tall screenshot](assets/settings.png#h=50vh)
@@ -158,7 +158,7 @@ A **link to a non-image asset** (`[label](assets/…)`) becomes a **download**. 
 file under `assets/` is stored whether or not a page references it, so a folder of
 downloadable extras needs no inline mentions.
 
-```md
+```ext:example
 Download the [quick-reference card](assets/quick-reference.txt).
 ```
 

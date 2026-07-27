@@ -10,7 +10,7 @@ related: [text-formatting, frontmatter-title, frontmatter-toc]
 Use `#` for headings — one to six `#` for levels 1–6. A blank line separates
 paragraphs; a single newline inside a paragraph is treated as a space.
 
-```md
+```ext:example
 # Page title (H1)
 
 ## A section
@@ -33,7 +33,7 @@ Every heading is given an `id` — the slug of its text — and a hover-revealed
 permalink, so a section can be deep-linked with a [`#slug` anchor](links). Cross-page
 navigation still comes from the docset's `toc.yaml` / folder structure.
 
-```md
+```ext:example
 ## Where to start
 
 …later, from anywhere on this page…

@@ -91,10 +91,14 @@ the pointer.
 
 `GET /docsets.json` lists `docsets/*/latest.json`, orders entries per
 `site.json.order` (unlisted append last), marks everything `streaming: true`
-with versioned `/d/…` paths, and attaches `site.json.folders` verbatim (schema:
-`docs/internals/manifest-schemas.md`). Cached ~60 s in the edge cache and
-purged best-effort on finalize. Because placement lives here — centrally — a
-publishing repo has no say in where its books appear in the tree.
+with versioned `/d/…` paths, exposes the main R2 object's ETag as the manifest
+`hash` used by the viewer's HTTP/offline cache, and attaches
+`site.json.folders` verbatim (schema: `docs/internals/manifest-schemas.md`).
+Older pointers without a hash remain valid. `site.json.config` also accepts the
+viewer's optional `prefetch` and `prefetchLocked` settings; both default off.
+The manifest is cached ~60 s in the edge cache and purged best-effort on
+finalize. Because placement lives here — centrally — a publishing repo has no
+say in where its books appear in the tree.
 
 ## Local development
 

@@ -75,6 +75,11 @@ enum Command {
         /// Where attachments go: embedded in the `.khb`, or a sibling `.khba`.
         #[arg(long = "assets", value_enum, default_value = "embed")]
         assets: AssetsMode,
+        /// Run the docset's declared `[extensions]` block transformers (external
+        /// processes). Off by default: `docset.toml` may come from an untrusted source,
+        /// and extensions break the otherwise hermetic, offline build.
+        #[arg(long = "allow-extensions")]
+        allow_extensions: bool,
     },
     /// Convert between `.khb` and `.khbb` (direction inferred from file extensions).
     Convert {
@@ -136,6 +141,15 @@ enum Command {
         /// Copied into `docsets.json`; `patch` preserves it.
         #[arg(long, value_name = "FILE")]
         folders: Option<PathBuf>,
+        /// Default the viewer's "keep streamed books offline" toggle to on: a
+        /// streamed book is also fetched whole in the background and cached, so
+        /// later loads open it from cache/offline. Users can still turn it off.
+        #[arg(long)]
+        prefetch: bool,
+        /// Hard-disable the offline-cache feature: the viewer hides the toggle and
+        /// never prefetches. For sites that don't want it at all.
+        #[arg(long = "no-prefetch", conflicts_with = "prefetch")]
+        no_prefetch: bool,
     },
     /// Add or replace docsets in an already-built distribution.
     Patch {
@@ -174,7 +188,8 @@ fn main() -> Result<()> {
             out,
             format,
             assets,
-        } => compile(&src, &out, format, assets),
+            allow_extensions,
+        } => compile(&src, &out, format, assets, allow_extensions),
         Command::Convert { input, out } => convert(&input, &out),
         Command::Pack {
             viewer,
@@ -190,6 +205,8 @@ fn main() -> Result<()> {
             base_url,
             stream,
             folders,
+            prefetch,
+            no_prefetch,
         } => {
             let mut external_sources = profile == Profile::Reader;
             if lock {
@@ -214,6 +231,8 @@ fn main() -> Result<()> {
                 base_url,
                 stream,
                 folders,
+                prefetch,
+                prefetch_locked: no_prefetch,
             })
         }
         Command::Patch {
@@ -272,7 +291,13 @@ fn inspect(src: &str) -> Result<()> {
     Ok(())
 }
 
-fn compile(src: &Path, out: &Path, format: Format, assets: AssetsMode) -> Result<()> {
+fn compile(
+    src: &Path,
+    out: &Path,
+    format: Format,
+    assets: AssetsMode,
+    allow_extensions: bool,
+) -> Result<()> {
     let docset =
         source::load_dir(src).with_context(|| format!("loading source {}", src.display()))?;
     let (id, language, pages) = (
@@ -280,8 +305,12 @@ fn compile(src: &Path, out: &Path, format: Format, assets: AssetsMode) -> Result
         docset.language.clone(),
         docset.pages.len(),
     );
-    let mut rendered =
-        render::render(&docset).with_context(|| format!("rendering {}", src.display()))?;
+    let render_opts = render::RenderOptions {
+        allow_extensions,
+        source_dir: Some(src),
+    };
+    let mut rendered = render::render(&docset, &render_opts)
+        .with_context(|| format!("rendering {}", src.display()))?;
     match format {
         Format::Khb => {
             if assets == AssetsMode::Sidecar && !rendered.assets.is_empty() {

@@ -7,15 +7,17 @@
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
     <meta name="theme-color" content="#3c5f95" />
-    <!-- Apply the saved colour theme before first paint (no flash of light chrome
-         when reloading in dark). Mirrors loadTheme()/effectiveDark() in main.ts;
-         the reading iframe is themed separately via frameDoc(). -->
+    <!-- Apply the saved *shell* theme before first paint (no flash of light chrome
+         when reloading in dark). Mirrors loadTheme()/shellDark() in main.ts; the
+         reading iframe is themed separately via frameDoc(). "dark-shell" darkens the
+         chrome but leaves the reading pane light. -->
     <script>
       (function () {
         try {
           var m = localStorage.getItem("khb.theme");
           var dark =
             m === "dark" ||
+            m === "dark-shell" ||
             ((m === "system" || m === null) &&
               window.matchMedia("(prefers-color-scheme: dark)").matches);
           if (dark)
@@ -73,8 +75,25 @@
             >
               Manage docsets…
             </div>
+            <div
+              class="menu-item menu-radio"
+              data-action="toggle-prefetch"
+              role="menuitemcheckbox"
+              aria-checked="false"
+            >
+              <span class="menu-check" aria-hidden="true"></span
+              ><span data-i18n="prefetchToggle">Keep books offline</span>
+            </div>
+            <div class="menu-sep"></div>
             <div class="menu-item" data-action="share" data-i18n="share">
               Share…
+            </div>
+            <div
+              class="menu-item"
+              data-action="copy-llm-links"
+              data-i18n="copyLlmLinks"
+            >
+              Copy links for LLMs
             </div>
             <div class="menu-item" data-action="print" data-i18n="print">
               Print…
@@ -107,13 +126,6 @@
             </div>
             <div
               class="menu-item"
-              data-action="search-page"
-              data-i18n="advancedSearch"
-            >
-              Advanced search…
-            </div>
-            <div
-              class="menu-item"
               data-action="mode-favorites"
               data-i18n="favorites"
             >
@@ -122,13 +134,6 @@
             <div class="menu-sep"></div>
             <div class="menu-item" data-action="sync" data-i18n="sync">
               Sync with Contents
-            </div>
-            <div
-              class="menu-item"
-              data-action="clear-highlight"
-              data-i18n="clearHighlight"
-            >
-              Clear search highlight
             </div>
             <div class="menu-item" data-action="font-up" data-i18n="largerText">
               Larger text
@@ -139,6 +144,13 @@
               data-i18n="smallerText"
             >
               Smaller text
+            </div>
+            <div
+              class="menu-item"
+              data-action="font-reset"
+              data-i18n="resetText"
+            >
+              Reset text size
             </div>
             <div class="menu-sep"></div>
             <!-- Colour theme (three radio-style items; the active one shows a ✓,
@@ -162,13 +174,44 @@
             </div>
             <div
               class="menu-item menu-radio"
+              data-action="theme-dark-shell"
+              data-theme-opt="dark-shell"
+            >
+              <span class="menu-check" aria-hidden="true"></span
+              ><span data-i18n="themeDarkShell">Dark shell, light pages</span>
+            </div>
+            <div
+              class="menu-item menu-radio"
               data-action="theme-system"
               data-theme-opt="system"
             >
               <span class="menu-check" aria-hidden="true"></span
               ><span data-i18n="themeSystem">Use system setting</span>
             </div>
-            <div class="menu-sep"></div>
+          </div>
+        </div>
+        <div class="menu" data-menu="search">
+          <span class="menu-label" data-i18n="menuSearch">Search</span>
+          <div class="menu-popup">
+            <div
+              class="menu-item"
+              data-action="search-page"
+              data-i18n="advancedSearch"
+            >
+              Advanced search…
+            </div>
+            <div
+              class="menu-item"
+              data-action="clear-highlight"
+              data-i18n="clearHighlight"
+            >
+              Clear search highlight
+            </div>
+          </div>
+        </div>
+        <div class="menu" data-menu="go">
+          <span class="menu-label" data-i18n="menuGo">Go</span>
+          <div class="menu-popup">
             <div class="menu-item" data-action="back" data-i18n="back">
               Back
             </div>
@@ -343,6 +386,7 @@
           class="tbtn theme-btn"
           id="theme-btn"
           data-action="theme-cycle"
+          data-mode="system"
           title="Theme"
           data-i18n-title="themeMenu"
           aria-label="Theme"
@@ -382,14 +426,45 @@
               fill="currentColor"
             />
           </svg>
-        </button>
-        <button
-          class="tbtn"
-          data-action="sync"
-          title="Sync with Contents"
-          data-i18n-title="sync"
-        >
-          <span data-i18n="sync">Sync</span>
+          <svg
+            class="ico-system"
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            aria-hidden="true"
+          >
+            <circle
+              cx="8"
+              cy="8"
+              r="6"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.3"
+            />
+            <path d="M8 2.7a5.3 5.3 0 0 1 0 10.6z" fill="currentColor" />
+          </svg>
+          <svg
+            class="ico-shell"
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            aria-hidden="true"
+          >
+            <rect
+              x="1.5"
+              y="2.5"
+              width="13"
+              height="11"
+              rx="1.5"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.2"
+            />
+            <path
+              d="M3 2.5 h10 a1.5 1.5 0 0 1 1.5 1.5 v1.5 h-13 v-1.5 a1.5 1.5 0 0 1 1.5 -1.5 z"
+              fill="currentColor"
+            />
+          </svg>
         </button>
         <div class="tsep"></div>
         <select
@@ -422,6 +497,15 @@
             Manage docsets…
           </button>
           <button
+            class="more-item more-check"
+            data-action="toggle-prefetch"
+            role="menuitemcheckbox"
+            aria-checked="false"
+          >
+            <span class="more-check-mark" aria-hidden="true"></span>
+            <span data-i18n="prefetchToggle">Keep books offline</span>
+          </button>
+          <button
             class="more-item"
             data-action="search-page"
             data-i18n="advancedSearch"
@@ -441,6 +525,16 @@
           <button class="more-item" data-action="share" data-i18n="share">
             Share…
           </button>
+          <button
+            class="more-item"
+            data-action="copy-llm-links"
+            data-i18n="copyLlmLinks"
+          >
+            Copy links for LLMs
+          </button>
+          <button class="more-item" data-action="print" data-i18n="print">
+            Print…
+          </button>
           <div class="more-sep"></div>
           <!-- Text size lives here (not just the off-screen toolbar) so it's
                reachable on a phone. These buttons keep the menu open (they aren't
@@ -455,6 +549,14 @@
                 data-i18n-title="smallerText"
               >
                 A−
+              </button>
+              <button
+                class="more-size-btn"
+                data-action="font-reset"
+                title="Reset text size"
+                data-i18n-title="resetText"
+              >
+                A
               </button>
               <button
                 class="more-size-btn"
@@ -488,6 +590,15 @@
                 data-i18n-title="themeDark"
               >
                 ☾
+              </button>
+              <button
+                class="more-size-btn"
+                data-action="theme-dark-shell"
+                data-theme-opt="dark-shell"
+                title="Dark shell, light pages"
+                data-i18n-title="themeDarkShell"
+              >
+                ◨
               </button>
               <button
                 class="more-size-btn"
@@ -755,12 +866,15 @@
                  (WITHOUT allow-same-origin) keeps the frame an isolated opaque
                  origin — untrusted JS can run but can't reach the app; our trusted
                  bridge talks to the app only via postMessage (validated). No
-                 popups/modals/forms/top-nav tokens: links go through the bridge. -->
+                 popups/modals/forms/top-nav tokens: links go through the bridge.
+                 `allow-downloads` lets an asset link save its file (the docset's
+                 own bytes, resolved to a `data:` URL) — it grants no app or
+                 same-origin access, so origin isolation is untouched. -->
             <iframe
               id="content-frame"
               class="content-frame"
               title="Documentation"
-              sandbox="allow-scripts"
+              sandbox="allow-scripts allow-downloads"
               referrerpolicy="no-referrer"
             ></iframe>
             <!-- App-generated UI (the Search results page) — not untrusted. -->

@@ -70,13 +70,21 @@ that the TypeScript viewer reached parity; it lives in git history (commit
 
 ## Security (untrusted docsets)
 - Page bodies (`body_html`) are **untrusted** and rendered in a **sandboxed `<iframe>`**
-  with `allow-scripts` but **without `allow-same-origin`** — origin isolation is the
-  boundary: untrusted JS may run but can't reach the app (no parent DOM / localStorage
-  / IndexedDB / chrome), and gets no other tokens (no popups/top-nav). A trusted
+  with `allow-scripts allow-downloads` but **without `allow-same-origin`** — origin
+  isolation is the boundary: untrusted JS may run but can't reach the app (no parent DOM
+  / localStorage / IndexedDB / chrome). `allow-downloads` only lets an asset link save
+  its file; no other tokens (no popups/top-nav). A trusted
   **bridge** (`FRAME_BRIDGE` in `main.ts`) is the only channel: it `postMessage`s link
   clicks (with modifiers → new tab) + scroll; the app validates every message by
   source + shape (`open`/`ext`, safe-by-design). Assets inline as `data:`. The Search
   page (app UI) stays in the normal `#content` div. See `docs/format.md` §Security.
+- **Printing** can't use that iframe: mobile browsers refuse to paginate a cross-origin
+  iframe when printing (they clip it to the visible area). So *File → Print* opens the
+  page as its **own top-level tab** (`buildPrintDoc` in `main.ts`) whose safety comes from
+  a strict **CSP** (`default-src 'none'`, `script-src 'nonce-…'`) instead of origin
+  isolation: no network, and the *only* script that runs is our own per-print nonce'd
+  self-print snippet — untrusted content is already script-stripped and can't know the
+  nonce. The Search/Manage overlay (same-origin `#content`) still prints in place.
 
 ## Key decisions & conventions
 - **Rust `core` is the engine for CLI + Tauri.** The browser mirrors its SQL via

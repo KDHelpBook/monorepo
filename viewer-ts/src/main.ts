@@ -14,10 +14,14 @@ import {
   addExtraPack,
   addRemote,
   allDocsets,
+  blobKey,
   deleteDocset,
+  getBlob,
   getRemotes,
   importKhbm,
   loadExtraPacks,
+  pruneBlobs,
+  putBlob,
   putDocset,
   removeRemote,
 } from "./data/library";
@@ -27,6 +31,7 @@ import {
   loadExpanded,
   loadFavorites,
   loadFontSize,
+  loadPrefetch,
   loadSeenVersions,
   loadTabs,
   loadTheme,
@@ -35,6 +40,7 @@ import {
   saveExpanded,
   saveFavorites,
   saveFontSize,
+  savePrefetch,
   saveSeenVersions,
   saveTabs,
   saveTheme,
@@ -67,6 +73,12 @@ interface Config {
   /** Cold-start landing: a page id (`docsetId:localId`) or `"search"`. When
    *  unset the viewer defaults to the Search page (search-first). */
   home?: string;
+  /** Default for the "keep streamed books offline" (prefetch-to-cache) toggle —
+   *  a per-device user setting overrides it. Off when unset. */
+  prefetch?: boolean;
+  /** Hard-disable prefetch (`khb pack --no-prefetch`): hide the toggle and never
+   *  prefetch, ignoring any per-device choice. */
+  prefetchLocked?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -214,6 +226,14 @@ function chooseLang(available: string[]): string {
 // bare pathname (see sw.js).
 const fresh = (file: string): string => `${file}?v=${__BUILD_ID__}`;
 
+// A docset's own cache key. Prefer the manifest's per-content hash: an unchanged
+// book then keeps its URL — and the viewer's HTTP cache — across deploys, while a
+// changed (or rebuilt same-named preview) book gets a fresh key so a stale byte
+// range can't mix with a fresh one into a malformed image. Older packs carry no
+// hash → fall back to the per-build stamp (correct, just re-fetched each deploy).
+const stampDocset = (url: string, hash?: string): string =>
+  hash ? `${url}?v=${hash}` : fresh(url);
+
 async function loadConfig(): Promise<Config> {
   try {
     const res = await fetch(fresh("config.json"));
@@ -238,7 +258,8 @@ function fmtBytes(n: number): string {
   return `${n} B`;
 }
 
-/** Drive the cold-start panel from a whole-file download's byte counts. */
+/** Drive the cold-start panel from a whole-file download's byte counts. `part` is
+ *  set while an attachment pack (not the docset itself) is downloading. */
 function setDownloadProgress(
   loaded: number,
   total: number | null,
@@ -246,6 +267,7 @@ function setDownloadProgress(
   index: number,
   count: number,
   lang: string,
+  part?: string,
 ): void {
   const box = document.getElementById("loading");
   if (!box || box.classList.contains("done")) return;
@@ -254,7 +276,8 @@ function setDownloadProgress(
   if (titleEl) titleEl.textContent = s.downloadingHelp;
   const nameEl = document.getElementById("loading-name");
   if (nameEl) {
-    nameEl.textContent = count > 1 ? `${title} (${index + 1}/${count})` : title;
+    const base = count > 1 ? `${title} (${index + 1}/${count})` : title;
+    nameEl.textContent = part ? `${base} — ${s.packLabel}` : base;
   }
   const prog = document.getElementById("loading-progress");
   const bar = document.getElementById("loading-bar");
@@ -479,23 +502,49 @@ async function bootstrap(): Promise<void> {
   // path above. Same negotiation as a remote: the host must honour Range and a
   // cheap streamed peek must succeed, else fall back to the whole fetch.
   const bundled: DocVariant[] = [];
+  // Prefetch-to-cache ("keep streamed books offline"): a per-device toggle with a
+  // config default. When on, a streamed book that we've already downloaded whole
+  // opens straight from IndexedDB; otherwise it streams now and is prefetched to
+  // cache in the background (then hot-swapped) — see start()/runPrefetch.
+  // `--no-prefetch` hard-disables the feature (toggle hidden, never prefetches),
+  // overriding any per-device choice; otherwise the user setting wins over the
+  // config default.
+  const prefetchOn =
+    !config.prefetchLocked && loadPrefetch(config.prefetch ?? false);
+  const prefetch = new Map<string, PrefetchItem>(); // streamed book id → how to cache it
+  const validBlobKeys = new Set<string>(); // current keys, to prune stale ones
   for (const d of manifest.docsets) {
     const packs = [...(d.attachments ?? []), ...extraOf(d.id)];
     let source: DocsetSource | null = null;
     // The manifest `file` is dist-relative — resolve it (and the packs) against
     // the site base so the Range probe and the streaming engine get real URLs.
-    const url = resolveManifestUrl(d.file, document.baseURI);
-    if (streamEligible(d, extraOf(d.id)) && (await rangeSupported(url))) {
+    // The content hash (`d.hash`) keys both the HTTP cache and the prefetch cache,
+    // so a rebuilt (same-named) book gets a fresh URL while an unchanged one hits
+    // cache; and a Range read never mixes a stale range into a malformed image.
+    const url = stampDocset(resolveManifestUrl(d.file, document.baseURI), d.hash);
+    const packUrls = packs.map((p) => fresh(resolveManifestUrl(p, document.baseURI)));
+    const eligible = streamEligible(d, extraOf(d.id));
+    // Cache-first: open the whole `.khb` from IndexedDB when we prefetched it.
+    if (eligible && d.hash) {
+      const key = blobKey(url, d.hash);
+      validBlobKeys.add(key);
+      if (prefetchOn) {
+        const cached = await getBlob(key);
+        if (cached)
+          source = {
+            bytes: cached.bytes,
+            attachments: cached.packs.map((bytes) => ({ bytes })),
+          };
+      }
+    }
+    const fromCache = source != null; // opened whole from the prefetch cache
+    if (!source && eligible && (await rangeSupported(url))) {
       try {
         const { StreamingDocset } = await import("./data/streaming-docset");
         await StreamingDocset.peek(url); // validates engine + host end-to-end
-        source = {
-          url,
-          mode: "streaming",
-          attachments: packs.map((p) =>
-            resolveManifestUrl(p, document.baseURI),
-          ),
-        };
+        source = { url, mode: "streaming", attachments: packUrls };
+        // Remember how to prefetch this streamed book whole in the background.
+        if (d.hash) prefetch.set(d.id, { url, hash: d.hash, packUrls });
       } catch (e) {
         // Same fallback as remotes: whole fetch, with the reason logged.
         console.warn("khb: streaming open failed, fetching whole", e);
@@ -508,11 +557,20 @@ async function bootstrap(): Promise<void> {
       version: d.version ?? "",
       title: d.title,
       source: source ?? {
-        file: d.file,
+        // Same content-keyed cache-busting on the whole-fetch fallback; packs
+        // carry no per-content hash in the manifest, so they stay on the build stamp.
+        file: stampDocset(d.file, d.hash),
         // A `.gz` suffix (on the docset or a pack) decompresses on fetch.
-        attachments: packs.map((file) => ({ file })),
+        attachments: packs.map((file) => ({ file: fresh(file) })),
       },
-      origin: { kind: "bundled", streaming: source != null, packs },
+      // `streaming` reflects the live transport: a cached (bytes) source is whole,
+      // not streamed, so only a real streaming source counts.
+      origin: {
+        kind: "bundled",
+        streaming: !!source && "mode" in source && source.mode === "streaming",
+        offline: fromCache,
+        packs,
+      },
     });
   }
 
@@ -591,8 +649,8 @@ async function bootstrap(): Promise<void> {
   // chosen edition) and keep loading the rest. Only an empty result blocks the app.
   const failed: FailedBook[] = [];
   const collection = await Collection.load(sources, lang, {
-    onProgress: (l, t, i, n) =>
-      setDownloadProgress(l, t, titles[i] ?? "", i, n, lang),
+    onProgress: (l, t, i, n, part) =>
+      setDownloadProgress(l, t, titles[i] ?? "", i, n, lang, part),
     labels: titles,
     onError: (e, i) => {
       const variant = books[i];
@@ -617,9 +675,25 @@ async function bootstrap(): Promise<void> {
     variants,
     sanitizeFolders(manifest.folders),
     failed,
+    { on: prefetchOn, items: prefetch, validKeys: validBlobKeys },
   );
   // Some books loaded but others failed — a non-blocking notice naming the bad ones.
   if (failed.length) showLoadWarnings(failed.map((f) => f.error), strings(lang));
+}
+
+/** How to prefetch one streamed book whole (for the offline cache). */
+interface PrefetchItem {
+  url: string;
+  hash: string;
+  packUrls: string[];
+}
+
+/** The prefetch-to-cache plan handed to start(): the toggle state, the streamed
+ *  books that can be prefetched, and the set of currently-valid cache keys. */
+interface PrefetchPlan {
+  on: boolean;
+  items: Map<string, PrefetchItem>;
+  validKeys: Set<string>;
 }
 
 /** Where a book came from + its packs — for the Manage docsets page. */
@@ -630,6 +704,10 @@ interface BookOrigin {
   /** Page-level streaming: the remote's transport preference, or — for a
    *  bundled book — the transport actually negotiated at load. */
   streaming?: boolean;
+  /** Served whole from the prefetch cache (IndexedDB) — set when a book opens
+   *  from cache, or a streamed book is hot-swapped to its cached copy. Shown as
+   *  "· offline" instead of "· streaming". Mutated live on hot-swap. */
+  offline?: boolean;
   /** Attachment packs: `.khba` paths/URLs (bundled/remote) or generic labels. */
   packs: string[];
 }
@@ -856,6 +934,7 @@ function start(
   variants: DocVariant[],
   folders: FolderNode[],
   failed: FailedBook[],
+  prefetchPlan: PrefetchPlan,
 ): void {
   const s: Strings = strings(lang);
   // Books that failed to load — kept visible (sidebar / About / Manage) marked as
@@ -872,6 +951,18 @@ function start(
       .querySelectorAll<HTMLElement>(
         '[data-action="open-docset"], [data-action="open-url"], [data-action="manage-docsets"]',
       )
+      .forEach((el) => (el.style.display = "none"));
+  }
+  // "Copy links for LLMs" only makes sense when the llms.txt export exists —
+  // `khb pack --llms` advertises it with a <link rel="llms-txt"> in the head (see
+  // compiler/cli/src/publish.rs). Absent it (dev server / non-llms pack), llms.txt
+  // and the md/ files don't exist, so hide the menu item on every surface.
+  const llmsLink = document.querySelector<HTMLLinkElement>(
+    'link[rel="llms-txt"]',
+  );
+  if (!llmsLink) {
+    document
+      .querySelectorAll<HTMLElement>('[data-action="copy-llm-links"]')
       .forEach((el) => (el.style.display = "none"));
   }
   const leftBody = $("#left-body");
@@ -929,6 +1020,9 @@ function start(
   // Touch device? Tree folder-pages then expand on a single tap (double-tap zooms).
   const coarsePointer = window.matchMedia("(pointer: coarse)").matches;
   let currentId = "";
+  // The current doc page's sanitized HTML, stashed at render time so File → Print can
+  // reproduce it as a standalone, top-level print document (see printCurrent).
+  let printSourceHtml = "";
   // Monotonic tokens so a slow async load/search (streaming) that finishes after a
   // newer one has started is dropped instead of clobbering the newer result.
   let loadSeq = 0;
@@ -937,19 +1031,29 @@ function start(
   let mode: Mode = "contents";
   let filterCategory = "";
   let filterProduct = ""; // family/collection scope (union by default)
-  let fontSize = loadFontSize(13);
-  // Colour theme: "light" | "dark" | "system" (system follows prefers-color-scheme).
+  // Reader font size (px): 13 is the default; font-up/down step within [11, 20],
+  // and font-reset returns to this value.
+  const DEFAULT_FONT_SIZE = 13;
+  let fontSize = loadFontSize(DEFAULT_FONT_SIZE);
+  // Colour theme. "system" follows the OS; "dark-shell" darkens the app chrome
+  // (menu/toolbar/tree/tabs and the Search/Manage app pages) but keeps the docset
+  // reading pane light. The shell and the reading pane are separate documents (the
+  // app document vs the sandboxed iframe), so we theme them independently.
   let themeMode: ThemeMode = loadTheme();
   const prefersDark = window.matchMedia("(prefers-color-scheme: dark)");
-  const effectiveDark = (): boolean =>
+  const shellDark = (): boolean =>
+    themeMode === "dark" ||
+    themeMode === "dark-shell" ||
+    (themeMode === "system" && prefersDark.matches);
+  const contentDark = (): boolean =>
     themeMode === "dark" || (themeMode === "system" && prefersDark.matches);
 
-  // Push the theme to the sandboxed content frame — a display-only message (no
-  // srcdoc rebuild), mirroring setFrameFont. The frame's bridge sets/clears
+  // Push the content theme to the sandboxed reading frame — a display-only message
+  // (no srcdoc rebuild), mirroring setFrameFont. The frame's bridge sets/clears
   // data-theme on its <html>; first paint is baked in by frameDoc().
   const setFrameTheme = (): void => {
     frame.contentWindow?.postMessage(
-      { t: "khb-app", a: "theme", dark: effectiveDark() },
+      { t: "khb-app", a: "theme", dark: contentDark() },
       "*",
     );
   };
@@ -960,12 +1064,31 @@ function start(
       el.classList.toggle("active", on);
       el.setAttribute("aria-checked", String(on));
     });
+    // The toolbar button reflects the current *mode* (not the effective theme), so
+    // each cycle click visibly changes its icon and tooltip — system/auto gets its
+    // own glyph. Without this, cycling within one effective theme (e.g. system →
+    // light on a light OS) looked like a dead click.
+    const btn = document.getElementById("theme-btn");
+    if (btn) {
+      btn.dataset.mode = themeMode;
+      const label =
+        themeMode === "light"
+          ? s.themeLight
+          : themeMode === "dark"
+            ? s.themeDark
+            : themeMode === "dark-shell"
+              ? s.themeDarkShell
+              : s.themeSystem;
+      const title = `${s.themeMenu}: ${label}`;
+      btn.title = title;
+      btn.setAttribute("aria-label", title);
+    }
   };
-  // Apply the effective theme to the app chrome (data-theme on <html>), the
-  // reading frame, and the toggle UI.
+  // Apply the shell theme to the app chrome (data-theme on <html>) and the content
+  // theme to the reading frame, then refresh the toggle UI.
   const applyTheme = (): void => {
     const de = document.documentElement;
-    if (effectiveDark()) de.setAttribute("data-theme", "dark");
+    if (shellDark()) de.setAttribute("data-theme", "dark");
     else de.removeAttribute("data-theme");
     setFrameTheme();
     updateThemeUI();
@@ -975,11 +1098,79 @@ function start(
     saveTheme(mode);
     applyTheme();
   };
-  const THEME_CYCLE: ThemeMode[] = ["light", "dark", "system"];
+  const THEME_CYCLE: ThemeMode[] = ["light", "dark", "dark-shell", "system"];
   // In "system" mode, follow the OS toggle live (a pinned light/dark ignores it).
   prefersDark.addEventListener("change", () => {
     if (themeMode === "system") applyTheme();
   });
+
+  // ---- prefetch to cache (keep streamed books offline) ----
+  // Streamed books we can download whole in the background, then hot-swap for the
+  // cached copy — no reload, identical content. The set shrinks as books swap.
+  let prefetchEnabled = prefetchPlan.on;
+  let prefetching = false;
+  const streamedIds = new Set(
+    [...prefetchPlan.items.keys()].filter((id) => collection.docsetById(id)),
+  );
+  const updatePrefetchUI = (): void => {
+    document
+      .querySelectorAll<HTMLElement>('[data-action="toggle-prefetch"]')
+      .forEach((el) => {
+        el.classList.toggle("active", prefetchEnabled);
+        el.setAttribute("aria-checked", String(prefetchEnabled));
+      });
+  };
+  // Replace an open streamed docset with a whole-file one of identical content —
+  // the TOC/structure is unchanged, so nothing needs re-rendering; later
+  // page/asset/search calls just use the cached (offline) docset.
+  const hotSwapToCache = async (
+    id: string,
+    bytes: Uint8Array,
+    packBytes: Uint8Array[],
+  ): Promise<void> => {
+    if (!streamedIds.has(id)) return; // gone / already swapped / version-switched
+    const { StreamingDocset } = await import("./data/streaming-docset");
+    const replacement = await StreamingDocset.openBytes(bytes, packBytes);
+    const previous = collection.docsetById(id);
+    collection = collection.withDocset(id, replacement);
+    streamedIds.delete(id);
+    previous?.close(); // free the streamed wa-sqlite handle
+    // Flip the transport shown in About / Manage (both render on demand from
+    // `variants`): this book is now served whole from cache, not streamed.
+    const v = variants.find((x) => x.id === id && x.origin.streaming);
+    if (v) {
+      v.origin.streaming = false;
+      v.origin.offline = true;
+    }
+  };
+  // Download each still-streaming book whole, cache it (IndexedDB), and hot-swap.
+  const runPrefetch = async (): Promise<void> => {
+    if (!prefetchEnabled || prefetching) return;
+    prefetching = true;
+    try {
+      for (const id of [...streamedIds]) {
+        const item = prefetchPlan.items.get(id);
+        if (!item || !prefetchEnabled || !streamedIds.has(id)) continue;
+        try {
+          const bytes = await fetchDocsetBytes(item.url);
+          const packs: Uint8Array[] = [];
+          for (const p of item.packUrls) packs.push(await fetchDocsetBytes(p));
+          await putBlob({ key: blobKey(item.url, item.hash), bytes, packs });
+          await hotSwapToCache(id, bytes, packs);
+        } catch {
+          /* offline / quota / fetch error — the book just keeps streaming */
+        }
+      }
+    } finally {
+      prefetching = false;
+    }
+  };
+  const setPrefetch = (on: boolean): void => {
+    prefetchEnabled = on;
+    savePrefetch(on);
+    updatePrefetchUI();
+    if (on) void runPrefetch(); // start caching (and hot-swapping) right away
+  };
   // Terms to highlight in the opened page — set when a search result is clicked,
   // persisted across navigation (classic help-viewer behaviour) until explicitly cleared.
   let highlightTerms: string[] = [];
@@ -1774,10 +1965,10 @@ function start(
   const narrow = (): boolean => window.matchMedia(COMPACT_MQ).matches;
 
   let pinned = true; // docked vs auto-hide
-  // Auto-hide reveals the panel on hover, which a touch device can't do. On coarse
-  // pointers (tablets) keep it docked and drop the pin toggle — the ☰ drawer covers
-  // "hide the panel" on phones/short screens.
-  if (coarsePointer) pinBtn.style.display = "none";
+  // The pin only makes sense on the wide, fine-pointer desktop layout: its auto-hide
+  // reveal is hover-only (dead on touch), and the compact drawer neutralizes auto-hide
+  // entirely. Its visibility is therefore handled declaratively in CSS — hidden in the
+  // compact/drawer layout and on coarse pointers — so it reacts to live window resizes.
 
   const renderPanel = (): void => {
     win.classList.toggle("autohide", !pinned);
@@ -2031,7 +2222,7 @@ function start(
   // Wrap page-body HTML into a full document for the sandboxed frame: the theme CSS
   // (the frame can't see the app stylesheet) + our trusted bridge script.
   const frameDoc = (bodyHtml: string): string =>
-    `<!doctype html><html${effectiveDark() ? ' data-theme="dark"' : ""}>` +
+    `<!doctype html><html${contentDark() ? ' data-theme="dark"' : ""}>` +
     `<head><meta charset="utf-8">` +
     `<meta name="referrer" content="no-referrer">` +
     // Typography + the syntax-highlighting theme (colours the compiler's class-tagged
@@ -2039,6 +2230,40 @@ function start(
     // the frame's <html> carries data-theme="dark").
     `<style>${contentCss}\n${syntaxCss}\n:root{--content-size:${fontSize}px}</style>` +
     `</head><body class="content">${bodyHtml}<script>${FRAME_BRIDGE}</script></body></html>`;
+
+  // A standalone, top-level print document for File → Print. Unlike the reading frame this
+  // is NOT a cross-origin iframe — mobile browsers refuse to paginate those when printing
+  // (they clip to the visible area), so it opens as its own tab and the browser paginates
+  // it normally. Its safety comes from a strict CSP instead of origin isolation:
+  // `default-src 'none'` blocks all network and every script EXCEPT the one carrying this
+  // document's random `nonce` — our self-print snippet. Untrusted content is already
+  // script-stripped and can't know the nonce, so no untrusted JS can run. `for-print`
+  // bakes in the paper adaptations (styles/content.css). The snippet prints from inside
+  // the document's own load — mobile-friendly, since a programmatic print from the
+  // *opener* trips iOS Safari's "did not finish loading" prompt. It deliberately does NOT
+  // auto-close the tab: Android Chrome fires `afterprint` before the print UI finishes
+  // loading, so closing on it tore the tab down mid-print; the user closes it instead.
+  const buildPrintDoc = (bodyHtml: string, title: string): string => {
+    const nonce = Array.from(
+      crypto.getRandomValues(new Uint8Array(16)),
+      (b) => b.toString(16).padStart(2, "0"),
+    ).join("");
+    const selfPrint =
+      `addEventListener('load',function(){` +
+      `setTimeout(function(){try{print()}catch(e){}},200)});`;
+    return (
+      `<!doctype html><html class="for-print"><head><meta charset="utf-8">` +
+      `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}'; img-src data:; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; form-action 'none'">` +
+      `<meta name="referrer" content="no-referrer">` +
+      // Empty inline favicon so the tab doesn't fire a (CSP-blocked) /favicon.ico request.
+      `<link rel="icon" href="data:,">` +
+      `<title>${esc(title)}</title>` +
+      `<style>${contentCss}\n${syntaxCss}</style>` +
+      `</head><body class="content">${bodyHtml}` +
+      `<script nonce="${nonce}">${selfPrint}</script>` +
+      `</body></html>`
+    );
+  };
 
   // Wrap every occurrence of the active search terms in the content in <mark>,
   // skipping script/style and our keyword footer. Runs after each page load.
@@ -2233,11 +2458,11 @@ function start(
         // The "On this page" nav is compiled into body_html; its `#slug` links route
         // through rewriteFrameLinks like any in-page anchor.
         rewriteFrameLinks(holder, id);
-        frame.srcdoc = frameDoc(holder.innerHTML);
+        printSourceHtml = holder.innerHTML;
+        frame.srcdoc = frameDoc(printSourceHtml);
       } else {
-        frame.srcdoc = frameDoc(
-          `<h1>${esc(s.notFoundTitle)}</h1><p>${s.notFoundBody(esc(id))}</p>`,
-        );
+        printSourceHtml = `<h1>${esc(s.notFoundTitle)}</h1><p>${s.notFoundBody(esc(id))}</p>`;
+        frame.srcdoc = frameDoc(printSourceHtml);
       }
       // Hide the app-UI overlay so the (always-visible) frame shows through.
       content.style.display = "none";
@@ -2326,11 +2551,19 @@ function start(
         setFrameFont();
         saveFontSize(fontSize);
         break;
+      case "font-reset":
+        fontSize = DEFAULT_FONT_SIZE;
+        setFrameFont();
+        saveFontSize(fontSize);
+        break;
       case "theme-light":
         setTheme("light");
         break;
       case "theme-dark":
         setTheme("dark");
+        break;
+      case "theme-dark-shell":
+        setTheme("dark-shell");
         break;
       case "theme-system":
         setTheme("system");
@@ -2340,8 +2573,11 @@ function start(
         setTheme(THEME_CYCLE[(i + 1) % THEME_CYCLE.length] ?? "light");
         break;
       }
+      case "toggle-prefetch":
+        if (!config.prefetchLocked) setPrefetch(!prefetchEnabled);
+        break;
       case "print":
-        window.print();
+        printCurrent();
         break;
       case "clear-highlight":
         highlightTerms = [];
@@ -2368,6 +2604,58 @@ function start(
       case "share":
         void shareCurrent();
         break;
+      case "copy-llm-links":
+        void copyLlmLinks();
+        break;
+    }
+  }
+
+  // Print just the reading content, never the app shell. The page body lives in a
+  // cross-origin sandboxed frame, and mobile browsers refuse to paginate a cross-origin
+  // iframe when printing (they clip it to the visible area) — so for a doc page we open
+  // the content as its own top-level tab (buildPrintDoc), which every browser paginates
+  // normally. The overlay (Search/Manage) is same-origin content in this document, so it
+  // still prints in place with the chrome hidden by @media print.
+  function printCurrent(): void {
+    // The Search/Manage overlay is trusted app UI in #content (same origin) — print the
+    // parent directly, with the @media print rules hiding the chrome around it.
+    if (content.style.display !== "none") {
+      document.body.classList.add("print-overlay");
+      const clean = (): void => {
+        document.body.classList.remove("print-overlay");
+        window.removeEventListener("afterprint", clean);
+      };
+      window.addEventListener("afterprint", clean);
+      window.print();
+      return;
+    }
+    if (!printSourceHtml) return;
+    // Open the page as a standalone print document that self-prints via its own
+    // CSP-nonce'd script (see buildPrintDoc). window.open runs synchronously in the click
+    // gesture so it isn't pop-up-blocked.
+    const html = buildPrintDoc(printSourceHtml, document.title);
+    if (/Android/i.test(navigator.userAgent)) {
+      // Android Chrome's print preview can't load a blob: URL — it fails with "a problem
+      // occurred while printing" — so write the document straight into the new tab.
+      const w = window.open("", "_blank");
+      if (!w) {
+        status.textContent = s.printPopupBlocked;
+        return;
+      }
+      w.document.open();
+      w.document.write(html);
+      w.document.close();
+    } else {
+      // iOS Safari (verified) and desktop print a blob: URL fine, and it keeps the
+      // untrusted markup out of an app-origin document.write.
+      const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+      const w = window.open(url, "_blank");
+      if (!w) {
+        URL.revokeObjectURL(url);
+        status.textContent = s.printPopupBlocked;
+        return;
+      }
+      window.setTimeout(() => URL.revokeObjectURL(url), 60000);
     }
   }
 
@@ -2385,6 +2673,34 @@ function start(
       }
     } catch (e) {
       /* user dismissed the share sheet */
+    }
+  }
+
+  // Copy an LLM-oriented block for the current page: its title, the per-page
+  // Markdown export URL (md/<docset>/<page>.md — the same file `khb pack --llms`
+  // writes) plus the viewer deep-link, and a pointer to the full llms.txt index.
+  // Only reachable when the export exists (the menu item is hidden otherwise), and
+  // only meaningful on a real content page.
+  async function copyLlmLinks(): Promise<void> {
+    if (!llmsLink || !navigator.clipboard) return;
+    if (!pages.has(currentId)) return; // not a real page (search/manage/failed view)
+    const { docsetId, localId } = collection.split(currentId);
+    const title = pages.get(currentId)?.title ?? document.title;
+    // Mirror Rust core::llms::sanitize() exactly (compiler/core/src/llms.rs): any
+    // char outside [A-Za-z0-9._-] maps to '_'. Ids are slugs, but be defensive.
+    const san = (x: string): string => x.replace(/[^A-Za-z0-9._-]/g, "_");
+    // llmsLink.href is the absolute, authoritative location of llms.txt; resolve
+    // md/ against it so the link is right even when index.html isn't at the root.
+    const indexUrl = llmsLink.href;
+    const mdUrl = new URL(`md/${san(docsetId)}/${san(localId)}.md`, indexUrl).href;
+    const pageUrl = location.href; // viewer deep-link (#<currentId>)
+    try {
+      await navigator.clipboard.writeText(
+        s.llmClipboard(title, mdUrl, pageUrl, indexUrl),
+      );
+      status.textContent = s.llmLinksCopied;
+    } catch {
+      /* clipboard denied */
     }
   }
 
@@ -2419,6 +2735,18 @@ function start(
   // The <html> data-theme was already set pre-paint by the inline script in index.html.
   applyTheme();
 
+  // Reflect the prefetch toggle, drop cache entries from superseded builds, and —
+  // when enabled — start downloading streamed books whole in the background,
+  // hot-swapping each for its cached copy as it lands. A `--no-prefetch` build
+  // hides the toggle entirely.
+  if (config.prefetchLocked)
+    document
+      .querySelectorAll<HTMLElement>('[data-action="toggle-prefetch"]')
+      .forEach((el) => (el.style.display = "none"));
+  else updatePrefetchUI();
+  void pruneBlobs(prefetchPlan.validKeys);
+  if (prefetchEnabled) void runPrefetch();
+
   // ---- About modal ----
   function showAbout(): void {
     const bg = document.createElement("div");
@@ -2426,11 +2754,20 @@ function start(
       "position:fixed;inset:0;background:var(--backdrop);display:grid;place-items:center;z-index:50";
     // Loaded docsets with their versions (language shown too, since a fallback book
     // may differ from the UI language).
+    // The transport marker for a loaded book — "· offline" (whole from cache) or
+    // "· streaming" (page-by-page), matched from the chosen editions (same markers
+    // the Manage page shows).
+    const transport = (id: string, language: string): string => {
+      const v = variants.find((x) => x.id === id && x.language === language);
+      if (v?.origin.offline) return ` ${esc(s.offlineBadge)}`;
+      if (v?.origin.streaming) return ` ${esc(s.streamingBadge)}`;
+      return "";
+    };
     const bookLines = collection
       .books()
       .map(
         (b) =>
-          `<div>${esc(b.title)} <span style="color:var(--muted)">· ${esc(b.language)}${b.version ? ` · ${esc(s.versionLabel)} ${esc(b.version)}` : ""}</span></div>`,
+          `<div>${esc(b.title)} <span style="color:var(--muted)">· ${esc(b.language)}${b.version ? ` · ${esc(s.versionLabel)} ${esc(b.version)}` : ""}${transport(b.id, b.language)}</span></div>`,
       )
       .join("");
     // List books that failed to load too, so they aren't silently missing here.
@@ -2599,7 +2936,11 @@ function start(
           : o.kind === "remote"
             ? s.remoteBadge
             : s.bundledBadge;
-      return o.streaming ? `${kind} ${s.streamingBadge}` : kind;
+      return o.offline
+        ? `${kind} ${s.offlineBadge}`
+        : o.streaming
+          ? `${kind} ${s.streamingBadge}`
+          : kind;
     };
 
     // Show every edition (variant) grouped by product, the loaded ones marked
@@ -2820,9 +3161,21 @@ function start(
   // Language switcher: persist + reload (the content docset changes with the UI).
   // Language selectors — the toolbar one and the mobile ⋯-menu one behave alike.
   const langNames: Record<string, string> = { en: "English", pl: "Polski" };
+  // Fewer than two selectable languages means there's nothing to switch to —
+  // hide the selector (and its toolbar separator) instead of showing a
+  // dropdown with every other option greyed out.
   document
     .querySelectorAll<HTMLSelectElement>(".lang-select")
     .forEach((sel) => {
+      if (available.length < 2) {
+        sel.hidden = true;
+        if (sel.previousElementSibling?.classList.contains("tsep")) {
+          (sel.previousElementSibling as HTMLElement).hidden = true;
+        }
+        const label = sel.closest("label.more-lang");
+        if (label) (label as HTMLElement).hidden = true;
+        return;
+      }
       for (const l of available) {
         if (![...sel.options].some((o) => o.value === l)) {
           const opt = document.createElement("option");
@@ -3202,10 +3555,18 @@ function start(
   })();
 
   // Panel wiring
-  // ☰ (mobile) toggles the drawer.
-  $("#btn-pane").addEventListener("click", () =>
-    win.classList.contains("flyout") ? retract() : flyout(),
-  );
+  // ☰ toggles the panel. Compact (phones/short screens): the slide-in drawer.
+  // Non-compact touch tablets: collapse the docked sidebar in place (content fills
+  // the width) — a touch-usable substitute for the hover-only pushpin auto-hide.
+  const btnPane = $("#btn-pane");
+  btnPane.addEventListener("click", () => {
+    if (narrow()) {
+      win.classList.contains("flyout") ? retract() : flyout();
+    } else {
+      const collapsed = win.classList.toggle("nav-collapsed");
+      btnPane.setAttribute("aria-expanded", String(!collapsed));
+    }
+  });
   // 📌 toggles dock <-> auto-hide.
   pinBtn.addEventListener("click", () => {
     pinned = !pinned;

@@ -1,0 +1,4 @@
+KD Help Book — quick reference (placeholder)
+
+Compile:  khb compile <src> -o book.khb
+Pack:     khb pack --viewer <dist> --docset book.khb

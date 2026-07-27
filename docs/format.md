@@ -148,9 +148,11 @@ downloading it whole, falling back to the whole fetch when the host can't `Range
 
 A `.khb` can come from anywhere (a user opens/uploads one), so its stored `body_html`
 is **untrusted**. The viewer renders every page body in a **sandboxed `<iframe>`**
-with `sandbox="allow-scripts"` — crucially **without `allow-same-origin`**, so the
-frame is an isolated, opaque origin. Origin isolation (not script-blocking) is the
-security boundary:
+with `sandbox="allow-scripts allow-downloads"` — crucially **without
+`allow-same-origin`**, so the frame is an isolated, opaque origin (the
+`allow-downloads` token only lets an asset link save its file; it grants no app
+or same-origin access). Origin isolation (not script-blocking) is the security
+boundary:
 
 - Untrusted JS may run, but in a different origin it **cannot reach the app**: no
   access to the parent DOM, `localStorage`, or the IndexedDB where other docsets
@@ -170,6 +172,12 @@ security boundary:
   first-party docsets never contain markup to neutralise in the first place.
 
 App-generated UI (the Search page) renders in the normal document, not the frame.
+
+Compile-time is guarded too: the bundled compiler runs a docset's declared external
+[extensions](authoring/extensions) only under the opt-in `--allow-extensions` flag, so
+compiling an untrusted `docset.toml` never executes its commands by default. Assets an
+extension generates are stored under the reserved `assets/ext/…` path prefix, keeping them
+from colliding with a book's own attachments.
 
 ## `.khbb` (binary)
 

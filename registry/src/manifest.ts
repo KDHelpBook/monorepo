@@ -20,6 +20,7 @@ interface ManifestEntry {
   language: string;
   collection: string;
   version?: string;
+  hash?: string;
   attachments?: string[];
   streaming: true;
 }
@@ -57,6 +58,7 @@ export async function buildManifest(
       language: p.language,
       collection: p.collection,
       ...(p.version ? { version: p.version } : {}),
+      ...(p.hash ? { hash: p.hash } : {}),
       ...(p.attachments.length
         ? { attachments: p.attachments.map((a) => base + a) }
         : {}),
@@ -96,8 +98,23 @@ export async function manifestResponse(
   return res;
 }
 
-/** `GET /config.json` — the viewer profile, from site.json. */
-export function configResponse(): Response {
-  const { externalSources = true, pwa = false, home } = site.config ?? {};
-  return jsonResponse({ externalSources, pwa, ...(home ? { home } : {}) });
+/** `GET /config.json` — the viewer profile, from site.json. The optional
+ *  argument keeps the shape directly testable without mutating imported config. */
+export function configResponse(
+  config: SiteConfig["config"] = site.config,
+): Response {
+  const {
+    externalSources = true,
+    pwa = false,
+    home,
+    prefetch = false,
+    prefetchLocked = false,
+  } = config ?? {};
+  return jsonResponse({
+    externalSources,
+    pwa,
+    ...(home ? { home } : {}),
+    ...(prefetch ? { prefetch } : {}),
+    ...(prefetchLocked ? { prefetchLocked } : {}),
+  });
 }

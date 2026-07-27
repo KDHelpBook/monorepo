@@ -8,6 +8,8 @@ export interface Strings {
   menuFile: string;
   menuEdit: string;
   menuView: string;
+  menuSearch: string;
+  menuGo: string;
   menuHelp: string;
   openDocset: string;
   print: string;
@@ -16,16 +18,31 @@ export interface Strings {
   clearHighlight: string;
   largerText: string;
   smallerText: string;
+  resetText: string;
   // colour theme (View menu + toolbar)
   themeMenu: string;
   themeLight: string;
   themeDark: string;
+  themeDarkShell: string;
   themeSystem: string;
+  /** View-menu toggle: cache streamed books whole for offline / faster reuse. */
+  prefetchToggle: string;
   back: string;
   forward: string;
   about: string;
   share: string;
   linkCopied: string;
+  /** File-menu label for copying the current page's LLM-oriented links. */
+  copyLlmLinks: string;
+  /** Status-bar confirmation after the LLM links are copied. */
+  llmLinksCopied: string;
+  /** The multi-line block placed on the clipboard, localized to the UI language. */
+  llmClipboard: (
+    title: string,
+    mdUrl: string,
+    pageUrl: string,
+    indexUrl: string,
+  ) => string;
   refreshing: string;
   /** Cold-start loading panel: indeterminate title, and the determinate-download title. */
   loadingHelp: string;
@@ -80,6 +97,7 @@ export interface Strings {
   newTab: string;
   showHidePanel: string;
   ready: string;
+  printPopupBlocked: string;
   keywordsLabel: string;
   seeAlso: string;
   /** Code-block copy button and its post-copy confirmation. */
@@ -131,12 +149,17 @@ export interface Strings {
   streamHint: string;
   streamSidecars: string;
   streamingBadge: string;
+  /** Badge for a book served whole from the offline (prefetch) cache. */
+  offlineBadge: string;
+  packLabel: string;
 }
 
 const en: Strings = {
   menuFile: "File",
   menuEdit: "Edit",
   menuView: "View",
+  menuSearch: "Search",
+  menuGo: "Go",
   menuHelp: "Help",
   openDocset: "Open docset…",
   print: "Print…",
@@ -145,15 +168,23 @@ const en: Strings = {
   clearHighlight: "Clear search highlight",
   largerText: "Larger text",
   smallerText: "Smaller text",
+  resetText: "Reset text size",
   themeMenu: "Theme",
   themeLight: "Light",
   themeDark: "Dark",
+  themeDarkShell: "Dark shell, light pages",
   themeSystem: "Use system setting",
+  prefetchToggle: "Keep books offline",
   back: "Back",
   forward: "Forward",
   about: "About KD Help Book",
   share: "Share…",
   linkCopied: "Link copied",
+  copyLlmLinks: "Copy links for LLMs",
+  llmLinksCopied: "LLM links copied",
+  llmClipboard: (title, mdUrl, pageUrl, indexUrl) =>
+    `${title}\n\nMarkdown: ${mdUrl}\nPage: ${pageUrl}\n\n` +
+    `The full documentation index is available at ${indexUrl}\n`,
   refreshing: "Refreshing…",
   loadingHelp: "Loading help…",
   downloadingHelp: "Downloading help…",
@@ -212,6 +243,7 @@ const en: Strings = {
   newTab: "Open current page in a new tab",
   showHidePanel: "Show/hide panel",
   ready: "Ready",
+  printPopupBlocked: "Allow pop-ups to print this page.",
   keywordsLabel: "Keywords:",
   seeAlso: "See also:",
   copy: "Copy",
@@ -259,12 +291,16 @@ const en: Strings = {
     "Reads pages on demand over HTTP Range (real full-text search), and falls back to a full download if the host has no Range support.",
   streamSidecars: "Attachment packs (.khba URLs, one per line — optional):",
   streamingBadge: "· streaming",
+  offlineBadge: "· offline",
+  packLabel: "attachment pack",
 };
 
 const pl: Strings = {
   menuFile: "Plik",
   menuEdit: "Edycja",
   menuView: "Widok",
+  menuSearch: "Szukaj",
+  menuGo: "Przejdź",
   menuHelp: "Pomoc",
   openDocset: "Otwórz docset…",
   print: "Drukuj…",
@@ -273,15 +309,23 @@ const pl: Strings = {
   clearHighlight: "Wyczyść podświetlenie wyszukiwania",
   largerText: "Większy tekst",
   smallerText: "Mniejszy tekst",
+  resetText: "Zresetuj rozmiar tekstu",
   themeMenu: "Motyw",
   themeLight: "Jasny",
   themeDark: "Ciemny",
+  themeDarkShell: "Ciemny interfejs, jasne strony",
   themeSystem: "Ustawienie systemu",
+  prefetchToggle: "Trzymaj książki offline",
   back: "Wstecz",
   forward: "Dalej",
   about: "O programie KD Help Book",
   share: "Udostępnij…",
   linkCopied: "Skopiowano link",
+  copyLlmLinks: "Kopiuj linki dla LLM",
+  llmLinksCopied: "Skopiowano linki dla LLM",
+  llmClipboard: (title, mdUrl, pageUrl, indexUrl) =>
+    `${title}\n\nMarkdown: ${mdUrl}\nStrona: ${pageUrl}\n\n` +
+    `Pełny indeks dokumentacji dostępny jest pod adresem ${indexUrl}\n`,
   refreshing: "Odświeżanie…",
   loadingHelp: "Wczytywanie pomocy…",
   downloadingHelp: "Pobieranie pomocy…",
@@ -342,6 +386,7 @@ const pl: Strings = {
   newTab: "Otwórz bieżącą stronę w nowej karcie",
   showHidePanel: "Pokaż/ukryj panel",
   ready: "Gotowe",
+  printPopupBlocked: "Zezwól na wyskakujące okna, aby wydrukować tę stronę.",
   keywordsLabel: "Słowa kluczowe:",
   seeAlso: "Zobacz też:",
   copy: "Kopiuj",
@@ -392,6 +437,8 @@ const pl: Strings = {
   streamSidecars:
     "Paczki załączników (adresy .khba, po jednym w wierszu — opcjonalne):",
   streamingBadge: "· strumieniowanie",
+  offlineBadge: "· offline",
+  packLabel: "pakiet załączników",
 };
 
 const TABLES: Record<Lang, Strings> = { en, pl };

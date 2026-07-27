@@ -34,19 +34,12 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Get the khb CLI
-        # Release assets are named khb-v<version>-<target>.tar.gz — resolve the
-        # current one through the latest release instead of hardcoding it.
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release download -R KDHelpBook/monorepo \
-            --pattern '*x86_64-unknown-linux-gnu.tar.gz' -O khb.tar.gz
-          tar -xzf khb.tar.gz
-          sudo install -m 755 khb-v*/khb /usr/local/bin/khb
-          khb --help >/dev/null
+        uses: KDHelpBook/monorepo/.github/actions/setup-khb@v1
+        with:
+          viewer: "false"
 
       - name: Compile the docset
         run: khb compile "$DOCS_SRC" -o "$DOCSET_ID.khb"

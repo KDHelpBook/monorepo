@@ -44,14 +44,28 @@ export interface BlockReader {
   read(start: number, end: number): Promise<Uint8Array>;
 }
 
+let httpSeq = 0;
 /** Reads a remote file over HTTP `Range` (the host must return 206). */
 export class HttpRangeReader implements BlockReader {
+  // A clean synthetic SQLite filename — NOT the URL. `sqlite3_open_v2` treats the
+  // name as a path/URI, and a real URL (with `://` and a `?v=` query) makes it
+  // fail with SQLITE_CANTOPEN before the VFS's xOpen is even called. The VFS is
+  // single-file (the URL is fixed at construction), so the name is just an id.
+  private readonly label = `stream-${httpSeq++}.khb`;
   constructor(private readonly url: string) {}
   name(): string {
-    return this.url;
+    return this.label;
   }
   async probeSize(): Promise<number> {
-    const res = await fetch(this.url, { headers: { Range: "bytes=0-0" } });
+    const res = await fetch(this.url, {
+      headers: { Range: "bytes=0-0" },
+      // Never cache a partial (206) response. GitHub Pages returns the *same*
+      // ETag for a Range and a full response, so a browser that caches a 206 can
+      // later answer a conditional *full* GET with that partial (a 304 serving
+      // truncated bytes → "not a .khb"). Skipping the cache keeps range reads
+      // fresh and can't poison the whole-fetch fallback's cache.
+      cache: "no-store",
+    });
     if (res.status !== 206) {
       throw new Error(
         `range not honoured (status ${res.status}); host must return 206`,
@@ -66,6 +80,7 @@ export class HttpRangeReader implements BlockReader {
   async read(start: number, end: number): Promise<Uint8Array> {
     const res = await fetch(this.url, {
       headers: { Range: `bytes=${start}-${end}` },
+      cache: "no-store", // see probeSize: don't let a 206 pollute the HTTP cache
     });
     if (res.status !== 206)
       throw new Error(`range read failed (${res.status})`);

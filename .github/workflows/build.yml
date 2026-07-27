@@ -147,9 +147,9 @@ jobs:
               # current one in the viewer's version switcher (sample-sdk pattern).
               sed -i "s/^id = \"${ID}\"$/id = \"${ID}-v${VER}\"/" "$T"
               grep -q "^id = \"${ID}-v${VER}\"$" "$T"
-              "$BIN" compile "$DIR" -o "out/${ID}-v${VER}.khb"
+              "$BIN" compile "$DIR" -o "out/${ID}-v${VER}.khb" --allow-extensions
             else
-              "$BIN" compile "$DIR" -o "out/${ID}.khb"
+              "$BIN" compile "$DIR" -o "out/${ID}.khb" --allow-extensions
             fi
           done
 
@@ -188,6 +188,16 @@ jobs:
           NAME="khb-viewer-${{ inputs.release_tag }}"
           mv viewer-dist "$NAME"
           tar czf "assets/${NAME}.tar.gz" "$NAME"
+      # Generate this only after every release asset has its final name. Sorting
+      # bytewise makes the manifest stable regardless of filesystem ordering.
+      - name: Generate SHA-256 manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd assets
+          find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\0' \
+            | LC_ALL=C sort -z \
+            | xargs -0 sha256sum > SHA256SUMS
       - name: Upload to the release
         env:
           GH_TOKEN: ${{ github.token }}

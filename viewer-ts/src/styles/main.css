@@ -1148,6 +1148,18 @@ textarea {
 .pane-toggle {
   display: none;
 }
+/* Touch devices get the ☰ toggle at every width: on phones it drives the drawer,
+   on tablets (non-compact, coarse pointer) it collapses the docked sidebar — the
+   pin's hover-based auto-hide is unusable by touch, so ☰ is the touch collapse path. */
+@media (pointer: coarse) {
+  .pane-toggle {
+    display: inline-flex;
+  }
+  /* The pushpin's auto-hide reveal is hover-only — unusable by touch. */
+  .left-head .pin {
+    display: none;
+  }
+}
 
 /* Auto-hide: when the panel is collapsed it becomes a vertical icon strip */
 .left-strip {
@@ -1232,6 +1244,16 @@ textarea {
   transform: translateX(0);
 }
 
+/* Touch tablets: the ☰ button collapses the docked sidebar in place (panel gone,
+   content fills the width). Scoped to the non-compact layout — the complement of
+   COMPACT_MQ in main.ts — so it can never leak into the compact slide-in drawer. */
+@media (min-width: 641px) and (min-height: 481px) {
+  .window.nav-collapsed #left-pane,
+  .window.nav-collapsed #splitter {
+    display: none;
+  }
+}
+
 /* Scrim behind the mobile drawer */
 .scrim {
   display: none;
@@ -1266,6 +1288,12 @@ textarea {
   }
   .pane-toggle {
     display: inline-flex;
+  }
+  /* The drawer layout neutralizes auto-hide, so the pushpin does nothing here —
+     the ☰ button is the panel toggle. Hide the dead control (also covers a narrow
+     desktop window with a mouse). */
+  .left-head .pin {
+    display: none;
   }
   .splitter {
     display: none;
@@ -1383,6 +1411,22 @@ textarea {
 .more-item:hover,
 .more-item:active {
   background: var(--hover);
+}
+/* Checkable more-item (e.g. Keep books offline): a leading ✓ shown when active.
+   updatePrefetchUI() toggles .active on every [data-action="toggle-prefetch"]. */
+.more-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.more-check-mark {
+  width: 14px;
+  flex: none;
+  color: var(--swoosh);
+  font-weight: bold;
+}
+.more-check.active .more-check-mark::before {
+  content: "✓";
 }
 .more-sep {
   height: 1px;
@@ -1697,15 +1741,27 @@ textarea {
 .menu-radio:hover .menu-check {
   color: var(--select-text);
 }
-/* Toolbar theme button shows the icon of the *effective* theme — sun in light,
-   moon in dark; data-theme flips which is visible. */
-.theme-btn .ico-moon {
+/* Toolbar theme button shows the icon of the current *mode* — sun (light), moon
+   (dark), split circle (system/auto) — driven by data-mode, which updateThemeUI()
+   sets. Keying off the mode (not the effective theme) means every cycle click
+   visibly changes the icon, so switching to a mode with the same effective look
+   (e.g. system → light on a light OS) no longer reads as a dead button. */
+.theme-btn .ico-sun,
+.theme-btn .ico-moon,
+.theme-btn .ico-shell,
+.theme-btn .ico-system {
   display: none;
 }
-:root[data-theme="dark"] .theme-btn .ico-sun {
-  display: none;
+.theme-btn[data-mode="light"] .ico-sun {
+  display: inline;
 }
-:root[data-theme="dark"] .theme-btn .ico-moon {
+.theme-btn[data-mode="dark"] .ico-moon {
+  display: inline;
+}
+.theme-btn[data-mode="dark-shell"] .ico-shell {
+  display: inline;
+}
+.theme-btn[data-mode="system"] .ico-system {
   display: inline;
 }
 /* Mobile theme picker reuses the .more-size row; mark the active option. */
@@ -1930,4 +1986,45 @@ textarea {
 :root[data-theme="dark"] .mg-remove {
   background: #3a2320;
   border-color: #6e3a2e;
+}
+
+/* ── Printing ────────────────────────────────────────────────────────────────
+   A documentation page prints via its own top-level tab (main.ts buildPrintDoc), so the
+   app shell below is not involved there. This block governs the other path — the trusted
+   Search/Manage overlay (#content), printed in place under body.print-overlay — and also
+   strips the chrome for a plain browser Ctrl/⌘-P. */
+@media print {
+  .menubar,
+  .toolbar,
+  .more-menu,
+  .left,
+  .splitter,
+  .doctabs,
+  .addressbar,
+  .statusbar,
+  .loading {
+    display: none !important;
+  }
+  /* Unwind the fixed full-viewport shell so content flows across pages. */
+  .window,
+  .body,
+  .pane.right,
+  .content-wrap {
+    position: static !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  /* Let the overlay flow inline when it is the active surface; its own inline
+     display:none keeps it out of print on a doc page (where the frame is shown). */
+  .content {
+    position: static !important;
+    overflow: visible !important;
+  }
+  /* On the overlay path the stale doc frame sits under #content — don't print it too. */
+  body.print-overlay .content-frame {
+    display: none !important;
+  }
+  @page {
+    margin: 1.6cm;
+  }
 }

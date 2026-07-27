@@ -56,6 +56,14 @@ npm run dev
 
 ## Distribution
 
+The first release is distributed through **GitHub Releases**, not crates.io.
+Download the archive for your platform from the
+[latest release](https://github.com/KDHelpBook/monorepo/releases/latest), extract
+it, and place the `khb` executable somewhere on your `PATH`. The
+`khb-core`, `khb-cli`, and `khb-wasm` workspace crates are implementation
+packages and are not currently published to crates.io; in particular,
+`cargo install khb-cli` is not an installation channel.
+
 `khb pack` assembles a ready-to-host static distribution (viewer + docsets +
 a `docsets.json` manifest); `khb patch` updates an already-built one without
 rebuilding the viewer. Two profiles:
@@ -65,6 +73,28 @@ rebuilding the viewer. Two profiles:
 
 Host the result on any static host (e.g. GitHub Pages), or wrap it in **Tauri**
 for an offline desktop app (the same Rust `core` runs natively there).
+
+### Verifying release downloads
+
+Each GitHub release includes a `SHA256SUMS` manifest. Download it alongside the
+archive or `.khb` file you want to verify, then run:
+
+```bash
+# Linux
+sha256sum --check --ignore-missing SHA256SUMS
+
+# macOS
+shasum --algorithm 256 --check --ignore-missing SHA256SUMS
+```
+
+On Windows, open PowerShell in the download directory, set the downloaded file
+name, and compare its calculated checksum with the manifest:
+
+```powershell
+$file = "khb-vX.Y.Z-x86_64-pc-windows-msvc.zip"
+$expected = (Select-String -Path SHA256SUMS -Pattern "  $([regex]::Escape($file))$").Line.Split(' ')[0]
+if ((Get-FileHash $file -Algorithm SHA256).Hash -eq $expected) { "OK" } else { throw "SHA-256 mismatch" }
+```
 
 ## License
 

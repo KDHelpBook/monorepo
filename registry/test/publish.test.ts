@@ -142,6 +142,9 @@ describe("publish finalize", () => {
     expect(pointer.file).toBe(`${ID}.khb`);
     expect(pointer.versions.map((v) => v.version)).toEqual(["1.0.0"]);
     expect(pointer.repository).toBe(REPO);
+    const current = await env.DOCSETS.head(`docsets/${ID}/1.1.0/${ID}.khb`);
+    expect(pointer.hash).toBe(current!.etag);
+    expect(pointer.versions[0]!.hash).toBeTruthy();
   });
 
   it("409s a re-publish of an already-published version", async () => {

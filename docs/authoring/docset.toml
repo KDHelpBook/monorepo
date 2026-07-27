@@ -6,3 +6,8 @@ version = "0.1.0"
 language = "en"
 collection = "khb-docs"
 collection_title = "KD Help Book"
+
+# `ext:example` — write a `code-preview example` once (no duplicated source/result).
+# Compile this volume with `--allow-extensions`; see authoring/extensions.md.
+[extensions.example]
+command = "./tools/example.py"

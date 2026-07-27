@@ -25,6 +25,7 @@ beforeAll(async () => {
     "docsets/khb-authoring/latest.json",
     pointer("khb-authoring", {
       collection: "khb",
+      hash: "etag-khb-authoring",
       attachments: ["khb-authoring.khba"],
     }),
   );
@@ -38,6 +39,7 @@ describe("buildManifest", () => {
       file: "d/khb-authoring/1.0.0/khb-authoring.khb",
       collection: "khb",
       version: "1.0.0",
+      hash: "etag-khb-authoring",
       streaming: true,
       attachments: ["d/khb-authoring/1.0.0/khb-authoring.khba"],
     });
@@ -53,6 +55,13 @@ describe("buildManifest", () => {
     expect(manifest.folders).toBeDefined();
     expect((manifest.folders as { id: string }[])[0]!.id).toBe("khb");
   });
+
+  it("keeps legacy pointers without a hash compatible", async () => {
+    const entry = (await buildManifest(env)).docsets.find(
+      (d) => d.id === "zzz",
+    )!;
+    expect(entry).not.toHaveProperty("hash");
+  });
 });
 
 describe("configResponse", () => {
@@ -62,5 +71,24 @@ describe("configResponse", () => {
     const body = (await res.json()) as Record<string, unknown>;
     expect(typeof body.externalSources).toBe("boolean");
     expect(typeof body.pwa).toBe("boolean");
+    expect(body).not.toHaveProperty("prefetch");
+    expect(body).not.toHaveProperty("prefetchLocked");
+  });
+
+  it("passes through the optional offline-prefetch settings", async () => {
+    const res = configResponse({
+      externalSources: false,
+      pwa: true,
+      home: "docs:index",
+      prefetch: true,
+      prefetchLocked: true,
+    });
+    expect(await res.json()).toEqual({
+      externalSources: false,
+      pwa: true,
+      home: "docs:index",
+      prefetch: true,
+      prefetchLocked: true,
+    });
   });
 });

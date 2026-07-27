@@ -12,6 +12,9 @@ export interface PublishedVersion {
   version: string;
   /** `.khb` filename under `docsets/<id>/<version>/`. */
   file: string;
+  /** Stable content identity used by the viewer's HTTP/offline cache. Older
+   *  pointers may omit it; new publishes use the R2 object's ETag. */
+  hash?: string;
   /** Sidecar `.khba` filenames under the same prefix. */
   attachments: string[];
   publishedAt: string;
@@ -61,7 +64,15 @@ export interface SiteConfig {
   /** The `folders` tree, emitted verbatim into docsets.json (viewer schema). */
   folders?: unknown[];
   /** Served as `config.json` (mirrors the CLI's pack profile output). */
-  config?: { externalSources?: boolean; pwa?: boolean; home?: string };
+  config?: {
+    externalSources?: boolean;
+    pwa?: boolean;
+    home?: string;
+    /** Default the viewer's per-device offline-prefetch toggle to on. */
+    prefetch?: boolean;
+    /** Hide and hard-disable the offline-prefetch feature. */
+    prefetchLocked?: boolean;
+  };
 }
 
 /** The subset of GitHub Actions OIDC claims the registry authorizes on. */

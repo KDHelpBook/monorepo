@@ -41,6 +41,7 @@ to the dist root.
 | `version` | no (omitted when empty) | content version (`meta.version`), surfaced in the viewer and its version switcher |
 | `attachments` | no (omitted when empty) | sidecar `.khba` pack paths (each optionally `.gz`), opened alongside the docset |
 | `streaming` | no (default `false`) | opt-in page-level streaming: open this docset (and its packs) over HTTP `Range`, falling back to a whole fetch when the host can't `Range` |
+| `hash` | no | stable content identity used to version the URL and offline-cache entry; `khb pack` hashes the shipped bytes, while the registry uses the R2 ETag |
 
 Besides `docsets`, the manifest may carry one optional top-level field:
 
@@ -102,7 +103,8 @@ Written next to `docsets.json`; drives the viewer's profile.
 {
   "externalSources": true,
   "pwa": true,
-  "home": "my-docs:getting-started"
+  "home": "my-docs:getting-started",
+  "prefetch": true
 }
 ```
 
@@ -111,6 +113,8 @@ Written next to `docsets.json`; drives the viewer's profile.
 | `externalSources` | boolean | `true` (reader profile): users may open/upload/add docsets. `false` (`bundled --lock`): those affordances are hidden and remote sources are never used |
 | `pwa` | boolean | `true` registers a service worker for best-effort offline use |
 | `home` | string, optional | the landing view on a cold start: a page id (`docsetId:localId`) or the literal `"search"`. Omitted → the viewer defaults to the Search page |
+| `prefetch` | boolean, optional | default the per-device “Keep books offline” toggle to on for streamed books |
+| `prefetchLocked` | boolean, optional | hide and hard-disable offline prefetch, overriding any saved per-device choice |
 
 ## `.khbm` — the import manifest
 

@@ -1,0 +1,162 @@
+name: Book PR preview
+
+# Reusable per-PR docs preview for a *consumer* documentation repository, mirror
+# of this repo's own pr-preview.yml. Opt-in per PR via a label (default
+# `preview`): while the label is present each push builds the book and publishes
+# it to `pr-preview/pr-<N>/` on the repo's gh-pages branch; removing the label or
+# closing the PR tears it down. Fork PRs get a read-only token and can't deploy.
+#
+# A consumer wires it up like this:
+#
+#   # .github/workflows/pr-preview.yml
+#   on:
+#     pull_request:
+#       types: [opened, reopened, labeled, unlabeled, synchronize, closed]
+#   jobs:
+#     preview:
+#       uses: KDHelpBook/monorepo/.github/workflows/book-pr-preview.yml@v1
+#       with:
+#         sources: "."
+#         home: my-book:index
+#       permissions:
+#         contents: write
+#         pull-requests: write
+#
+# One-time setup on the consumer repo: Settings → Pages → Source = Deploy from a
+# branch → gh-pages / root. `@v1` requires the v1 tag (see book-pages.yml).
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: khb release to build with (tag vX.Y.Z or "latest"). Empty follows an exact workflow tag, otherwise latest.
+        type: string
+        default: ""
+      sources:
+        description: Source directories (whitespace/newline separated; globs expanded).
+        type: string
+        default: "."
+      home:
+        description: Cold-start landing page id or "search".
+        type: string
+        default: ""
+      stream:
+        description: Mark books for page-level streaming.
+        type: boolean
+        default: true
+      llms:
+        description: Emit the AI-facing export.
+        type: boolean
+        default: true
+      allow-extensions:
+        description: Run docset [extensions] transformers during compile.
+        type: boolean
+        default: false
+      label:
+        description: PR label that opts a pull request into previews.
+        type: string
+        default: preview
+      site-url:
+        description: >-
+          Site root the previews hang under (no trailing slash) — the preview URL
+          is `<site-url>/pr-preview/pr-<N>/`. Default — the project Pages URL
+          `https://<owner>.github.io/<repo>`.
+        type: string
+        default: ""
+      khb-repository:
+        description: Repository to fetch the khb release from.
+        type: string
+        default: KDHelpBook/monorepo
+
+permissions:
+  contents: write # push the built site to the gh-pages branch
+  pull-requests: write # let the action post/update the preview-URL comment
+
+concurrency:
+  group: book-pr-preview-${{ github.event.number }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    # Act on the label, its removal, or a close — the last two to tear down.
+    if: >
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (github.event.action == 'closed' ||
+       github.event.action == 'unlabeled' ||
+       contains(github.event.pull_request.labels.*.name, inputs.label))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Check out the composite actions from the same ref as this reusable
+      # workflow, so @vX.Y.Z remains an end-to-end version pin.
+      - name: Resolve the toolchain ref and release
+        if: github.event.action != 'closed' && contains(github.event.pull_request.labels.*.name, inputs.label)
+        id: toolchain
+        shell: bash
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          REF="${GITHUB_WORKFLOW_REF##*@}"
+          VERSION="$REQUESTED_VERSION"
+          if [[ -z "$VERSION" ]]; then
+            TAG="${REF#refs/tags/}"
+            if [[ "$REF" == refs/tags/v* && "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              VERSION="$TAG"
+            else
+              VERSION=latest
+            fi
+          fi
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check out the pinned KD Help Book actions
+        if: github.event.action != 'closed' && contains(github.event.pull_request.labels.*.name, inputs.label)
+        uses: actions/checkout@v7
+        with:
+          repository: KDHelpBook/monorepo
+          ref: ${{ steps.toolchain.outputs.ref }}
+          path: _khb-toolchain
+
+      # Everything below the checkout runs only when (re)deploying — PR open and
+      # still labelled. On close/unlabel we skip straight to the teardown step.
+      - name: Compute the preview base URL
+        if: github.event.action != 'closed' && contains(github.event.pull_request.labels.*.name, inputs.label)
+        id: url
+        shell: bash
+        env:
+          SITE_URL: ${{ inputs.site-url }}
+        run: |
+          set -euo pipefail
+          ROOT="${SITE_URL:-https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}}"
+          echo "base=${ROOT%/}/pr-preview/pr-${{ github.event.number }}/" >> "$GITHUB_OUTPUT"
+
+      - name: Set up khb
+        if: github.event.action != 'closed' && contains(github.event.pull_request.labels.*.name, inputs.label)
+        id: khb
+        uses: ./_khb-toolchain/.github/actions/setup-khb
+        with:
+          version: ${{ steps.toolchain.outputs.version }}
+          repository: ${{ inputs.khb-repository }}
+
+      - name: Compile and pack the preview
+        if: github.event.action != 'closed' && contains(github.event.pull_request.labels.*.name, inputs.label)
+        uses: ./_khb-toolchain/.github/actions/build-book
+        with:
+          khb: ${{ steps.khb.outputs.khb }}
+          viewer-dir: ${{ steps.khb.outputs.viewer-dir }}
+          sources: ${{ inputs.sources }}
+          out: preview
+          home: ${{ inputs.home }}
+          stream: ${{ inputs.stream }}
+          llms: ${{ inputs.llms }}
+          allow-extensions: ${{ inputs.allow-extensions }}
+          base-url: ${{ steps.url.outputs.base }}
+
+      - name: Deploy or tear down the preview
+        uses: rossjrw/pr-preview-action@v1
+        with:
+          source-dir: preview
+          umbrella-dir: pr-preview
+          action: ${{ (github.event.action != 'closed' && contains(github.event.pull_request.labels.*.name, inputs.label)) && 'deploy' || 'remove' }}

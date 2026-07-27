@@ -58,13 +58,17 @@ export type DownloadProgress = (loaded: number, total: number | null) => void;
 /**
  * Collection-load progress: the current whole-file download's byte counts, plus
  * which source it is (`index`) and how many sources load in all (`count`) — so a
- * UI can name the book and show `(2/3)`. Streaming sources report nothing.
+ * UI can name the book and show `(2/3)`. `part` names a sub-download: `undefined`
+ * for the docset itself, else the attachment pack's URL/path (so the UI can label
+ * it). A pure streaming open reports nothing; a streamed book that falls back to a
+ * whole fetch reports like any whole-file source.
  */
 export type LoadProgress = (
   loaded: number,
   total: number | null,
   index: number,
   count: number,
+  part?: string,
 ) => void;
 
 /** Coarse classification of why a docset failed to load, for a clear UI message. */
@@ -130,6 +134,10 @@ export async function fetchDocsetBytes(
   url: string,
   onProgress?: DownloadProgress,
 ): Promise<Uint8Array> {
+  // Normal HTTP caching: a whole-fetched docset is cached and reused across loads.
+  // It can't be poisoned by a stale Range partial because the Range reads use
+  // `cache: "no-store"` (see rangeSupported / HttpRangeReader) — nothing to
+  // mis-serve — so the full GET needs no cache bypass.
   const res = await fetch(url);
   if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
   // With a progress callback, stream the body so we can count bytes as they
@@ -167,7 +175,14 @@ export async function fetchDocsetBytes(
  */
 export async function rangeSupported(url: string): Promise<boolean> {
   try {
-    const res = await fetch(url, { headers: { Range: "bytes=0-0" } });
+    // `no-store`: don't cache this 206 probe. GitHub Pages shares one ETag between
+    // Range and full responses, so a cached partial can later be served for a full
+    // GET (a 304 of truncated bytes). Keeping the probe out of the cache prevents
+    // it from poisoning the whole-fetch fallback.
+    const res = await fetch(url, {
+      headers: { Range: "bytes=0-0" },
+      cache: "no-store",
+    });
     const ok = res.status === 206;
     // Stop the body download (a server that ignored Range sent the whole file).
     await res.body?.cancel().catch(() => undefined);
@@ -199,6 +214,22 @@ export class Collection {
     for (const d of this.docsets) d.close();
   }
 
+  /** The open docset with this id, if loaded. */
+  docsetById(id: string): IDocset | undefined {
+    return this.docsets.find((d) => d.id === id);
+  }
+
+  /** A new collection with the docset `id` replaced by `replacement` — the other
+   *  docsets are shared (NOT closed), so the caller closes only the one it
+   *  replaced. Used to hot-swap a streamed book for its cached whole-file copy of
+   *  identical content, without re-opening the rest. */
+  withDocset(id: string, replacement: IDocset): Collection {
+    return new Collection(
+      this.language,
+      this.docsets.map((d) => (d.id === id ? replacement : d)),
+    );
+  }
+
   static async load(
     sources: DocsetSource[],
     language: string,
@@ -222,36 +253,72 @@ export class Collection {
     const { StreamingDocset } = await import("./streaming-docset");
     for (let index = 0; index < sources.length; index++) {
       const src = sources[index]!;
+      // A progress reporter for one sub-download (the docset, or a named pack).
+      // Only a whole-file fetch has bytes to count; in-memory sources are instant.
+      const reportFor = (part?: string): DownloadProgress | undefined =>
+        onProgress
+          ? (loaded, total) => onProgress(loaded, total, index, count, part)
+          : undefined;
+      // Fetch an attachment pack whole, re-tagging a failure as the *pack's* — so
+      // the UI names the offending pack (with its book), not just the book.
+      const fetchPack = async (url: string): Promise<Uint8Array> => {
+        try {
+          return await fetchDocsetBytes(url, reportFor(url));
+        } catch (cause) {
+          const { kind, detail } = classifyLoadError(cause);
+          throw new DocsetLoadError(
+            url,
+            kind,
+            `attachment pack — ${detail}`,
+            labels?.[index],
+          );
+        }
+      };
       try {
         if (isStreaming(src)) {
-          docsets.push(
-            await StreamingDocset.open(src.url, src.attachments ?? []),
-          );
+          try {
+            docsets.push(
+              await StreamingDocset.open(src.url, src.attachments ?? []),
+            );
+          } catch {
+            // A host can advertise Range yet mangle the actual range reads —
+            // some mobile-carrier proxies transcode or mis-serve 206 bodies — so
+            // a streamed open that passed the cheap peek still reads a malformed
+            // image. Whole-file GETs are unaffected (the app shell itself loads
+            // that way), so fall back to fetching the book and its packs whole
+            // before giving up. The Range reads used `cache: "no-store"`, so no
+            // 206 was cached to poison this full GET — and it caches normally. If
+            // the whole fetch also fails, the outer catch surfaces it.
+            const bytes = await fetchDocsetBytes(src.url, reportFor());
+            const packBytes: Uint8Array[] = [];
+            for (const a of src.attachments ?? [])
+              packBytes.push(await fetchPack(a));
+            docsets.push(await StreamingDocset.openBytes(bytes, packBytes));
+          }
           continue;
         }
-        // Only a whole-file fetch has bytes to count; in-memory sources are instant.
-        const report: DownloadProgress | undefined = onProgress
-          ? (loaded, total) => onProgress(loaded, total, index, count)
-          : undefined;
         const bytes =
-          "bytes" in src ? src.bytes : await fetchDocsetBytes(src.file, report);
+          "bytes" in src ? src.bytes : await fetchDocsetBytes(src.file, reportFor());
         const attachmentBytes: Uint8Array[] = [];
         for (const a of src.attachments ?? []) {
           attachmentBytes.push(
-            "bytes" in a ? a.bytes : await fetchDocsetBytes(a.file),
+            "bytes" in a ? a.bytes : await fetchPack(a.file),
           );
         }
         docsets.push(await StreamingDocset.openBytes(bytes, attachmentBytes));
       } catch (cause) {
-        // Classify + tag with the source (and title) so the UI can explain which
-        // book failed and why, instead of a raw SQLite/fetch message.
-        const { kind, detail } = classifyLoadError(cause);
-        const err = new DocsetLoadError(
-          sourceLabel(src),
-          kind,
-          detail,
-          labels?.[index],
-        );
+        // A pack failure already arrives as a DocsetLoadError naming the pack;
+        // reuse it. Otherwise classify + tag with the docset source (and title) so
+        // the UI can explain which book failed and why, not a raw SQLite message.
+        const err =
+          cause instanceof DocsetLoadError
+            ? cause
+            : new DocsetLoadError(
+                sourceLabel(src),
+                classifyLoadError(cause).kind,
+                classifyLoadError(cause).detail,
+                labels?.[index],
+              );
         // Skip a bad book and keep loading the rest when the caller handles errors.
         if (onError) onError(err, index);
         else throw err;

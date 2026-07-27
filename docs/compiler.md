@@ -67,8 +67,8 @@ A fenced code block that declares a language (```` ```rust ````, ```` ```bash ``
 `…`) is **syntax-highlighted at compile time** (comrak + syntect). The highlighting is
 emitted as **CSS classes** (not inline styles), so the colours come from a stylesheet
 the viewer injects into the content frame — which lets code blocks follow the app
-theme (a light theme by default, with a dormant `[data-theme="dark"]` block ready for
-dark mode) instead of one theme being baked into every `.khb`. The theme CSS is
+theme — light, or dark via the stylesheet's `[data-theme="dark"]` block — instead of
+one theme being baked into every `.khb`. The theme CSS is
 generated from syntect so it always matches the emitted classes; regenerate it with
 `cargo run -p khb-core --example syntax-css > viewer-ts/src/styles/syntax.css`. The
 search text (`plain`) is taken from an unhighlighted render, so the per-token spans
@@ -120,15 +120,21 @@ them in a sibling `.khba` instead (see below).
 ### `compile` — source → docset
 
 ```bash
-khb compile <src-dir> -o out.khb            # SQLite docset (default)
+khb compile <src-dir> -o out.khb                    # SQLite docset (default)
 khb compile <src-dir> -o out.khbb --format khbb
 khb compile <src-dir> -o out.khb --assets sidecar   # attachments -> out.khba
+khb compile <src-dir> -o out.khb --allow-extensions # run declared [extensions]
 ```
 
 `--assets embed` (default) stores attachments inside the `.khb`; `--assets sidecar`
 writes them to a sibling `out.khba` and leaves the `.khb` lean. A docset may be
 backed by several `.khba` packs — `pack`/`patch` pick up `out.khba` and any
 `out.<tag>.khba` next to the `.khb`.
+
+`--allow-extensions` runs the external block transformers a book declares in its
+`docset.toml` (see [Extensions](authoring/extensions)). It's opt-in because those are
+arbitrary external processes; without it, `ext:` blocks are left as plain code and the
+build stays hermetic.
 
 ### `convert` — `.khb` ⇄ `.khbb`
 
@@ -181,7 +187,10 @@ so language models and agents can read the docs without scraping the SPA:
 The Markdown is the page's original source (the optional `pages.md` column, format
 v5), falling back to plain text for a docset that carries none. It's the **static**
 counterpart to a future MCP server: plain files a static host serves as-is, no
-backend. Nothing here is loaded by the viewer.
+backend. Nothing here is loaded by the viewer — though when the export is present
+the viewer offers a **File → Copy links for LLMs** menu item that copies the current
+page's `md/…` URL, its in-app link, and a pointer to `llms.txt` (hidden on
+non-`--llms` builds).
 
 ##### Making the export discoverable (`--base-url`)
 

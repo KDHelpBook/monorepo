@@ -139,10 +139,18 @@ export async function handleFinalize(
   const attachments = (meta.attachments ?? []).filter((f) => FILE_RE.test(f));
 
   // Every referenced object must have been uploaded to this version's prefix.
+  // Keep the main object's ETag as the content identity used by the viewer's
+  // HTTP/offline cache. These uploads are single-part R2 puts, so a changed body
+  // (including an explicitly forced republish) produces a changed ETag.
+  let docsetObject: R2Object | null = null;
   for (const f of [meta.file, ...attachments]) {
-    if (!(await env.DOCSETS.head(`docsets/${id}/${version}/${f}`))) {
-      return json(400, { error: `file ${f} was not uploaded for this version` });
+    const object = await env.DOCSETS.head(`docsets/${id}/${version}/${f}`);
+    if (!object) {
+      return json(400, {
+        error: `file ${f} was not uploaded for this version`,
+      });
     }
+    if (f === meta.file) docsetObject = object;
   }
 
   const pointerKey = `docsets/${id}/latest.json`;
@@ -160,6 +168,7 @@ export async function handleFinalize(
   const entry: PublishedVersion = {
     version,
     file: meta.file,
+    hash: docsetObject?.etag,
     attachments,
     publishedAt: new Date().toISOString(),
     repository: auth.claims.repository,
@@ -177,6 +186,7 @@ export async function handleFinalize(
             {
               version: prev.version,
               file: prev.file,
+              hash: prev.hash,
               attachments: prev.attachments,
               publishedAt: prev.publishedAt,
               repository: prev.repository,

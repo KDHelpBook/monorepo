@@ -19,7 +19,8 @@ CREATE TABLE meta (
 -- lives in the `keywords` table below.
 --
 -- `md` is an OPTIONAL clean-Markdown rendition of the body (NULL when the producing
--- compiler has no Markdown source). The format stays source-agnostic: the viewer
+-- compiler has no Markdown source), with any extension blocks already expanded to the
+-- Markdown their tools returned. The format stays source-agnostic: the viewer
 -- never reads it — `body_html` is the canonical render — it exists only for
 -- AI-facing consumers (llms.txt export, a future MCP `get_page`). It is the LAST
 -- column on purpose: SQLite serialises a row column-by-column and stops reading at

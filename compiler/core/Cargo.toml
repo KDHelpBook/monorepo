@@ -6,11 +6,13 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
+publish = false
 
 [dependencies]
 anyhow.workspace = true
 serde.workspace = true
 serde_yaml = "0.9"
+serde_json = "1"
 toml = "0.8"
 comrak = { version = "0.53", features = ["shortcodes"] }
 # Same syntect comrak already pulls in — used directly to emit the code-block theme

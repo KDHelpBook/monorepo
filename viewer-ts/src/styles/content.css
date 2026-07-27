@@ -978,12 +978,70 @@ body {
   font-size: 0.82em;
   line-height: 1.4;
 }
-/* In print a scrolling strip wraps instead, so no tiles are clipped off the page. */
-@media print {
-  .content .gallery-scroll {
-    flex-wrap: wrap;
-    overflow-x: visible;
-  }
+/* Adapt the content for paper: reveal everything the interactive widgets hide on
+   screen, wrap the horizontally-scrolling strips, and drop the on-screen-only chrome.
+   Driven by an `html.for-print` class rather than @media print: main.ts printCurrent
+   prints the *parent* tab with this reading frame expanded to its full height, and it
+   needs that height measured on screen (class on) to match what prints (class still on).
+   Page margins live with the parent's @page rule (styles/main.css). */
+html.for-print .content .gallery-scroll {
+  flex-wrap: wrap;
+  overflow-x: visible;
+}
+/* CodeCollapse: expand fully — drop the peek clamp, the fade, and the toggle button. */
+html.for-print .content .code-collapse:not(.open) > pre {
+  max-height: none;
+  overflow: visible;
+}
+html.for-print .content .code-collapse:not(.open)::after {
+  display: none;
+}
+html.for-print .content .code-collapse-toggle {
+  display: none;
+}
+/* Tabbed widgets: reveal every panel (not just .active) so nothing stays hidden —
+   CodeGroup, CodeTree, and prose :::tabs. The tab/file bars stay visible as plain
+   headers that label each revealed panel. */
+html.for-print .content .code-group-panel,
+html.for-print .content .tree-panel,
+html.for-print .content .tab-panel {
+  display: block !important;
+}
+html.for-print .content .code-group-tab,
+html.for-print .content .tab-btn,
+html.for-print .content .tree-file {
+  cursor: auto;
+}
+/* Spoilers: reveal — print them as if clicked open. */
+html.for-print .content .spoiler {
+  background: #eef3fa;
+  color: inherit;
+  cursor: auto;
+}
+/* Interactive-only affordance: the copy button has no meaning on paper. */
+html.for-print .content .code-copy {
+  display: none;
+}
+/* "On this page" inline nav: its anchors carry no page references — drop it. */
+html.for-print .content .page-toc {
+  display: none;
+}
+/* White page, and no mid-element page breaks. */
+html.for-print .content {
+  background: #fff;
+}
+html.for-print .content pre,
+html.for-print .content table,
+html.for-print .content figure,
+html.for-print .content .gallery,
+html.for-print .content .code-block {
+  break-inside: avoid;
+}
+html.for-print .content h1,
+html.for-print .content h2,
+html.for-print .content h3,
+html.for-print .content h4 {
+  break-after: avoid;
 }
 /* Description / definition lists (Term / : details). */
 .content dl {

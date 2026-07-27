@@ -10,14 +10,9 @@ related: [text-formatting, headings]
 Write emoji with `:shortcode:` names — the compiler replaces them with the Unicode
 character at build time.
 
-~~~code-preview example
-```md
+```ext:example
 Shipped it :tada: — tests are green :white_check_mark:.
 ```
-```md
-Shipped it :tada: — tests are green :white_check_mark:.
-```
-~~~
 
 > [!NOTE]
 > An unknown `:name:` is left in the text as-is — a typo in a shortcode shows up

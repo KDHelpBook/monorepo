@@ -10,7 +10,7 @@ related: [links, blockquotes]
 Footnotes work exactly as on GitHub. Place a reference
 `[^id]` in the text and define it anywhere in the page.
 
-```md
+```ext:example
 KD Help Book stores rendered HTML, never the source Markdown[^format].
 
 [^format]: The optional `md` column is an enrichment for AI export, not the render.
