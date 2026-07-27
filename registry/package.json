@@ -1,6 +1,6 @@
 {
   "name": "@kdhelpbook/cf-registry",
-  "version": "0.0.2",
+  "version": "0.0.1",
   "description": "Central .khb docs registry: OIDC publish from GitHub Actions, Range streaming from R2, dynamic docsets.json.",
   "type": "module",
   "license": "MIT",
