@@ -1,0 +1,10 @@
+- id: registry
+  title: Registry
+- id: deployment
+  title: Deployment
+- id: configuration
+  title: Configuration
+- id: automation
+  title: Automation
+- id: troubleshooting
+  title: Troubleshooting
