@@ -33,9 +33,9 @@ on:
   workflow_call:
     inputs:
       version:
-        description: khb release to build with (tag vX.Y.Z or "latest").
+        description: khb release to build with (tag vX.Y.Z or "latest"). Empty follows an exact workflow tag, otherwise latest.
         type: string
-        default: latest
+        default: ""
       sources:
         description: Source directories (whitespace/newline separated; globs expanded).
         type: string
@@ -100,15 +100,45 @@ jobs:
         id: pages
         uses: actions/configure-pages@v6
 
+      # Materialise the actions from the same ref as this reusable workflow.
+      # Referencing @v1 here would silently mix an exactly pinned workflow
+      # (for example @v1.2.0) with the newest v1 actions.
+      - name: Resolve the toolchain ref and release
+        id: toolchain
+        shell: bash
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          REF="${GITHUB_WORKFLOW_REF##*@}"
+          VERSION="$REQUESTED_VERSION"
+          if [[ -z "$VERSION" ]]; then
+            TAG="${REF#refs/tags/}"
+            if [[ "$REF" == refs/tags/v* && "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              VERSION="$TAG"
+            else
+              VERSION=latest
+            fi
+          fi
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check out the pinned KD Help Book actions
+        uses: actions/checkout@v7
+        with:
+          repository: KDHelpBook/monorepo
+          ref: ${{ steps.toolchain.outputs.ref }}
+          path: _khb-toolchain
+
       - name: Set up khb
         id: khb
-        uses: KDHelpBook/monorepo/.github/actions/setup-khb@v1
+        uses: ./_khb-toolchain/.github/actions/setup-khb
         with:
-          version: ${{ inputs.version }}
+          version: ${{ steps.toolchain.outputs.version }}
           repository: ${{ inputs.khb-repository }}
 
       - name: Compile and pack
-        uses: KDHelpBook/monorepo/.github/actions/build-book@v1
+        uses: ./_khb-toolchain/.github/actions/build-book
         with:
           khb: ${{ steps.khb.outputs.khb }}
           viewer-dir: ${{ steps.khb.outputs.viewer-dir }}
