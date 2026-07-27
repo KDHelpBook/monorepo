@@ -6,6 +6,7 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
+publish = false
 
 [lib]
 # rlib so the workspace can build/test natively; cdylib is the wasm-pack target.

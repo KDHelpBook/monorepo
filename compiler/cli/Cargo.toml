@@ -6,6 +6,7 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
+publish = false
 # The optional `khb-ext-stub` test helper adds a second bin; keep `cargo run -p khb-cli`
 # unambiguous.
 default-run = "khb"

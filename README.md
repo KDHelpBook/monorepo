@@ -56,6 +56,14 @@ npm run dev
 
 ## Distribution
 
+The first release is distributed through **GitHub Releases**, not crates.io.
+Download the archive for your platform from the
+[latest release](https://github.com/KDHelpBook/monorepo/releases/latest), extract
+it, and place the `khb` executable somewhere on your `PATH`. The
+`khb-core`, `khb-cli`, and `khb-wasm` workspace crates are implementation
+packages and are not currently published to crates.io; in particular,
+`cargo install khb-cli` is not an installation channel.
+
 `khb pack` assembles a ready-to-host static distribution (viewer + docsets +
 a `docsets.json` manifest); `khb patch` updates an already-built one without
 rebuilding the viewer. Two profiles:
