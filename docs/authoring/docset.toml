@@ -2,7 +2,7 @@
 # Pages are the flat *.md files; toc.yaml shapes the tree, categories.yaml names the facet.
 id = "khb-authoring"
 title = "Authoring KD Help Books"
-version = "0.0.1"
+version = "0.0.2"
 language = "en"
 collection = "khb-docs"
 collection_title = "KD Help Book"
