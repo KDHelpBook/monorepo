@@ -662,7 +662,7 @@ checksum = "47f142fe24a9c9944451e8349de0a56af5f3e7226dc46f3ed4d4ecc0b85af75e"
 
 [[package]]
 name = "khb-cli"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -678,7 +678,7 @@ dependencies = [
 
 [[package]]
 name = "khb-core"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "comrak",
@@ -698,7 +698,7 @@ dependencies = [
 
 [[package]]
 name = "khb-wasm"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "khb-core",
 ]
