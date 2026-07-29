@@ -1,6 +1,6 @@
 ---
 title: Full-text search
-keywords: [FTS5, bm25, snippet, tokenizer, porter, stemming, sql.js]
+keywords: [FTS5, bm25, snippet, tokenizer, porter, stemming, wa-sqlite]
 categories: [internals, engine]
 related: [sqlite-schema, streaming, khb-authoring:frontmatter-keywords]
 ---
@@ -63,27 +63,17 @@ stemmers are added — for Polish, `wyjątek` still matches `wyjatek`.
 This is also why content ships as **one docset per language**: each book gets an
 index tokenized for its own language.
 
-## Where each engine differs
+## Runtime engines
 
-The same file is searched by three engines, and they are not equal:
+The same file is searched by two FTS5-enabled engines:
 
 | Engine | Where | Search |
 |--------|-------|--------|
-| Rust `core` (rusqlite) | CLI, Tauri | real FTS5: bm25 + stemming |
-| sql.js | browser, whole-file books | **no FTS5** — JS scan over `plain` |
-| custom wa-sqlite | browser, streamed books | real FTS5: bm25 + stemming |
+| Rust `core` (rusqlite) | CLI | FTS5: bm25 + stemming |
+| custom `wa-sqlite` | browser, whole-file and streamed books | FTS5: bm25 + stemming |
 
-> [!WARNING]
-> The stock `sql.js` wasm build ships **without FTS5**, so the prebuilt
-> `pages_fts` index is unusable in the browser's default engine. For whole-file
-> books the viewer instead searches the stored `plain` column in JS — a heuristic,
-> not bm25. The index in the file is *not* wasted, though: native (CLI/Tauri) uses
-> it directly, and so does the browser's **streaming** engine, a custom
-> FTS5-enabled `wa-sqlite` build (see [Streaming](streaming)).
-
-When books on different engines merge into one collection, the viewer normalizes
-each book's scores before interleaving results, so bm25 values and the sql.js
-heuristic compete fairly.
+The viewer normalizes each book's bm25 scores before interleaving results so a
+large book does not crowd out smaller books.
 
 Keyword terms (from page frontmatter — see
 [keywords](khb-authoring:frontmatter-keywords)) take part in full-text matching via

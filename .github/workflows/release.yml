@@ -1,111 +1,103 @@
 name: Release
 
-# Bumps the version everywhere it lives, commits + tags on main, creates the
-# GitHub release, then chains build.yml (binaries + docs .khb as release
-# assets) and publish.yml (GitHub Pages). The chain uses workflow_call because
-# a push/tag made with GITHUB_TOKEN does not trigger other workflows.
+# Release preparation happens in a normal pull request. This workflow only
+# validates the already-versioned main commit, creates/resumes a draft, builds
+# immutable artifacts, publishes every channel, and finally makes the release
+# public. A failed run leaves the draft private and never moves v0.
 
 on:
   workflow_dispatch:
     inputs:
-      bump:
-        description: Semver part to bump
-        type: choice
-        options: [patch, minor, major]
-        default: patch
       version:
-        description: Explicit version (X.Y.Z) — overrides bump
+        description: Prepared version (X.Y.Z)
         type: string
-        default: ""
+        required: true
 
 permissions:
   contents: write
 
 concurrency:
   group: release
+  cancel-in-progress: false
 
 jobs:
   tag:
-    name: Bump, commit, tag
-    runs-on: ubuntu-latest
+    name: Validate, tag, and create the draft
+    runs-on: ubuntu-22.04
     outputs:
       tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v7
         with:
           ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
 
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Compute the new version
+      - name: Validate prepared versions and release prerequisites
         id: version
         shell: bash
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+          REGISTRY_URL: ${{ vars.KHB_REGISTRY_URL }}
+          PAGES_DEPLOY_KEY: ${{ secrets.PAGES_DEPLOY_KEY }}
         run: |
-          CUR=$(sed -n 's/^version = "\(.*\)"$/\1/p' compiler/Cargo.toml | head -n1)
-          NEW="${{ inputs.version }}"
-          NEW="${NEW#v}"
-          if [[ -z "$NEW" ]]; then
-            IFS=. read -r MAJ MIN PAT <<<"$CUR"
-            case "${{ inputs.bump }}" in
-              major) NEW="$((MAJ + 1)).0.0" ;;
-              minor) NEW="${MAJ}.$((MIN + 1)).0" ;;
-              patch) NEW="${MAJ}.${MIN}.$((PAT + 1))" ;;
-            esac
-          fi
-          [[ "$NEW" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "bad version: '$NEW'" >&2; exit 1; }
-          [[ "$NEW" != "$CUR" ]] || { echo "version $NEW is already current" >&2; exit 1; }
-          echo "bump: $CUR -> $NEW"
-          echo "new=$NEW" >> "$GITHUB_OUTPUT"
-          echo "tag=v$NEW" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          VERSION="${REQUESTED_VERSION#v}"
+          bash .github/scripts/check-version.sh "$VERSION"
+          [[ -n "$REGISTRY_URL" ]] || {
+            echo "KHB_REGISTRY_URL repository variable is required" >&2
+            exit 1
+          }
+          [[ -n "$PAGES_DEPLOY_KEY" ]] || {
+            echo "PAGES_DEPLOY_KEY repository secret is required" >&2
+            exit 1
+          }
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Set the version in code
+      - name: Create or validate the immutable tag
         shell: bash
         run: |
-          NEW="${{ steps.version.outputs.new }}"
-          # Workspace version — the single source; every crate inherits it.
-          sed -i "0,/^version = \".*\"$/s//version = \"${NEW}\"/" compiler/Cargo.toml
-          grep -q "^version = \"${NEW}\"$" compiler/Cargo.toml
-          (cd compiler && cargo update --workspace)
-          (cd viewer-ts && npm version "$NEW" --no-git-tag-version)
-          (cd registry && npm version "$NEW" --no-git-tag-version)
-          # Every published documentation volume (docs/*/docset.toml); the
-          # compiler/examples/* fixtures keep their static demo versions.
-          for T in docs/*/docset.toml; do
-            sed -i "s/^version = \".*\"$/version = \"${NEW}\"/" "$T"
-            grep -q "^version = \"${NEW}\"$" "$T"
-          done
-          git diff --stat
+          set -euo pipefail
+          TAG="${{ steps.version.outputs.tag }}"
+          HEAD_SHA="$(git rev-parse HEAD)"
+          if git rev-parse --verify "refs/tags/$TAG" >/dev/null 2>&1; then
+            TAG_SHA="$(git rev-list -n1 "$TAG")"
+            [[ "$TAG_SHA" == "$HEAD_SHA" ]] || {
+              echo "$TAG points to $TAG_SHA, not prepared main $HEAD_SHA" >&2
+              exit 1
+            }
+            echo "Resuming existing tag $TAG at $TAG_SHA"
+          else
+            git tag "$TAG" "$HEAD_SHA"
+            git push origin "refs/tags/$TAG"
+          fi
 
-      - name: Commit, tag, push
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "release: ${{ steps.version.outputs.tag }}"
-          git tag "${{ steps.version.outputs.tag }}"
-          git push origin HEAD:main --follow-tags
-
-      - name: Create the GitHub release
+      - name: Create or validate the draft GitHub Release
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ steps.version.outputs.tag }}" \
-            --title "${{ steps.version.outputs.tag }}" --generate-notes \
-            -R "${{ github.repository }}"
-
-      # Move the major-version alias tag (e.g. v1) to this release. It's how
-      # downstream repositories pin the reusable workflows and composite actions
-      # (`uses: KDHelpBook/monorepo/.github/workflows/book-pages.yml@v1`, which
-      # in turn reference setup-khb@v1 / build-book@v1) — the actions/checkout@v4
-      # convention: one moving major that always resolves to the newest release
-      # in that series. Force-updated on every release; exact `@vX.Y.Z` pins stay
-      # available for anyone wanting to lock a specific version.
-      - name: Move the major-version alias tag
-        run: |
-          NEW="${{ steps.version.outputs.new }}"
-          MAJOR="v${NEW%%.*}"
-          git tag -f "$MAJOR"
-          git push origin "refs/tags/$MAJOR" --force
+          set -euo pipefail
+          TAG="${{ steps.version.outputs.tag }}"
+          if gh release view "$TAG" -R "${{ github.repository }}" >/dev/null 2>&1; then
+            IS_DRAFT="$(gh release view "$TAG" -R "${{ github.repository }}" --json isDraft --jq .isDraft)"
+            [[ "$IS_DRAFT" == "true" ]] || {
+              echo "Release $TAG already exists and is public; refusing to overwrite it" >&2
+              exit 1
+            }
+            echo "Resuming existing draft $TAG"
+          else
+            gh release create "$TAG" \
+              --repo "${{ github.repository }}" \
+              --draft \
+              --title "$TAG" \
+              --notes "Hardened KD Help Book release: one .khb format, FTS5-enabled browser viewer, safer dependencies, compatibility-tested CLI binaries, and an atomic multi-channel release." \
+              --generate-notes
+          fi
 
   build:
     needs: tag
@@ -116,13 +108,11 @@ jobs:
       contents: write
     secrets: inherit
 
-  publish:
+  pages:
     needs: [tag, build]
     uses: ./.github/workflows/publish.yml
     with:
       ref: ${{ needs.tag.outputs.tag }}
-    # The cross-repo Pages deploy authenticates with the PAGES_DEPLOY_KEY
-    # secret (via `secrets: inherit`), not with workflow permissions.
     permissions:
       contents: read
       actions: read
@@ -131,7 +121,7 @@ jobs:
   registry-package:
     name: Publish @kdhelpbook/cf-registry
     needs: [tag, build]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     permissions:
       contents: read
       id-token: write
@@ -145,25 +135,46 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
-      - name: Publish with npm trusted publishing
+
+      - name: Publish once, or verify an identical existing version
         shell: bash
         run: |
-          REGISTRY_TARBALLS=()
-          while IFS= read -r REGISTRY_TARBALL; do
-            REGISTRY_TARBALLS+=("$REGISTRY_TARBALL")
-          done < <(find package -type f -name '*.tgz' -print)
-          if [[ "${#REGISTRY_TARBALLS[@]}" -ne 1 ]]; then
-            printf 'Expected exactly one registry tarball, found %s:\n' \
-              "${#REGISTRY_TARBALLS[@]}" >&2
-            printf '  %s\n' "${REGISTRY_TARBALLS[@]}" >&2
+          set -euo pipefail
+          mapfile -t TARBALLS < <(find package -type f -name '*.tgz' -print)
+          [[ "${#TARBALLS[@]}" -eq 1 ]] || {
+            printf 'Expected one registry tarball, found %s\n' "${#TARBALLS[@]}" >&2
             exit 1
+          }
+          TARBALL="$(realpath "${TARBALLS[0]}")"
+          NAME="$(tar -xOf "$TARBALL" package/package.json | jq -er .name)"
+          VERSION="$(tar -xOf "$TARBALL" package/package.json | jq -er .version)"
+          [[ "$VERSION" == "${{ needs.tag.outputs.version }}" ]]
+          LOCAL_INTEGRITY="sha512-$(openssl dgst -sha512 -binary "$TARBALL" | openssl base64 -A)"
+
+          set +e
+          REMOTE_RAW="$(npm view "$NAME@$VERSION" dist.integrity --json 2>"$RUNNER_TEMP/npm-view.err")"
+          VIEW_STATUS=$?
+          set -e
+          if [[ "$VIEW_STATUS" -eq 0 ]]; then
+            REMOTE_INTEGRITY="$(jq -r . <<<"$REMOTE_RAW")"
+            [[ "$REMOTE_INTEGRITY" == "$LOCAL_INTEGRITY" ]] || {
+              echo "$NAME@$VERSION exists with different tarball integrity" >&2
+              echo "local:  $LOCAL_INTEGRITY" >&2
+              echo "remote: $REMOTE_INTEGRITY" >&2
+              exit 1
+            }
+            echo "$NAME@$VERSION already exists with matching integrity; skipping publish"
+          elif grep -q 'E404' "$RUNNER_TEMP/npm-view.err"; then
+            npm publish "$TARBALL" --access public --provenance
+          else
+            cat "$RUNNER_TEMP/npm-view.err" >&2
+            exit "$VIEW_STATUS"
           fi
-          REGISTRY_TARBALL="$(realpath "${REGISTRY_TARBALLS[0]}")"
-          npm publish "$REGISTRY_TARBALL"
+
+          [[ "$(npm view "$NAME@$VERSION" version)" == "$VERSION" ]]
 
   registry-docs:
     name: Publish ${{ matrix.id }} to the official registry
-    if: vars.KHB_REGISTRY_URL != ''
     needs: [tag, build]
     strategy:
       fail-fast: false
@@ -174,6 +185,9 @@ jobs:
             allow-extensions: true
           - id: khb-publishing
             source: docs/publishing
+            allow-extensions: false
+          - id: khb-internals
+            source: docs/internals
             allow-extensions: false
           - id: khb-registry
             source: docs/registry
@@ -188,3 +202,70 @@ jobs:
     permissions:
       contents: read
       id-token: write
+
+  finalize:
+    name: Publish the GitHub Release
+    needs: [tag, build, pages, registry-package, registry-docs]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Verify all release gates and assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ needs.tag.outputs.tag }}"
+          VERSION="${{ needs.tag.outputs.version }}"
+          RELEASE="$(gh release view "$TAG" -R "${{ github.repository }}" --json isDraft,assets)"
+          [[ "$(jq -r .isDraft <<<"$RELEASE")" == "true" ]]
+          mapfile -t ASSETS < <(jq -r '.assets[].name' <<<"$RELEASE" | LC_ALL=C sort)
+          [[ "${#ASSETS[@]}" -eq 11 ]] || {
+            printf 'Expected 11 release assets, found %s:\n' "${#ASSETS[@]}" >&2
+            printf '  %s\n' "${ASSETS[@]}" >&2
+            exit 1
+          }
+          has_asset() {
+            printf '%s\n' "${ASSETS[@]}" | grep -Fxq "$1"
+          }
+          for TARGET in \
+            x86_64-unknown-linux-gnu \
+            aarch64-unknown-linux-gnu \
+            aarch64-apple-darwin \
+            x86_64-apple-darwin; do
+            has_asset "khb-v${VERSION}-${TARGET}.tar.gz"
+          done
+          has_asset "khb-v${VERSION}-x86_64-pc-windows-msvc.zip"
+          has_asset "khb-viewer-v${VERSION}.tar.gz"
+          has_asset "khb-authoring-v${VERSION}.khb"
+          has_asset "khb-publishing-v${VERSION}.khb"
+          has_asset "khb-internals-v${VERSION}.khb"
+          has_asset "khb-registry-v${VERSION}.khb"
+          has_asset "SHA256SUMS"
+          [[ "$(
+            curl --fail --silent --show-error --location \
+              --retry 10 --retry-all-errors --retry-delay 5 \
+              -o /dev/null -w '%{http_code}' \
+              https://kdhelpbook.github.io/
+          )" == "200" ]]
+
+      - name: Make the release public, mark Latest, and move v0
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ needs.tag.outputs.tag }}"
+          gh release edit "$TAG" -R "${{ github.repository }}" --draft=false --latest
+          git tag -f v0 "$TAG"
+          if ! git push origin refs/tags/v0 --force; then
+            gh release edit "$TAG" -R "${{ github.repository }}" --draft=true --latest=false
+            echo "Could not move v0; restored $TAG to draft" >&2
+            exit 1
+          fi

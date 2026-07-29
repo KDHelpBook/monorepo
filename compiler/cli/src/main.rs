@@ -1,8 +1,8 @@
 //! `khb` — the KD Help Book command-line tool.
 //!
-//! Subcommands: `compile` (source → `.khb`/`.khbb`), `convert` (`.khb` ⇄ `.khbb`),
-//! `pack` (assemble a publishable distribution), `patch` (update one in place) and
-//! `inspect` (print metadata for a local or HTTP-streamed docset).
+//! Subcommands: `compile` (source → `.khb`), `pack` (assemble a publishable
+//! distribution), `patch` (update one in place) and `inspect` (print metadata
+//! for a local or HTTP-streamed docset).
 
 mod http;
 mod publish;
@@ -10,9 +10,9 @@ mod publish;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
-use khb_core::{binary, build, render, source, Docset, RangeReader};
+use khb_core::{build, render, source, Docset, RangeReader};
 
 use crate::http::HttpRangeReader;
 use crate::publish::{pack, patch, PackOptions};
@@ -28,14 +28,6 @@ struct Cli {
     command: Command,
 }
 
-#[derive(Copy, Clone, ValueEnum)]
-enum Format {
-    /// SQLite docset with a prebuilt full-text index.
-    Khb,
-    /// Minimal binary (no indexes); rebuilt into a `.khb` by the viewer.
-    Khbb,
-}
-
 #[derive(Copy, Clone, PartialEq, ValueEnum)]
 enum AssetsMode {
     /// Store attachments inside the `.khb`.
@@ -48,7 +40,7 @@ enum AssetsMode {
 enum PackMode {
     /// Copy the `.khb` as-is.
     Khb,
-    /// Gzip each docset to `.khbc` (smaller download).
+    /// Gzip each docset to `.khb.gz` and each attachment pack to `.khba.gz`.
     Compact,
 }
 
@@ -62,16 +54,13 @@ enum Profile {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Compile a source directory into a `.khb` (or `.khbb`) docset.
+    /// Compile a source directory into a `.khb` docset.
     Compile {
         /// Source directory (docset.toml, pages/*.md, optional toc.yaml / categories.yaml).
         src: PathBuf,
         /// Output path.
         #[arg(short, long)]
         out: PathBuf,
-        /// Output format.
-        #[arg(long, value_enum, default_value = "khb")]
-        format: Format,
         /// Where attachments go: embedded in the `.khb`, or a sibling `.khba`.
         #[arg(long = "assets", value_enum, default_value = "embed")]
         assets: AssetsMode,
@@ -80,12 +69,6 @@ enum Command {
         /// and extensions break the otherwise hermetic, offline build.
         #[arg(long = "allow-extensions")]
         allow_extensions: bool,
-    },
-    /// Convert between `.khb` and `.khbb` (direction inferred from file extensions).
-    Convert {
-        input: PathBuf,
-        #[arg(short, long)]
-        out: PathBuf,
     },
     /// Assemble a publishable distribution: viewer + docsets + manifest + config.
     Pack {
@@ -191,11 +174,9 @@ fn main() -> Result<()> {
         Command::Compile {
             src,
             out,
-            format,
             assets,
             allow_extensions,
-        } => compile(&src, &out, format, assets, allow_extensions),
-        Command::Convert { input, out } => convert(&input, &out),
+        } => compile(&src, &out, assets, allow_extensions),
         Command::Pack {
             viewer,
             docsets,
@@ -339,13 +320,7 @@ fn inspect(src: &str, json: bool) -> Result<()> {
     Ok(())
 }
 
-fn compile(
-    src: &Path,
-    out: &Path,
-    format: Format,
-    assets: AssetsMode,
-    allow_extensions: bool,
-) -> Result<()> {
+fn compile(src: &Path, out: &Path, assets: AssetsMode, allow_extensions: bool) -> Result<()> {
     let docset =
         source::load_dir(src).with_context(|| format!("loading source {}", src.display()))?;
     let (id, language, pages) = (
@@ -359,67 +334,27 @@ fn compile(
     };
     let mut rendered = render::render(&docset, &render_opts)
         .with_context(|| format!("rendering {}", src.display()))?;
-    match format {
-        Format::Khb => {
-            if assets == AssetsMode::Sidecar && !rendered.assets.is_empty() {
-                // Peel attachments out of the .khb and into a sibling .khba, then
-                // point the .khb's routing index at that pack.
-                let khba = out.with_extension("khba");
-                let sidecar = std::mem::take(&mut rendered.assets);
-                build::build_khb(&rendered, out)
-                    .with_context(|| format!("writing {}", out.display()))?;
-                build::build_khba(&id, &sidecar, &khba)
-                    .with_context(|| format!("writing {}", khba.display()))?;
-                let pack = build::khba_pack_id(&khba);
-                let paths = sidecar.iter().map(|a| a.path.clone()).collect();
-                build::rebuild_asset_index(out, &[(pack, paths)])
-                    .with_context(|| format!("indexing assets in {}", out.display()))?;
-                println!("  + {} attachment(s) -> {}", sidecar.len(), khba.display());
-            } else {
-                build::build_khb(&rendered, out)
-                    .with_context(|| format!("writing {}", out.display()))?;
-            }
-        }
-        Format::Khbb => {
-            if assets == AssetsMode::Sidecar {
-                bail!("--assets sidecar is only valid for --format khb (khbb is a single file)");
-            }
-            let bytes = binary::to_khbb(&rendered)?;
-            std::fs::write(out, bytes).with_context(|| format!("writing {}", out.display()))?;
-        }
+    if assets == AssetsMode::Sidecar && !rendered.assets.is_empty() {
+        // Peel attachments out of the .khb and into a sibling .khba, then
+        // point the .khb's routing index at that pack.
+        let khba = out.with_extension("khba");
+        let sidecar = std::mem::take(&mut rendered.assets);
+        build::build_khb(&rendered, out).with_context(|| format!("writing {}", out.display()))?;
+        build::build_khba(&id, &sidecar, &khba)
+            .with_context(|| format!("writing {}", khba.display()))?;
+        let pack = build::khba_pack_id(&khba);
+        let paths = sidecar.iter().map(|a| a.path.clone()).collect();
+        build::rebuild_asset_index(out, &[(pack, paths)])
+            .with_context(|| format!("indexing assets in {}", out.display()))?;
+        println!("  + {} attachment(s) -> {}", sidecar.len(), khba.display());
+    } else {
+        build::build_khb(&rendered, out).with_context(|| format!("writing {}", out.display()))?;
     }
     println!(
         "compiled {id} ({pages} pages, language {language}) -> {}",
         out.display()
     );
     Ok(())
-}
-
-fn convert(input: &Path, out: &Path) -> Result<()> {
-    match (has_ext(input, "khbb"), has_ext(out, "khbb")) {
-        (true, false) => {
-            let bytes =
-                std::fs::read(input).with_context(|| format!("reading {}", input.display()))?;
-            build::build_khb(&binary::from_khbb(&bytes)?, out)?;
-        }
-        (false, true) => {
-            let rendered = Docset::open(input)?.to_rendered()?;
-            std::fs::write(out, binary::to_khbb(&rendered)?)
-                .with_context(|| format!("writing {}", out.display()))?;
-        }
-        _ => bail!(
-            "convert needs one .khb and one .khbb path (got {} -> {})",
-            input.display(),
-            out.display()
-        ),
-    }
-    println!("converted {} -> {}", input.display(), out.display());
-    Ok(())
-}
-
-fn has_ext(path: &Path, ext: &str) -> bool {
-    path.extension()
-        .is_some_and(|e| e.eq_ignore_ascii_case(ext))
 }
 
 #[cfg(test)]

@@ -5,16 +5,15 @@ categories: [distribution, reference]
 ---
 # Offline desktop app (Tauri)
 
-Want a real desktop application with a native window and menus, like a classic
-desktop help viewer? Wrap the same viewer in **Tauri**.
+KD Help Book does not currently ship a desktop application. A **Tauri** wrapper
+is a possible future integration for a native window and menus.
 
-Because the entire data engine is a Rust crate that also compiles natively, Tauri
-reads `.khb` docsets straight from disk with native SQLite — no WebAssembly and no
-network needed. The content is fully offline by definition.
+The proposed design would reuse the viewer UI and expose the native Rust `core`
+engine through Tauri commands so `.khb` docsets can be read directly from disk.
 
 | Option | Upside | Note |
 |--------|--------|------|
 | **Tauri** | tiny bundle, native menus | needs Rust to build |
 | **Electron** | ubiquitous Chromium | heavier bundle |
 
-Tauri is the closest to the spirit of a lightweight help reader.
+This is a design direction, not an available release artifact.

@@ -27,7 +27,7 @@ Come back here when you need to know what those tools actually produce.
 
 | Page | Covers |
 |------|--------|
-| [File formats](file-formats) | `.khb`, `.khbb`, `.khba`, and the `.gz` transfer suffix |
+| [File formats](file-formats) | `.khb`, `.khba`, and the `.gz` transfer suffix |
 | [SQLite schema](sqlite-schema) | every table, the `meta` keys, the format version |
 | [Full-text search](full-text-search) | FTS5 external content, bm25, per-language tokenizers |
 | [Streaming](streaming) | the Range-VFS: reading a remote book page-by-page |
@@ -41,8 +41,8 @@ A `.khb` book is an **ordinary SQLite database** with everything precomputed at
 build time — rendered HTML, plain text, the TOC, the keyword index, the FTS index.
 That single choice explains most of the architecture:
 
-- **Any SQLite can open it** — the native Rust engine (CLI, Tauri), sql.js in the
-  browser, or your own tooling.
+- **Any SQLite with FTS5 can open it** — the native Rust CLI engine, the browser's
+  bundled `wa-sqlite`, or your own tooling.
 - **Search is instant and offline** — nothing is computed at read time.
 - **Streaming falls out for free** — SQLite reads fixed-size pages, and a page read
   maps one-to-one onto an HTTP `Range` request (see [Streaming](streaming)).

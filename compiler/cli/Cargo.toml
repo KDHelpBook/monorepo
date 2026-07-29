@@ -1,6 +1,6 @@
 [package]
 name = "khb-cli"
-description = "KD Help Book command-line tool (khb): compile / pack / patch / convert"
+description = "KD Help Book command-line tool (khb): compile / pack / patch / inspect"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

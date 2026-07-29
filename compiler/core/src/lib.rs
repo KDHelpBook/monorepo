@@ -2,11 +2,10 @@
 //!
 //! This crate owns everything about the `.khb` docset format: the SQLite schema,
 //! the source model, Markdown rendering, the writer, and the `Docset`/`Collection`
-//! query API. It is compiled both natively (for the CLI and, later, Tauri) and to
-//! wasm (for the browser viewer). It must stay free of any DOM or JS assumptions.
+//! query API. It is compiled natively for the CLI; a future desktop integration
+//! can reuse it. It must stay free of any UI assumptions.
 
 pub mod assets;
-pub mod binary;
 pub mod build;
 pub mod docset;
 pub mod llms;
@@ -23,9 +22,8 @@ pub use model::{
 };
 pub use vfs::{FileRangeReader, RangeReader};
 
-/// The on-disk `.khb`/`.khbb` format version this build reads and writes. Bump it
-/// whenever the schema or the rendered-docset layout that `.khbb` encodes changes
-/// incompatibly. (Pre-release development iterated within version 1.)
+/// The on-disk `.khb` format version this build reads and writes. Bump it whenever
+/// the SQLite schema changes incompatibly.
 pub const FORMAT_VERSION: u32 = 1;
 
 /// The crate version, surfaced in a docset's `meta.generator`.
@@ -274,32 +272,6 @@ mod tests {
             .unwrap();
         assert_eq!(mime, "image/svg+xml");
         assert!(!data.is_empty());
-    }
-
-    #[test]
-    fn khbb_roundtrip_matches_khb() {
-        let doc = render::render(&demo_source(), &render::RenderOptions::default()).unwrap();
-
-        // RenderedDocset -> .khbb bytes -> RenderedDocset
-        let bytes = binary::to_khbb(&doc).unwrap();
-        let restored = binary::from_khbb(&bytes).unwrap();
-        assert_eq!(restored.id, doc.id);
-        assert_eq!(restored.pages.len(), doc.pages.len());
-        // The v6 page-less folder node survives the binary round-trip.
-        assert_eq!(restored.toc[0].children[0].page_id, None);
-
-        // Rebuild a .khb from the restored data; search still works.
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("from_khbb.khb");
-        build::build_khb(&restored, &path).unwrap();
-        let ds = Docset::open(&path).unwrap();
-        assert_eq!(ds.search("fox", 10).unwrap().len(), 2);
-
-        // And the reverse: .khb -> RenderedDocset reproduces the same shape.
-        let back = ds.to_rendered().unwrap();
-        assert_eq!(back.pages.len(), doc.pages.len());
-        assert_eq!(back.toc.len(), doc.toc.len());
-        assert_eq!(back.categories.len(), doc.categories.len());
     }
 
     #[test]

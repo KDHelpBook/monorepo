@@ -5,9 +5,8 @@ categories: [distribution]
 ---
 # Distribution
 
-A docset and the viewer are separate, so the same content ships two ways:
+A docset and the viewer are separate. Today the supported distribution is:
 
 - [Packaging](packaging) a static site for the web.
-- An [offline desktop app](offline-tauri) with Tauri.
-
-Both use exactly the same `.khb` content — no changes required.
+A future [offline desktop integration](offline-tauri) can reuse the same `.khb`
+content, but it is not currently shipped.

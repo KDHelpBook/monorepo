@@ -1,24 +1,21 @@
 # Desktop app (Tauri)
 
-The viewer is a static web app, so it runs unchanged inside a **[Tauri](https://tauri.app)**
-window to give an offline desktop application with a native window and menus — in
-the spirit of a classic desktop help viewer.
+Tauri is a **future integration**. KD Help Book does not currently ship a desktop
+application or installer. This page records the intended design, not an available
+release channel.
 
 Two things are worth knowing:
 
-- **The webview reuses the browser stack.** Inside Tauri's webview the viewer
-  loads exactly as in a browser (sql.js for SQLite, the same UI), so no code
-  changes are required to ship a desktop build.
-- **Native SQLite is an optional upgrade.** Because the whole data engine is the
-  Rust `compiler/core` crate, a Tauri build can later read `.khb` docsets straight
-  from disk with native SQLite (via `tauri-plugin-sql` or by exposing `core`'s
-  `Docset` over Tauri commands) — dropping sql.js on the desktop and getting the
-  real FTS5 index. That is a follow-up, not required for a working app.
+- **The webview can reuse the browser stack.** A prototype could load the same
+  FTS5-enabled `wa-sqlite` viewer as the website.
+- **Native SQLite is the intended integration.** The Rust `compiler/core` crate
+  can later read `.khb` docsets from disk and expose `Docset` through Tauri
+  commands.
 - **Streamed & remote content** (including a `khb-asset://` protocol for streamed
   images/media, and online/hybrid docsets over HTTP Range) is a further step, sketched
   in [streaming.md](streaming.md).
 
-## Wiring it up
+## Proposed wiring
 
 1. Build a bundled distribution to serve as the frontend:
 
@@ -45,7 +42,7 @@ Two things are worth knowing:
    }
    ```
 
-3. Run / build:
+3. During future application development, run or build it with the Tauri CLI:
 
    ```bash
    cargo tauri dev      # live desktop window

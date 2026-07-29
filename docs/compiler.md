@@ -121,7 +121,6 @@ them in a sibling `.khba` instead (see below).
 
 ```bash
 khb compile <src-dir> -o out.khb                    # SQLite docset (default)
-khb compile <src-dir> -o out.khbb --format khbb
 khb compile <src-dir> -o out.khb --assets sidecar   # attachments -> out.khba
 khb compile <src-dir> -o out.khb --allow-extensions # run declared [extensions]
 ```
@@ -135,15 +134,6 @@ backed by several `.khba` packs — `pack`/`patch` pick up `out.khba` and any
 `docset.toml` (see [Extensions](authoring/extensions)). It's opt-in because those are
 arbitrary external processes; without it, `ext:` blocks are left as plain code and the
 build stays hermetic.
-
-### `convert` — `.khb` ⇄ `.khbb`
-
-Direction is inferred from the file extensions:
-
-```bash
-khb convert out.khb  -o out.khbb    # down-convert to the binary form
-khb convert out.khbb -o out.khb     # rebuild the SQLite docset
-```
 
 ### `pack` — assemble a publishable distribution
 

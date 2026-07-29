@@ -1,6 +1,6 @@
 ---
 title: Compiling a book
-keywords: [compile, khb, CLI, build, validation, khbb, sidecar, inspect]
+keywords: [compile, khb, CLI, build, validation, sidecar, inspect]
 categories: [authoring]
 related: [getting-started, images, khb-publishing:pack, khb-publishing:patch]
 ---
@@ -18,7 +18,6 @@ khb compile my-docs -o my.khb
 | Flag | Meaning |
 |------|---------|
 | `-o <path>` | where to write the compiled docset |
-| `--format khbb` | emit the minimal `.khbb` binary form instead of the default `.khb` (smaller to transfer; rebuilt into a `.khb` before use) |
 | `--assets sidecar` | write attachments to a sibling `.khba` pack instead of embedding them in the `.khb` — see [Images & assets](images) |
 
 ## What the compiler validates

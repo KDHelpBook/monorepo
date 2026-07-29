@@ -3,9 +3,8 @@
 //! Two stages:
 //! - [`SourceDocset`] — pages still as Markdown, produced by a source loader
 //!   ([`crate::source`]). Front-end / format-specific.
-//! - [`RenderedDocset`] — pages as rendered HTML + plain text. This is the pivot
-//!   both output formats share: `.khb` (SQLite, [`crate::build`]) and `.khbb`
-//!   (binary, [`crate::binary`]) are just two encodings of the same rendered data.
+//! - [`RenderedDocset`] — pages as rendered HTML + plain text, ready for the
+//!   `.khb` SQLite writer ([`crate::build`]).
 
 use serde::{Deserialize, Serialize};
 
@@ -121,7 +120,7 @@ pub struct Asset {
 }
 
 // ---------------------------------------------------------------------------
-// Rendered stage (HTML in, format-agnostic pivot)
+// Rendered stage (HTML ready for the SQLite writer)
 // ---------------------------------------------------------------------------
 
 /// A page rendered to HTML + plain text, ready to be encoded into a docset.
@@ -143,7 +142,7 @@ pub struct RenderedPage {
     pub md: Option<String>,
 }
 
-/// A complete rendered docset — the pivot shared by `.khb` and `.khbb`.
+/// A complete rendered docset ready to be written as `.khb`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RenderedDocset {
     pub id: String,

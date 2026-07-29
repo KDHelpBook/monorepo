@@ -1,6 +1,6 @@
 [package]
 name = "khb-wasm"
-description = "wasm-bindgen bindings exposing khb-core to the browser viewer"
+description = "Internal placeholder for possible future WebAssembly integration"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,7 +9,7 @@ repository.workspace = true
 publish = false
 
 [lib]
-# rlib so the workspace can build/test natively; cdylib is the wasm-pack target.
+# Keep an rlib so the workspace can build and test the placeholder natively.
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]

@@ -124,10 +124,39 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail-with-body --silent --show-error --retry 3 \
-            -X PUT --data-binary "@$DOCSET_FILE" \
-            -H "Authorization: Bearer $OIDC_TOKEN" \
-            "$REGISTRY_ORIGIN/publish/$DOCSET_ID/$DOCSET_VERSION/$DOCSET_ID.khb"
+          SERVE_URL="$REGISTRY_ORIGIN/d/$DOCSET_ID/$DOCSET_VERSION/$DOCSET_ID.khb"
+          STATUS="$(curl --silent --show-error -o "$RUNNER_TEMP/existing.khb" \
+            -w '%{http_code}' "$SERVE_URL")"
+          if [[ "$STATUS" == "200" ]]; then
+            cmp "$DOCSET_FILE" "$RUNNER_TEMP/existing.khb" || {
+              echo "Registry already contains different bytes for $DOCSET_ID@$DOCSET_VERSION" >&2
+              exit 1
+            }
+            PUBLISHED_VERSION="$(
+              curl --fail-with-body --silent --show-error "$REGISTRY_ORIGIN/docsets.json" \
+                | jq -r --arg id "$DOCSET_ID" '.docsets[] | select(.id == $id) | .version' \
+                | head -n1
+            )"
+            if [[ "$PUBLISHED_VERSION" == "$DOCSET_VERSION" ]]; then
+              echo "$DOCSET_ID@$DOCSET_VERSION is already finalized with identical bytes"
+              exit 0
+            fi
+            echo "The bytes already exist but are not finalized; resuming at finalize"
+            SKIP_UPLOAD=true
+          else
+            [[ "$STATUS" == "404" ]] || {
+              echo "Unexpected registry response while probing $SERVE_URL: HTTP $STATUS" >&2
+              exit 1
+            }
+            SKIP_UPLOAD=false
+          fi
+
+          if [[ "$SKIP_UPLOAD" != "true" ]]; then
+            curl --fail-with-body --silent --show-error --retry 3 \
+              -X PUT --data-binary "@$DOCSET_FILE" \
+              -H "Authorization: Bearer $OIDC_TOKEN" \
+              "$REGISTRY_ORIGIN/publish/$DOCSET_ID/$DOCSET_VERSION/$DOCSET_ID.khb"
+          fi
 
           jq -n \
             --arg title "$DOCSET_TITLE" \

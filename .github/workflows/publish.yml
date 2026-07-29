@@ -2,8 +2,8 @@ name: Publish
 
 # Assembles and deploys the GitHub Pages site from build.yml's artifacts —
 # nothing is built here: the khb CLI and the viewer dist both come from
-# build.yml (this very run when called by release.yml, the triggering run on
-# workflow_run, or the latest successful main build on manual dispatch). The
+# build.yml (this very run when called by release.yml, or the latest successful
+# main build on manual dispatch). The
 # CLI then compiles every documentation volume (docs/*/docset.toml) from the
 # checked-out ref, packs the distribution (with the llms.txt export) and
 # merges archived documentation versions downloaded from past releases.
@@ -16,13 +16,6 @@ name: Publish
 # gh-pages branch.
 
 on:
-  # After every successful build of main — guarantees the deployed viewer and
-  # docsets come from the same commit (a plain push trigger would race
-  # build.yml and could only use artifacts from a previous build).
-  workflow_run:
-    workflows: [Build]
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
   workflow_call:
     inputs:
@@ -43,13 +36,11 @@ concurrency:
 
 jobs:
   build:
-    # On workflow_run, deploy only after a successful build.
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.ref || github.event.workflow_run.head_sha || github.ref }}
+          ref: ${{ inputs.ref || github.ref }}
 
       # Same-run artifacts exist only when release.yml calls this workflow
       # after build.yml (inputs.ref is the release tag); on the other trigger
@@ -74,12 +65,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          RUN="${{ github.event.workflow_run.id }}"
-          if [[ -z "$RUN" ]]; then
-            RUN=$(gh run list -R "${{ github.repository }}" --workflow build.yml \
-              --branch main --status success --limit 1 \
-              --json databaseId --jq '.[0].databaseId' || true)
-          fi
+          RUN=$(gh run list -R "${{ github.repository }}" --workflow build.yml \
+            --branch main --status success --limit 1 \
+            --json databaseId --jq '.[0].databaseId' || true)
           if ! ls cli-dl/*.tar.gz >/dev/null 2>&1 && [[ -n "$RUN" ]]; then
             gh run download "$RUN" -R "${{ github.repository }}" \
               -n khb-x86_64-unknown-linux-gnu -D cli-dl || true

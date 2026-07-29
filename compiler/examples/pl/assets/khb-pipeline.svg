@@ -24,7 +24,7 @@
 
   <rect class="box" x="524" y="45" width="128" height="60" rx="6"/>
   <text class="t" x="588" y="72">przeglądarka</text>
-  <text class="s" x="588" y="90">/ Tauri</text>
+  <text class="s" x="588" y="90">wa-sqlite + FTS5</text>
 
   <line class="a" x1="142" y1="75" x2="180" y2="75"/>
   <line class="a" x1="316" y1="75" x2="354" y2="75"/>

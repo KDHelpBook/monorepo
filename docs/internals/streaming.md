@@ -44,7 +44,7 @@ pub trait RangeReader: Send + Sync {
 }
 ```
 
-### Native (CLI / Tauri)
+### Native CLI
 
 `compiler/core/src/vfs.rs` registers the VFS directly against `rusqlite::ffi` —
 the same bundled SQLite the rest of the engine uses, avoiding the "two SQLite
@@ -57,8 +57,7 @@ remote book this way; a 2 MB docset streams roughly **15 %** of its bytes for op
 
 ### Browser (wa-sqlite + Asyncify)
 
-sql.js cannot `await` inside a read callback, so the browser streaming engine is
-built on **wa-sqlite**, whose Asyncify build lets a VFS method `await
+The browser engine is built on **wa-sqlite**, whose Asyncify build lets a VFS method `await
 fetch(url, {headers: {Range: …}})`. `viewer-ts/src/data/streaming.ts` implements
 the async Range VFS (same immutability and block cache); `StreamingDocset` wraps
 it as a regular docset that **eager-loads the small structure** (TOC, categories,
@@ -70,10 +69,9 @@ Two practical notes:
 
 - The prebuilt `wa-sqlite` ships **without FTS5**, so the viewer vendors a
   **custom FTS5-enabled build** (SQLite 3.53, `-DSQLITE_ENABLE_FTS5`) under
-  `viewer-ts/vendor/wa-sqlite/` — streamed books get genuine bm25 search, unlike
-  the sql.js fallback (see [Full-text search](full-text-search)).
-- The engine is **code-split**: sessions that never open a streamed docset never
-  download it.
+  `viewer-ts/vendor/wa-sqlite/`; whole-file and streamed books both use genuine
+  bm25 search (see [Full-text search](full-text-search)).
+- The engine is **code-split** and downloaded when the first docset opens.
 
 Measured on a 618 KB demo docset: **\~11 %** of the file to open, **\~21 %** to also
 read a full page, **\~32 %** to also run a bm25 search.

@@ -2,15 +2,15 @@
 
 Reference for the KD Help Book format and tooling.
 
-- **[format.md](format.md)** — the `.khb` / `.khbb` / `.khba` file formats (and the
+- **[format.md](format.md)** — the `.khb` / `.khba` file formats (and the
   `.gz` compression suffix), the SQLite schema, and asset attachments.
 - **[compiler.md](compiler.md)** — the `khb` CLI: authoring sources and the
-  `compile` / `convert` / `pack` / `patch` commands.
+  `compile` / `pack` / `patch` / `inspect` commands.
 - **[collections.md](collections.md)** — how the viewer merges multiple docsets,
   language grouping, and distribution profiles.
-- **[streaming.md](streaming.md)** — planned architecture for HTTP-Range streaming
-  and online/hybrid modes (the format is already streaming-ready).
-- **[desktop.md](desktop.md)** — running the viewer as an offline Tauri app.
+- **[streaming.md](streaming.md)** — the implemented HTTP-Range streaming and
+  online/hybrid modes.
+- **[desktop.md](desktop.md)** — the proposed future Tauri integration.
 
 The compiled documentation collection contains separate Authoring, Publishing,
 Registry, and Internals docsets under `docs/*/docset.toml`.

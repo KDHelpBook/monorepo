@@ -31,16 +31,15 @@ jobs:
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
+            os: ubuntu-22.04
           - target: aarch64-unknown-linux-gnu
-            os: ubuntu-24.04-arm
+            os: ubuntu-22.04-arm
           - target: aarch64-apple-darwin
-            os: macos-latest
-          # Cross-compiled on the arm64 runner; Apple's cc handles both arches.
+            os: macos-15
           - target: x86_64-apple-darwin
-            os: macos-latest
+            os: macos-15-intel
           - target: x86_64-pc-windows-msvc
-            os: windows-latest
+            os: windows-2022
     steps:
       - uses: actions/checkout@v7
         with:
@@ -57,6 +56,51 @@ jobs:
       - name: Build
         run: cargo build --release -p khb-cli --target ${{ matrix.target }}
         working-directory: compiler
+
+      - name: Smoke-test the built CLI
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN="compiler/target/${{ matrix.target }}/release/khb"
+          OUT="${RUNNER_TEMP}/smoke.khb"
+          "$BIN" --version
+          "$BIN" compile compiler/examples/en -o "$OUT"
+          "$BIN" inspect "$OUT" --json | tee "${RUNNER_TEMP}/inspect.json"
+          grep -q '"id": "khb-docs-en"' "${RUNNER_TEMP}/inspect.json"
+
+      - name: Smoke-test the built CLI (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $bin = "compiler/target/${{ matrix.target }}/release/khb.exe"
+          $out = Join-Path $env:RUNNER_TEMP "smoke.khb"
+          & $bin --version
+          & $bin compile compiler/examples/en -o $out
+          & $bin inspect $out --json | Tee-Object -FilePath (Join-Path $env:RUNNER_TEMP "inspect.json")
+          if ($LASTEXITCODE -ne 0) { throw "CLI smoke test failed" }
+          if (-not (Select-String -Path (Join-Path $env:RUNNER_TEMP "inspect.json") -Pattern '"id": "khb-docs-en"' -Quiet)) {
+            throw "inspect JSON did not contain the expected docset id"
+          }
+
+      - name: Enforce the glibc 2.35 ceiling
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN="compiler/target/${{ matrix.target }}/release/khb"
+          MAX_GLIBC="$(
+            readelf --version-info "$BIN" \
+              | sed -n 's/.*Name: GLIBC_\([0-9.]*\).*/\1/p' \
+              | sort -V \
+              | tail -n1
+          )"
+          [[ -n "$MAX_GLIBC" ]]
+          if [[ "$(printf '%s\n' "$MAX_GLIBC" "2.35" | sort -V | tail -n1)" != "2.35" ]]; then
+            echo "Binary requires GLIBC_$MAX_GLIBC; maximum supported is GLIBC_2.35" >&2
+            exit 1
+          fi
+          echo "Maximum required glibc symbol: GLIBC_$MAX_GLIBC"
 
       - name: Package (tar.gz)
         if: runner.os != 'Windows'
@@ -136,6 +180,7 @@ jobs:
         working-directory: registry
         run: |
           npm ci
+          npm audit --audit-level=high
           npm run typecheck
           npm test
           npm run stage-viewer -- --viewer ../viewer-dist
@@ -143,10 +188,14 @@ jobs:
           npm pack --pack-destination ../registry-package
 
       - name: Verify package contents
+        shell: bash
         run: |
+          set -euo pipefail
           tar tzf registry-package/*.tgz | grep -q 'package/dist/index.js'
           tar tzf registry-package/*.tgz | grep -q 'package/schema/khb-registry.schema.json'
           tar tzf registry-package/*.tgz | grep -q 'package/viewer/index.html'
+          TARBALL="$(find registry-package -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+          node registry/scripts/smoke-package.mjs "$TARBALL"
 
       - uses: actions/upload-artifact@v7
         with:
@@ -201,10 +250,63 @@ jobs:
           path: out/*.khb
           if-no-files-found: error
 
+  browser-smoke:
+    name: Packed distribution (browser smoke)
+    needs: [cli, viewer, docs]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.release_tag || github.ref }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: viewer-ts/package-lock.json
+      - uses: actions/download-artifact@v8
+        with:
+          name: khb-x86_64-unknown-linux-gnu
+          path: cli
+      - uses: actions/download-artifact@v8
+        with:
+          name: viewer-dist
+          path: viewer-dist
+      - uses: actions/download-artifact@v8
+        with:
+          name: docs-khb
+          path: docs-khb
+      - name: Assemble a four-volume distribution
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -xzf cli/*.tar.gz -C cli
+          BIN="$(find cli -type f -name khb -perm -111 -print -quit)"
+          mapfile -t DOCSETS < <(find docs-khb -maxdepth 1 -type f -name '*.khb' | LC_ALL=C sort)
+          [[ "${#DOCSETS[@]}" -eq 4 ]]
+          ARGS=()
+          for DOCSET in "${DOCSETS[@]}"; do
+            ARGS+=(--docset "$DOCSET")
+          done
+          "$BIN" pack \
+            --viewer viewer-dist \
+            "${ARGS[@]}" \
+            --out smoke-dist \
+            --home search \
+            --stream
+      - name: Run the browser smoke test
+        working-directory: viewer-ts
+        env:
+          KHB_SMOKE_URL: http://127.0.0.1:4173
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          python3 -m http.server 4173 --directory ../smoke-dist &
+          npm run test:release-smoke
+
   release-assets:
     name: Upload release assets
     if: inputs.release_tag != ''
-    needs: [cli, viewer, docs]
+    needs: [cli, viewer, docs, browser-smoke]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -240,6 +342,8 @@ jobs:
           find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\0' \
             | LC_ALL=C sort -z \
             | xargs -0 sha256sum > SHA256SUMS
+          [[ "$(wc -l < SHA256SUMS)" -eq 10 ]]
+          sha256sum --check SHA256SUMS
       - name: Upload to the release
         env:
           GH_TOKEN: ${{ github.token }}

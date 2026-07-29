@@ -16,8 +16,8 @@ This is a monorepo with three parts:
 
 | Path | What it is |
 |------|------------|
-| [`compiler/`](compiler/) | Rust **Cargo workspace** — the data engine. Crates: `core` (format, queries, SQLite + FTS5, streaming VFS, `.khbb` converter — compiled to **native** *and* **wasm**), `cli` (the `khb` command), `wasm` (browser bindings). |
-| [`viewer-ts/`](viewer-ts/) | Vite + TypeScript viewer — **UI only**, backed by the wasm `core`. |
+| [`compiler/`](compiler/) | Rust **Cargo workspace** — the native data engine. Crates: `core` (format, queries, SQLite + FTS5, streaming VFS), `cli` (the `khb` command), and an internal `wasm` placeholder reserved for future work. |
+| [`viewer-ts/`](viewer-ts/) | Vite + TypeScript viewer using a browser-native `wa-sqlite` build with FTS5. |
 | [`docs/`](docs/) | The `.khb` format specification and the compiler manual. |
 
 The `viewer-ts` app began as a single-file HTML prototype (`help-viewer.html`,
@@ -26,14 +26,12 @@ reached parity — it remains in the project's git history.
 
 ## Desktop (Tauri)
 
-The viewer runs unchanged inside a **Tauri** window for an offline desktop app —
-see [`docs/desktop.md`](docs/desktop.md).
+Tauri is a future integration, not a shipped application. The intended design is
+documented in [`docs/desktop.md`](docs/desktop.md).
 
 ## Formats
 
 - **`.khb`** — a SQLite docset ("Help Book"). The form queried at runtime.
-- **`.khbb`** — a minimal binary (no prebuilt indexes) that the viewer rebuilds
-  into a `.khb` in the browser (via wasm) and caches. Smallest download.
 - **`.khba`** — a sidecar attachments file (images and downloads) for a `.khb`.
   Attachments can also be embedded directly in the `.khb`; one docset may have
   several `.khba` packs.
@@ -56,8 +54,7 @@ npm run dev
 
 ## Distribution
 
-The first release is distributed through **GitHub Releases**, not crates.io.
-Download the archive for your platform from the
+Install the CLI by downloading the archive for your platform from the
 [latest release](https://github.com/KDHelpBook/monorepo/releases/latest), extract
 it, and place the `khb` executable somewhere on your `PATH`. The
 `khb-core`, `khb-cli`, and `khb-wasm` workspace crates are implementation
@@ -71,8 +68,18 @@ rebuilding the viewer. Two profiles:
 - **`reader`** — the general viewer: users can open/upload other docsets; PWA on.
 - **`bundled --lock`** — a single product's docs, external sources disabled, PWA off.
 
-Host the result on any static host (e.g. GitHub Pages), or wrap it in **Tauri**
-for an offline desktop app (the same Rust `core` runs natively there).
+Host the result on any static host (for example GitHub Pages). A native Tauri
+wrapper is planned but is not part of the current distribution.
+
+### System requirements
+
+- Linux x86_64 or ARM64 with glibc 2.35 or newer.
+- macOS on Apple silicon or Intel.
+- Windows x86_64.
+
+Release binaries are currently unsigned. macOS Gatekeeper and Windows
+SmartScreen may therefore require an explicit one-time approval. The project
+does not currently provide code signing or Apple notarization.
 
 ### Verifying release downloads
 

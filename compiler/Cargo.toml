@@ -1,14 +1,13 @@
 # khb — Rust workspace (KD Help Book) (the data engine)
 #
-# One shared `core` crate compiles to native (CLI / Tauri) AND wasm (browser),
-# so the docset format, queries, full-text search and streaming logic live in a
-# single place. `cli` is the `khb` command; `wasm` exposes `core` to the browser.
+# `core` is the native data engine used by `cli`. The `wasm` crate is reserved
+# for possible future integration; the browser uses wa-sqlite directly.
 [workspace]
 resolver = "2"
 members = ["core", "cli", "wasm"]
 
 [workspace.package]
-version = "0.0.2"
+version = "0.0.4"
 edition = "2021"
 license = "MIT"
 authors = ["Krystian Duma"]

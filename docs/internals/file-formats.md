@@ -1,20 +1,19 @@
 ---
 title: File formats
-keywords: [khb, khbb, khba, gzip, postcard, sidecar, file format]
+keywords: [khb, khba, gzip, sidecar, file format]
 categories: [internals, format]
 related: [sqlite-schema, streaming, khb-publishing:pack-mode]
 ---
 
 # File formats
 
-The KD Help Book family is three file kinds plus one orthogonal compression
+The KD Help Book family is two file kinds plus one orthogonal compression
 convention. The normative description is `docs/format.md` in the repository; this
 page is the tour.
 
 | Extension | What it is | Read by |
 |-----------|------------|---------|
-| `.khb`  | the SQLite docset — the canonical, queried form | native SQLite / sql.js / wa-sqlite |
-| `.khbb` | a minimal binary (no SQLite container, no indexes) | rebuilt into a `.khb` before use |
+| `.khb`  | the SQLite docset — the canonical, queried form | native Rust / browser `wa-sqlite` with FTS5 |
 | `.khba` | a sidecar SQLite file of attachments (images, downloads) | opened beside its `.khb` |
 
 ## `.khb` — the docset
@@ -31,23 +30,6 @@ stores is HTML, and the viewer never needs Markdown. A producer *may* also stash
 clean Markdown rendition in the optional `pages.md` column, but that is an
 enrichment for AI-facing consumers, not a requirement — see the
 [SQLite schema](sqlite-schema).
-
-## `.khbb` — the minimal binary
-
-`.khbb` is a compact [postcard](https://docs.rs/postcard) encoding of the rendered
-docset: pages as HTML + plain text, the TOC, categories, keywords **and embedded
-assets** — but **no SQLite container and no FTS index**. It is the smallest way to
-ship a docset; the consumer rebuilds a real `.khb` from it (the browser does this
-in wasm and caches the result in IndexedDB).
-
-The payload sits inside a **versioned wrapper** so it can be validated before use:
-the file carries a `format_version`, and a reader rejects any version other than
-the one it was built for. Unlike the SQLite form — where old tables simply keep
-working — a `.khbb` is a serialized snapshot of the rendered-docset layout, so
-every format bump (see the [SQLite schema](sqlite-schema)) gates it.
-
-`khb convert` turns a `.khb` into a `.khbb` and back; the direction is inferred
-from the file extensions.
 
 ## `.khba` — attachment sidecars
 

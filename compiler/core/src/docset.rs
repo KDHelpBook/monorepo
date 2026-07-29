@@ -1,14 +1,14 @@
 //! Reader: open a `.khb` docset and query it.
 //!
-//! This is the query surface the viewer (via wasm) and Tauri (natively) both use.
-//! It is read-only — writing/compiling is the job of [`crate::build`].
+//! This is the native query surface used by the CLI. It is read-only —
+//! writing/compiling is the job of [`crate::build`].
 
 use std::path::Path;
 
 use anyhow::{Context, Result};
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 
-use crate::model::{Asset, Category, Product, RenderedDocset, RenderedPage, TocNode};
+use crate::model::{Category, Product, TocNode};
 
 /// A page's renderable content.
 #[derive(Debug, Clone)]
@@ -329,100 +329,6 @@ impl Docset {
     pub fn toc_tree(&self) -> Result<Vec<TocNode>> {
         Ok(build_toc_tree(&self.toc()?, None))
     }
-
-    /// Read the whole docset back into a [`RenderedDocset`] — the inverse of the
-    /// writer, used to down-convert a `.khb` to `.khbb`.
-    pub fn to_rendered(&self) -> Result<RenderedDocset> {
-        use std::collections::HashMap;
-
-        let mut keywords_by_page: HashMap<String, Vec<String>> = HashMap::new();
-        {
-            let mut stmt = self
-                .conn
-                .prepare("SELECT page_id, term FROM keywords ORDER BY page_id, term")?;
-            let rows =
-                stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
-            for row in rows {
-                let (page_id, term) = row?;
-                keywords_by_page.entry(page_id).or_default().push(term);
-            }
-        }
-
-        let mut categories_by_page: HashMap<String, Vec<String>> = HashMap::new();
-        {
-            let mut stmt = self.conn.prepare(
-                "SELECT page_id, category_id FROM page_categories ORDER BY page_id, category_id",
-            )?;
-            let rows =
-                stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
-            for row in rows {
-                let (page_id, category_id) = row?;
-                categories_by_page
-                    .entry(page_id)
-                    .or_default()
-                    .push(category_id);
-            }
-        }
-
-        let mut related_by_page: HashMap<String, Vec<String>> = HashMap::new();
-        {
-            let mut stmt = self
-                .conn
-                .prepare("SELECT page_id, related_id FROM related ORDER BY page_id, position")?;
-            let rows =
-                stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
-            for row in rows {
-                let (page_id, related_id) = row?;
-                related_by_page.entry(page_id).or_default().push(related_id);
-            }
-        }
-
-        let mut pages = Vec::new();
-        {
-            let mut stmt = self
-                .conn
-                .prepare("SELECT id, title, body_html, plain, md FROM pages ORDER BY rowid")?;
-            let rows = stmt.query_map([], |r| {
-                Ok((
-                    r.get::<_, String>(0)?,
-                    r.get::<_, String>(1)?,
-                    r.get::<_, String>(2)?,
-                    r.get::<_, String>(3)?,
-                    r.get::<_, Option<String>>(4)?,
-                ))
-            })?;
-            for row in rows {
-                let (id, title, body_html, plain, md) = row?;
-                let keywords = keywords_by_page.remove(&id).unwrap_or_default();
-                let categories = categories_by_page.remove(&id).unwrap_or_default();
-                let related = related_by_page.remove(&id).unwrap_or_default();
-                pages.push(RenderedPage {
-                    id,
-                    title,
-                    body_html,
-                    plain,
-                    keywords,
-                    categories,
-                    related,
-                    md,
-                });
-            }
-        }
-
-        Ok(RenderedDocset {
-            id: self.id()?,
-            title: self.meta("title")?.unwrap_or_default(),
-            version: self.meta("version")?.unwrap_or_default(),
-            language: self.language()?,
-            collection: self.collection()?,
-            collection_title: self.collection_title()?,
-            products: self.products()?,
-            pages,
-            toc: self.toc_tree()?,
-            categories: self.categories()?,
-            assets: query_assets(&self.conn)?,
-        })
-    }
 }
 
 /// A read-only handle to a sidecar `.khba` attachments file. Same `assets` table as
@@ -529,23 +435,6 @@ fn query_asset_paths(conn: &Connection) -> Result<Vec<String>> {
     let mut stmt = conn.prepare("SELECT path FROM assets ORDER BY path")?;
     let rows = stmt
         .query_map([], |r| r.get::<_, String>(0))?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    Ok(rows)
-}
-
-fn query_assets(conn: &Connection) -> Result<Vec<Asset>> {
-    if !has_assets_table(conn)? {
-        return Ok(Vec::new());
-    }
-    let mut stmt = conn.prepare("SELECT path, mime, data FROM assets ORDER BY path")?;
-    let rows = stmt
-        .query_map([], |r| {
-            Ok(Asset {
-                path: r.get(0)?,
-                mime: r.get(1)?,
-                data: r.get(2)?,
-            })
-        })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(rows)
 }

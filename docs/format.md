@@ -8,13 +8,12 @@ The family:
 
 | Extension | What it is | Read by |
 |-----------|------------|---------|
-| `.khb`  | the SQLite docset (the canonical, queried form) | native SQLite / sql.js |
-| `.khbb` | a minimal binary (no indexes) | rebuilt into a `.khb` before use |
+| `.khb`  | the SQLite docset (the canonical, queried form) | native Rust / browser `wa-sqlite` with FTS5 |
 | `.khba` | a sidecar SQLite file of attachments (images, downloads) | opened beside its `.khb` |
 
 **Compression** is an orthogonal `.gz` suffix, not a distinct format: any of the
-files above may be shipped gzip-compressed as `<name>.gz` (`foo.khb.gz`,
-`foo.khba.gz`, …) and decompressed after fetch. The viewer decides by the gzip magic
+files above may be shipped gzip-compressed as `<name>.gz` (`foo.khb.gz` or
+`foo.khba.gz`) and decompressed after fetch. The viewer decides by the gzip magic
 bytes (`1f 8b`), not the name — so a host that auto-applies `Content-Encoding: gzip`
 for `.gz` files (and thus pre-decompresses) works just as well as one that serves the
 bytes verbatim.
@@ -109,9 +108,8 @@ WHERE pages_fts MATCH ?
 ORDER BY score DESC;
 ```
 
-> **Browser note.** The stock `sql.js` build lacks FTS5, so the browser viewer
-> searches the stored `plain` column in JS instead. Native (CLI/Tauri) uses the
-> real FTS5 index. Keep the two query paths in sync.
+> **Browser note.** The viewer uses the bundled `wa-sqlite` build with FTS5 and
+> queries the same prebuilt full-text index as the native Rust CLI.
 
 ## Attachments (`assets` + `.khba`)
 
@@ -178,11 +176,3 @@ Compile-time is guarded too: the bundled compiler runs a docset's declared exter
 compiling an untrusted `docset.toml` never executes its commands by default. Assets an
 extension generates are stored under the reserved `assets/ext/…` path prefix, keeping them
 from colliding with a book's own attachments.
-
-## `.khbb` (binary)
-
-`.khbb` is a compact [postcard](https://docs.rs/postcard) encoding of the rendered
-docset (pages as HTML + plain text, the TOC, categories, keywords **and embedded
-assets**) — **no SQLite container and no FTS index**. It is the smallest way to ship
-a docset; the consumer rebuilds a real `.khb` from it. It is a versioned wrapper so
-it can be validated before use.

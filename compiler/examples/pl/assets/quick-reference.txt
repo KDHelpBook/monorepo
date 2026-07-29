@@ -5,10 +5,6 @@ Kompilacja docsetu:
   khb compile <katalog> -o out.khb
   khb compile <katalog> -o out.khb --assets sidecar   (załączniki -> out.khba)
 
-Konwersja:
-  khb convert out.khb  -o out.khbb
-  khb convert out.khbb -o out.khb
-
 Publikacja:
   khb pack  --viewer viewer-ts/dist --docset out.khb -o publish/
   khb patch publish/ --docset new.khb

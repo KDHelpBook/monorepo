@@ -12,8 +12,8 @@
 // custom build; there is no second engine.
 //
 // Engine: a **custom wa-sqlite 1.1.1 Asyncify build WITH FTS5** (SQLite 3.53
-// `--enable-all`), vendored under `viewer-ts/vendor/wa-sqlite/`. Stock sql.js and
-// the prebuilt wa-sqlite ship *without* FTS5; this build restores it. The Asyncify
+// `--enable-all`), vendored under `viewer-ts/vendor/wa-sqlite/`. The published
+// wa-sqlite binaries ship *without* FTS5; this build restores it. The Asyncify
 // build lets a VFS method `await` a `fetch()`, which is what makes streaming from
 // JS possible.
 //

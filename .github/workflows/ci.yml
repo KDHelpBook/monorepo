@@ -9,7 +9,7 @@ on:
 jobs:
   rust:
     name: compiler (Rust)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     defaults:
       run:
         working-directory: compiler
@@ -24,6 +24,11 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+      - run: cargo test -p khb-cli --features ext-stub
+      - name: Audit Cargo.lock against RustSec
+        run: |
+          cargo install cargo-audit --locked
+          cargo audit
 
   viewer:
     name: viewer (TypeScript)
@@ -39,7 +44,8 @@ jobs:
           cache: npm
           cache-dependency-path: viewer-ts/package-lock.json
       - run: npm ci
-      - run: npx tsc --noEmit
+      - run: npm audit --audit-level=high
+      - run: npm run typecheck
       - run: npm run test
       - run: npm run build
 
@@ -57,5 +63,7 @@ jobs:
           cache: npm
           cache-dependency-path: registry/package-lock.json
       - run: npm ci
+      - run: npm audit --audit-level=high
       - run: npm run typecheck
       - run: npm run test
+      - run: npm run build

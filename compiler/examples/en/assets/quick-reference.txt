@@ -5,10 +5,6 @@ Compile a docset:
   khb compile <src-dir> -o out.khb
   khb compile <src-dir> -o out.khb --assets sidecar   (attachments -> out.khba)
 
-Convert:
-  khb convert out.khb  -o out.khbb
-  khb convert out.khbb -o out.khb
-
 Publish:
   khb pack  --viewer viewer-ts/dist --docset out.khb -o publish/
   khb patch publish/ --docset new.khb

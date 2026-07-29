@@ -10,25 +10,25 @@ format, and the `khb://` address scheme; the git repo is `KDHelpBook/monorepo`.
 ## Monorepo layout
 - `compiler/` — Rust **Cargo workspace** (the native data engine):
   - `core/` — format/schema, `Docset` queries, SQLite + FTS5, Markdown render,
-    `.khb` writer/reader, `.khbb` (postcard) codec, and a read-only **Range-VFS**
+    `.khb` writer/reader and a read-only **Range-VFS**
     (`vfs.rs`: `RangeReader` + `Docset::open_reader`) that streams only the pages a
     query touches — the native basis for HTTP streaming (`docs/streaming.md`).
-    **Native only** (CLI + Tauri). No DOM.
-  - `cli/` — the `khb` CLI: `compile` / `convert` (`pack` / `patch` later).
-  - `wasm/` — reserved (currently a stub). See the browser-SQLite note below.
+    **Native only** (CLI; reusable by a future desktop integration). No DOM.
+  - `cli/` — the `khb` CLI: `compile` / `pack` / `patch` / `inspect`.
+  - `wasm/` — internal placeholder only; it is not a working browser backend.
   - `examples/{en,pl}/` — seed content compiled into the demo docsets.
 - `viewer-ts/` — Vite + TypeScript viewer. In the **browser** it queries `.khb`
   with a **custom FTS5-enabled `wa-sqlite`** (one engine for both whole-file and
-  streamed books); on **Tauri** it will call the native Rust `core`.
+  streamed books). A future native desktop wrapper may call Rust `core`.
 
 ## Browser SQLite (important)
 `rusqlite`'s bundled C SQLite **cannot compile to browser wasm** (`wasm32-unknown-unknown`
 has no libc), so the browser can't run the Rust engine. Instead it runs **one** SQLite
 engine — a **custom FTS5-enabled `wa-sqlite`** (SQLite 3.53 `-DSQLITE_ENABLE_FTS5`,
 Asyncify), vendored under `viewer-ts/vendor/wa-sqlite/` with a reproducible Docker build
-recipe (stock sql.js and the *prebuilt* wa-sqlite both ship **without** FTS5). It mirrors
+recipe (the prebuilt wa-sqlite artifacts ship **without** FTS5). It mirrors
 `core`'s SQL — keep the two query paths in sync with `compiler/core/src/docset.rs`. The
-Rust `core` stays the engine for **CLI and Tauri** (native). **sql.js has been removed.**
+Rust `core` stays the native CLI engine.
 
 Both browser load shapes use this one engine, via a pluggable byte source (`BlockReader`
 in `viewer-ts/src/data/streaming.ts` — the JS mirror of core's `vfs.rs` `RangeReader`):
@@ -45,8 +45,8 @@ eager-loaded at open and served **synchronously**; only `page`/`asset`/`search` 
 and normalizes per-book bm25 scores so books merge fairly. Sidecar `.khba` packs open the
 same way (bytes or URL). `wa-sqlite` 1.1 authors a VFS by extending `FacadeVFS`
 (`jOpen`/`jRead`/…; `async` methods run via Asyncify — and `SQLite.Factory(module)` must be
-called exactly once). See [docs/streaming.md](docs/streaming.md). Native/Tauri stream via
-`compiler/core/src/vfs.rs`.
+called exactly once). See [docs/streaming.md](docs/streaming.md). The native CLI streams
+via `compiler/core/src/vfs.rs`.
 - `docs/` — `.khb` format spec + compiler manual.
 
 The original single-file prototype (`help-viewer.html`) has been **removed** now
@@ -57,9 +57,7 @@ that the TypeScript viewer reached parity; it lives in git history (commit
 - `.khb` — SQLite docset; the form queried at runtime.
 - **`.gz` suffix** — any file (`.khb`/`.khba`/`.khbp`) gzip-compressed for transfer
   (`foo.khb.gz`); the viewer decompresses by gzip magic, not the name
-  (`DecompressionStream('gzip')`). Replaced the former `.khbc` extension.
-- `.khbb` — minimal binary (no indexes); rebuilt into `.khb` in-browser by wasm,
-  cached in IndexedDB.
+  (`DecompressionStream('gzip')`).
 - `.khba` — sidecar SQLite file of attachments (images/downloads) for a `.khb`.
   Attachments may instead be **embedded** in the `.khb` (`assets` table);
   one `.khb` can have several `.khba` packs. Pages link assets as `asset:<path>`;
@@ -87,7 +85,7 @@ that the TypeScript viewer reached parity; it lives in git history (commit
   nonce. The Search/Manage overlay (same-origin `#content`) still prints in place.
 
 ## Key decisions & conventions
-- **Rust `core` is the engine for CLI + Tauri.** The browser mirrors its SQL via
+- **Rust `core` is the native CLI engine.** The browser mirrors its SQL via
   the custom FTS5 `wa-sqlite` (see the browser-SQLite note above). Keep the two
   query paths in sync.
 - Content is **source-format-agnostic**: the canonical render in `.khb` is HTML +
@@ -120,7 +118,7 @@ that the TypeScript viewer reached parity; it lives in git history (commit
   the default/fallback for non-Range hosts (`docs/streaming.md`).
 - **i18n from the start** (EN default + PL): UI strings in locale files; content
   is one docset per language.
-- **No single-file build.** Distribution: static multi-file (Pages) or Tauri.
+- **No single-file build.** The shipped distribution is static multi-file (Pages).
   `pack` builds a publishable dist (viewer + docsets + `docsets.json`); `patch`
   updates one in place. Profiles: `reader` (external sources + PWA on) vs
   `bundled --lock` (embedded only, PWA off) — driven by `config.json`.

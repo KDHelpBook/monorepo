@@ -1,7 +1,7 @@
 {
   "name": "khb-viewer",
   "private": true,
-  "version": "0.0.2",
+  "version": "0.0.4",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,13 +9,18 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:release-smoke": "playwright test e2e/release-smoke.spec.ts",
     "format": "prettier --write ."
   },
+  "overrides": {
+    "postcss": "^8.5.24"
+  },
   "devDependencies": {
+    "@playwright/test": "^1.62.0",
     "@types/node": "^26.1.2",
     "prettier": "^3.4.2",
     "typescript": "^5.7.2",
     "vite": "^6.0.7",
-    "vitest": "^2.1.8"
+    "vitest": "^4.1.10"
   }
 }

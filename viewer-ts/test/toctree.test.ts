@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildTocTree } from "../src/data/docset";
 
-// Flat `toc` rows as both engines read them (sql.js + streaming). A NULL page_id
+// Flat `toc` rows as the browser and native engines read them. A NULL page_id
 // is a pure folder node (format v6).
 const row = (
   id: number,

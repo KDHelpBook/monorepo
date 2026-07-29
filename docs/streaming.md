@@ -13,8 +13,8 @@
 > **~18–21 % of a demo file** (139 KB / 618 KB) to open + read a page, mirroring the
 > native win, and runs **real, bm25-ranked FTS5** over the streamed index via a
 > **custom FTS5-enabled `wa-sqlite` build** vendored under `viewer-ts/vendor/wa-sqlite/`
-> (the prebuilt `wa-sqlite` has no FTS5). The engine is **code-split**, so sessions
-> without a streamed docset never load it. Whole-file remains the default (and only
+> (the prebuilt `wa-sqlite` has no FTS5). The engine is **code-split** and loads
+> with the first docset. Whole-file remains the default (and only
 > option for a non-Range host); offline works throughout (bundled + IndexedDB uploads
 > + PWA).
 
@@ -25,8 +25,8 @@ read SQLite performs is "give me page N" — which maps one-to-one onto an HTTP
 `Range:` request. So a static file server is enough to serve *only the pages a query
 touches*: a search hits the FTS/B-tree pages it needs, opening a page reads its row's
 overflow pages, and nothing else is downloaded. A zip is not page-addressable this
-way; choosing SQLite is what keeps the streaming door open (and keeps one engine for
-CLI, Tauri and browser — see [format.md](format.md)).
+way; choosing SQLite is what keeps the streaming door open while preserving one file
+format for the native CLI and browser — see [format.md](format.md).
 
 Attachments compound the win: with the **`asset_index`** routing table, resolving an
 `asset:<path>` is one lookup → one ranged read of the *one* pack that holds it, never
@@ -37,7 +37,7 @@ order/placement of packs never matters.
 
 Streaming needs a **SQLite VFS over byte ranges**:
 
-- **Native / Tauri — done.** `compiler/core/src/vfs.rs` is a read-only VFS written
+- **Native CLI — done.** `compiler/core/src/vfs.rs` is a read-only VFS written
   directly against `rusqlite::ffi` (the same bundled SQLite the engine uses, so no
   "two SQLite libraries" clash). It treats the file as **immutable** (writes/locks
   are no-ops; the device reports `IMMUTABLE`, so no journal/WAL), coalesces reads
@@ -77,10 +77,8 @@ Streaming needs a **SQLite VFS over byte ranges**:
   *prebuilt* `wa-sqlite` ships without FTS5 (`MATCH` → *"no such module: fts5"*). So a
   docset gets genuine bm25-ranked full-text search.
 
-  > **Update:** sql.js has since been **retired**. This one wa-sqlite engine now backs
-  > **every** browser book — whole-file (bundled/uploaded) via an in-memory `BlockReader`
-  > and remote via HTTP Range — so whole-file books get the same real FTS5, not the old
-  > JS `plain`-column heuristic. The "sql.js" mentions below are historical.
+  This one wa-sqlite engine backs **every** browser book — whole-file
+  (bundled/uploaded) via an in-memory `BlockReader` and remote via HTTP Range.
 
   **Merged into the live collection.** `StreamingDocset` (`streaming-docset.ts`) is the
   sole browser `IDocset` engine: it **eager-loads the small structure** at open
@@ -120,7 +118,7 @@ adds a remote docset by URL; it is persisted (as a URL, re-fetched each session 
 can mix a product's own docs with remote ones. Its **"Stream"** checkbox chooses the
 transport: unchecked fetches the `.khb` whole (works on any CORS host); checked opens
 it **page-by-page over `Range`** through the browser async-VFS engine — the same
-page-level streaming that `khb inspect <url>` / Tauri do natively.
+page-level streaming that `khb inspect <url>` also performs natively.
 
 **Bundled books can stream too.** A `docsets.json` entry may carry
 `"streaming": true` (written by `khb pack`/`patch` `--stream`): the viewer then
@@ -179,9 +177,9 @@ files and let **collections** merge them (that works today). Content packs earn 
 keep only alongside streaming, where the point is a tiny initial download with page
 bodies fetched lazily.
 
-## Tauri: streamed assets & media in the webview
+## Future Tauri integration: streamed assets & media
 
-For the desktop app, stream bytes to the webview through a **custom URI scheme**
+One possible desktop design would stream bytes through a **custom URI scheme**
 (`register_uri_scheme_protocol`, e.g. `khb-asset://<docset>/<path>`) handled in Rust:
 
 - the handler resolves the pack via `asset_index`, then reads from the embedded
@@ -226,14 +224,14 @@ small fully-fetched index for a remote book).
    618 KB file to open + read a page), and its bm25 FTS5 hits interleave with the
    other books (per-book score normalization keeps the merge fair). Opt-in via *File →
    Open from URL… → Stream* for remotes, or `"streaming": true` in `docsets.json`
-   (`khb pack --stream`) for bundled books; the engine is code-split so
-   non-streaming sessions never load it. Whole-file (step 2) stays the default and
+   (`khb pack --stream`) for bundled books; the engine loads on the first docset.
+   Whole-file (step 2) stays the default and
    the fallback for non-Range hosts.
-4. Tauri `khb-asset://` protocol with `Range` support for streamed media.
+4. Optional future Tauri `khb-asset://` protocol with `Range` support for media.
 5. **Content packs** — a `page_index` table + a compiler `--split` that peels
    `body_html` (and assets) into `.khbp` packs, and a `Docset.page(id)` that routes
    through it. Optional; only worthwhile once step 3 exists.
 
-Steps 1–4 change **no** format — the files shipped today are already streaming-ready.
+Steps 1–3 change **no** format — the files shipped today are already streaming-ready.
 Step 5 adds one routing table (`page_index`) mirroring `asset_index`; the master
 `.khb` and the packs stay ordinary SQLite.
