@@ -44,6 +44,31 @@ describe("detectUpdates", () => {
     expect(nextSeen).toEqual({ b: "2.0.0" });
   });
 
+  it("compares against the newest edition when a book offers several", () => {
+    // A reader pinned 1.0.0 while 1.1.0 is also on offer: the toast must announce
+    // the release once, not flip between editions on every visit.
+    const { updates, nextSeen } = detectUpdates(
+      [
+        { id: "a", title: "Docs A", version: "1.0.0" },
+        { id: "a", title: "Docs A", version: "1.1.0" },
+      ],
+      { a: "1.0.0" },
+    );
+    expect(updates).toEqual([{ title: "Docs A", from: "1.0.0", to: "1.1.0" }]);
+    expect(nextSeen.a).toBe("1.1.0");
+  });
+
+  it("stays quiet when the newest edition is already the seen one", () => {
+    const { updates } = detectUpdates(
+      [
+        { id: "a", title: "A", version: "1.1.0" },
+        { id: "a", title: "A", version: "1.0.0" },
+      ],
+      { a: "1.1.0" },
+    );
+    expect(updates).toEqual([]);
+  });
+
   it("handles several docsets at once", () => {
     const { updates } = detectUpdates(
       [

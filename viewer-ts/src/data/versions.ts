@@ -16,13 +16,27 @@ export interface VersionUpdate {
   to: string;
 }
 
+/** One entry per docset id: the edition with the highest version (first seen wins
+ *  a tie), in first-seen order. */
+function newestPerId(docsets: VersionedDocset[]): VersionedDocset[] {
+  const best = new Map<string, VersionedDocset>();
+  for (const d of docsets) {
+    const prev = best.get(d.id);
+    if (!prev || compareVersions(d.version, prev.version) > 0) best.set(d.id, d);
+  }
+  return [...best.values()];
+}
+
 export function detectUpdates(
   current: VersionedDocset[],
   seen: Record<string, string>,
 ): { updates: VersionUpdate[]; nextSeen: Record<string, string> } {
   const nextSeen = { ...seen };
   const updates: VersionUpdate[] = [];
-  for (const d of current) {
+  // Several editions of one book can be present at once (a pinned archive next to
+  // the current release), so compare against the newest one per id — otherwise the
+  // "updated" toast would flip back and forth between editions every session.
+  for (const d of newestPerId(current)) {
     if (!d.version) continue;
     const was = nextSeen[d.id];
     if (was && was !== d.version) {
