@@ -6,6 +6,7 @@
 
 mod http;
 mod publish;
+mod version;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
