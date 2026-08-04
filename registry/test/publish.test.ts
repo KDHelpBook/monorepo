@@ -169,6 +169,71 @@ describe("publish finalize", () => {
     expect(pointer.versions[0]!.hash).toBeTruthy();
   });
 
+  it("records the pointer format and the current edition's metadata", async () => {
+    await upload({ version: "1.5.0" });
+    await finalize({ version: "1.5.0" });
+
+    const pointer = (await (await env.DOCSETS.get(
+      `docsets/${ID}/latest.json`,
+    ))!.json()) as LatestPointer;
+    expect(pointer.schema).toBe(2);
+    expect(pointer).toMatchObject({
+      title: "Authoring",
+      language: "en",
+      collection: "khb",
+    });
+  });
+
+  it("carries a superseded edition's own metadata down into versions[]", async () => {
+    // The retitled release must not rewrite what the older edition was called:
+    // the switcher names each edition as it was published.
+    await upload({ id: "khb-publishing", version: "2.0.0" });
+    await finalize({
+      id: "khb-publishing",
+      version: "2.0.0",
+      body: {
+        title: "Publishing",
+        language: "en",
+        collection: "khb",
+        file: "khb-publishing.khb",
+      },
+    });
+    await upload({ id: "khb-publishing", version: "2.1.0" });
+    await finalize({
+      id: "khb-publishing",
+      version: "2.1.0",
+      body: {
+        title: "Publishing a book",
+        language: "en",
+        collection: "khb",
+        file: "khb-publishing.khb",
+      },
+    });
+
+    const pointer = (await (await env.DOCSETS.get(
+      "docsets/khb-publishing/latest.json",
+    ))!.json()) as LatestPointer;
+    expect(pointer.title).toBe("Publishing a book");
+    expect(pointer.versions[0]).toMatchObject({
+      version: "2.0.0",
+      title: "Publishing",
+      language: "en",
+      collection: "khb",
+    });
+  });
+
+  it("defaults a missing collection to the docset id", async () => {
+    await upload({ version: "1.6.0" });
+    await finalize({
+      version: "1.6.0",
+      body: { title: "Authoring", language: "en", file: `${ID}.khb` },
+    });
+    const pointer = (await (await env.DOCSETS.get(
+      `docsets/${ID}/latest.json`,
+    ))!.json()) as LatestPointer;
+    expect(pointer.collection).toBe(ID);
+  });
+
   it("409s a re-publish of an already-published version", async () => {
     await upload({ version: "2.0.0" });
     await finalize({ version: "2.0.0" });

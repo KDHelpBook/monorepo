@@ -58,6 +58,11 @@ export interface CollectionVersioned {
  * Order two dotted versions numerically where possible (`1.10.0 > 1.2.0`),
  * falling back to string comparison for non-numeric segments. Missing trailing
  * segments count as 0 (`1.2 == 1.2.0`). Returns -1 / 0 / 1.
+ *
+ * Mirrored by `compareVersions` in registry/src/versions.ts (which picks the
+ * editions a registry offers) and `compare_versions` in
+ * compiler/cli/src/version.rs (which picks a packed book's primary edition).
+ * All three must order identically; their test cases are deliberately the same.
  */
 export function compareVersions(a: string, b: string): number {
   const pa = a.split(".");

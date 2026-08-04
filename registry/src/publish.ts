@@ -172,24 +172,32 @@ export async function handleFinalize(
   const entry: PublishedVersion = {
     version,
     file: meta.file,
+    title: meta.title,
+    language: meta.language,
+    collection: meta.collection || id,
     hash: docsetObject?.etag,
     attachments,
     publishedAt: new Date().toISOString(),
     repository: auth.claims.repository,
   };
   const pointer: LatestPointer = {
+    schema: 2,
     id,
-    title: meta.title,
-    language: meta.language,
-    collection: meta.collection || id,
     ...entry,
     versions: prev
       ? [
           // Fold the previous current edition in; drop a republished version.
+          // Its display metadata sat at the pointer's top level — that is exactly
+          // this edition's metadata, so it moves down with it. Editions already in
+          // `prev.versions` are carried verbatim; ones written before schema 2
+          // simply have none, and the manifest leaves them out.
           ...[
             {
               version: prev.version,
               file: prev.file,
+              title: prev.title,
+              language: prev.language,
+              collection: prev.collection,
               hash: prev.hash,
               attachments: prev.attachments,
               publishedAt: prev.publishedAt,

@@ -51,6 +51,42 @@ describe("registry configuration", () => {
     ).toThrow(/items/);
   });
 
+  it("accepts a version policy, with per-docset overrides", () => {
+    const config = {
+      ...TEST_CONFIG,
+      site: {
+        ...TEST_CONFIG.site,
+        versions: {
+          mode: "minor",
+          keep: 5,
+          docsets: { "khb-authoring": { mode: "all" } },
+        },
+      },
+    };
+    expect(validateRegistryConfig(config)).toEqual(config);
+  });
+
+  it("rejects an unknown version mode, a zero keep, and stray keys", () => {
+    const withVersions = (versions: unknown): unknown => ({
+      ...TEST_CONFIG,
+      site: { ...TEST_CONFIG.site, versions },
+    });
+    expect(() => validateRegistryConfig(withVersions({ mode: "newest" }))).toThrow(
+      /enum|allowed values/,
+    );
+    expect(() => validateRegistryConfig(withVersions({ keep: 0 }))).toThrow(
+      />= 1/,
+    );
+    expect(() =>
+      validateRegistryConfig(withVersions({ mode: "all", trim: 2 })),
+    ).toThrow(/unknown property "trim"/);
+    expect(() =>
+      validateRegistryConfig(
+        withVersions({ docsets: { "../escape": { mode: "all" } } }),
+      ),
+    ).toThrow(/pattern/);
+  });
+
   it("parses YAML from disk", async () => {
     const dir = await mkdtemp(join(tmpdir(), "khb-registry-config-"));
     const file = join(dir, "khb-registry.yml");

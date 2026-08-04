@@ -92,8 +92,12 @@ describe("compareVersions", () => {
     expect(compareVersions("1.2", "1.2.0")).toBe(0);
     expect(compareVersions("1.2.1", "1.2")).toBe(1);
   });
+  // Mirrored in registry/test/versions.test.ts and compiler/cli/src/version.rs —
+  // the three implementations must agree on every case here.
   it("falls back to string compare for non-numeric segments", () => {
     expect(compareVersions("1.0.0-beta", "1.0.0-alpha")).toBe(1);
+    expect(compareVersions("latest", "9.9.9")).toBe(1);
+    expect(compareVersions("1.0.0-beta", "1.0.0")).toBe(1);
   });
 });
 
