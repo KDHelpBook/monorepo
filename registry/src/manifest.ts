@@ -9,6 +9,20 @@
 
 import { corsHeaders } from "./serve";
 import type { Env, LatestPointer, SiteConfig } from "./types";
+import { ruleFor, selectEditions } from "./versions";
+
+/** One older edition of an entry's book, offered in the viewer's version
+ *  switcher. Its metadata is the edition's own, not the entry's. */
+interface ManifestEdition {
+  version: string;
+  file: string;
+  title: string;
+  language: string;
+  collection: string;
+  hash?: string;
+  attachments?: string[];
+  publishedAt?: string;
+}
 
 interface ManifestEntry {
   file: string;
@@ -20,6 +34,7 @@ interface ManifestEntry {
   hash?: string;
   attachments?: string[];
   streaming: true;
+  versions?: ManifestEdition[];
 }
 
 async function listPointers(env: Env): Promise<LatestPointer[]> {
@@ -48,9 +63,25 @@ export async function buildManifest(
   };
   pointers.sort((a, b) => rank(a.id) - rank(b.id));
   const docsets = pointers.map((p): ManifestEntry => {
-    const base = `d/${p.id}/${p.version}/`;
+    const serve = (version: string, file: string): string =>
+      `d/${p.id}/${version}/${file}`;
+    // Older editions the site's policy still offers; the current one is this entry.
+    const editions = selectEditions(p, ruleFor(site.versions, p.id)).map(
+      (v): ManifestEdition => ({
+        version: v.version,
+        file: serve(v.version, v.file),
+        title: v.title,
+        language: v.language,
+        collection: v.collection,
+        ...(v.hash ? { hash: v.hash } : {}),
+        ...(v.attachments.length
+          ? { attachments: v.attachments.map((a) => serve(v.version, a)) }
+          : {}),
+        ...(v.publishedAt ? { publishedAt: v.publishedAt } : {}),
+      }),
+    );
     return {
-      file: base + p.file,
+      file: serve(p.version, p.file),
       id: p.id,
       title: p.title,
       language: p.language,
@@ -58,9 +89,10 @@ export async function buildManifest(
       ...(p.version ? { version: p.version } : {}),
       ...(p.hash ? { hash: p.hash } : {}),
       ...(p.attachments.length
-        ? { attachments: p.attachments.map((a) => base + a) }
+        ? { attachments: p.attachments.map((a) => serve(p.version, a)) }
         : {}),
       streaming: true,
+      ...(editions.length ? { versions: editions } : {}),
     };
   });
   const folders = site.folders;

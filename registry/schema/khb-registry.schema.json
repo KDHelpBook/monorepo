@@ -26,6 +26,36 @@
             "type": "object"
           }
         },
+        "versions": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "$ref": "#/$defs/versionsMode"
+            },
+            "keep": {
+              "$ref": "#/$defs/versionsKeep"
+            },
+            "docsets": {
+              "type": "object",
+              "propertyNames": {
+                "$ref": "#/$defs/docsetId"
+              },
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "mode": {
+                    "$ref": "#/$defs/versionsMode"
+                  },
+                  "keep": {
+                    "$ref": "#/$defs/versionsKeep"
+                  }
+                }
+              }
+            }
+          }
+        },
         "config": {
           "type": "object",
           "additionalProperties": false,
@@ -96,6 +126,16 @@
     "docsetId": {
       "type": "string",
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "versionsMode": {
+      "description": "Which older editions the manifest offers: none (latest), every recorded one (all), or the newest patch of each minor series (minor).",
+      "enum": ["latest", "all", "minor"],
+      "default": "latest"
+    },
+    "versionsKeep": {
+      "description": "Cap on how many older editions to offer, newest first.",
+      "type": "integer",
+      "minimum": 1
     }
   }
 }

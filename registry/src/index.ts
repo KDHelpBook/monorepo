@@ -26,6 +26,8 @@ export type {
   Publisher,
   RegistryConfig,
   SiteConfig,
+  VersionsPolicy,
+  VersionsRule,
 } from "./types";
 
 /** Build an isolated Worker handler for one validated registry instance. */

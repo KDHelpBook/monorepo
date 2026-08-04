@@ -62,6 +62,11 @@ The main R2 object's ETag is recorded as `hash` in the pointer and dynamic
 manifest. The viewer uses it to keep streamed HTTP ranges and offline cache
 entries tied to the correct content.
 
+Finalizing also moves the edition it supersedes into the docset's archive, with
+the title, language, and collection it was published under. Whether readers are
+offered that archive is the site's [`site.versions`](configuration) policy; the
+files themselves are kept either way.
+
 Publishing an existing version returns `409` unless the matching publisher has
 `force: true` and explicitly requests a forced publication. Prefer incrementing
 the docset version.

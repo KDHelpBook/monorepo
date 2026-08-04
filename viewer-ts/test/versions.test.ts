@@ -44,6 +44,31 @@ describe("detectUpdates", () => {
     expect(nextSeen).toEqual({ b: "2.0.0" });
   });
 
+  it("compares against the newest edition when a book offers several", () => {
+    // A reader pinned 1.0.0 while 1.1.0 is also on offer: the toast must announce
+    // the release once, not flip between editions on every visit.
+    const { updates, nextSeen } = detectUpdates(
+      [
+        { id: "a", title: "Docs A", version: "1.0.0" },
+        { id: "a", title: "Docs A", version: "1.1.0" },
+      ],
+      { a: "1.0.0" },
+    );
+    expect(updates).toEqual([{ title: "Docs A", from: "1.0.0", to: "1.1.0" }]);
+    expect(nextSeen.a).toBe("1.1.0");
+  });
+
+  it("stays quiet when the newest edition is already the seen one", () => {
+    const { updates } = detectUpdates(
+      [
+        { id: "a", title: "A", version: "1.1.0" },
+        { id: "a", title: "A", version: "1.0.0" },
+      ],
+      { a: "1.1.0" },
+    );
+    expect(updates).toEqual([]);
+  });
+
   it("handles several docsets at once", () => {
     const { updates } = detectUpdates(
       [
@@ -67,8 +92,12 @@ describe("compareVersions", () => {
     expect(compareVersions("1.2", "1.2.0")).toBe(0);
     expect(compareVersions("1.2.1", "1.2")).toBe(1);
   });
+  // Mirrored in registry/test/versions.test.ts and compiler/cli/src/version.rs —
+  // the three implementations must agree on every case here.
   it("falls back to string compare for non-numeric segments", () => {
     expect(compareVersions("1.0.0-beta", "1.0.0-alpha")).toBe(1);
+    expect(compareVersions("latest", "9.9.9")).toBe(1);
+    expect(compareVersions("1.0.0-beta", "1.0.0")).toBe(1);
   });
 });
 

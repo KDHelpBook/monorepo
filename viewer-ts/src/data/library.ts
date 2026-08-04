@@ -7,9 +7,13 @@ const STORE = "docsets";
 /** Prefetch cache: whole `.khb` (and pack) bytes for bundled/remote streamed
  *  books, so a streamed book can be used offline / from cache on later loads. */
 const BLOBS = "blobs";
-const VERSION = 2;
+const VERSION = 3;
 
 export interface StoredDocset {
+  /** Storage identity: `id@version` (see `docsetKey`). A book is identified by
+   *  *edition*, not by id alone — uploading 1.2 of a book must not evict 1.1.
+   *  Records written before v3 of the store lack it; the upgrade fills it in. */
+  key: string;
   id: string;
   language: string;
   title: string;
@@ -31,14 +35,40 @@ export interface StoredBlob {
   packs: Uint8Array[];
 }
 
+/** The storage identity of one uploaded edition: `id@version`, mirroring the
+ *  variant key the viewer uses for bundled/remote editions (`variants.ts`). */
+export function docsetKey(d: { id: string; version?: string }): string {
+  return `${d.id}@${d.version ?? ""}`;
+}
+
+/** Rewrite the `docsets` store to be keyed by edition (v2 → v3). IndexedDB can't
+ *  change a `keyPath` in place, so the records are read inside the versionchange
+ *  transaction, the store is recreated, and each record is put back with its key. */
+function upgradeDocsetStore(db: IDBDatabase, tx: IDBTransaction): void {
+  const carried: StoredDocset[] = [];
+  const old = tx.objectStore(STORE);
+  const all = old.getAll() as IDBRequest<StoredDocset[]>;
+  all.onsuccess = () => {
+    carried.push(...(all.result ?? []));
+    db.deleteObjectStore(STORE);
+    const store = db.createObjectStore(STORE, { keyPath: "key" });
+    store.createIndex("language", "language", { unique: false });
+    for (const record of carried) {
+      store.put({ ...record, key: record.key || docsetKey(record) });
+    }
+  };
+}
+
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, VERSION);
-    req.onupgradeneeded = () => {
+    req.onupgradeneeded = (event) => {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE)) {
-        const store = db.createObjectStore(STORE, { keyPath: "id" });
+        const store = db.createObjectStore(STORE, { keyPath: "key" });
         store.createIndex("language", "language", { unique: false });
+      } else if (event.oldVersion < 3 && req.transaction) {
+        upgradeDocsetStore(db, req.transaction);
       }
       if (!db.objectStoreNames.contains(BLOBS)) {
         db.createObjectStore(BLOBS, { keyPath: "key" });
@@ -68,12 +98,17 @@ async function withStore<T>(
   }
 }
 
-export async function putDocset(d: StoredDocset): Promise<void> {
-  await withStore(STORE, "readwrite", (s) => s.put(d));
+export async function putDocset(
+  d: Omit<StoredDocset, "key"> & { key?: string },
+): Promise<void> {
+  await withStore(STORE, "readwrite", (s) =>
+    s.put({ ...d, key: d.key || docsetKey(d) }),
+  );
 }
 
-export async function deleteDocset(id: string): Promise<void> {
-  await withStore(STORE, "readwrite", (s) => s.delete(id));
+/** Remove one uploaded edition, by its `docsetKey` (not by bare docset id). */
+export async function deleteDocset(key: string): Promise<void> {
+  await withStore(STORE, "readwrite", (s) => s.delete(key));
 }
 
 export async function allDocsets(): Promise<StoredDocset[]> {

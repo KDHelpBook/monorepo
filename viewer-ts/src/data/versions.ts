@@ -16,13 +16,27 @@ export interface VersionUpdate {
   to: string;
 }
 
+/** One entry per docset id: the edition with the highest version (first seen wins
+ *  a tie), in first-seen order. */
+function newestPerId(docsets: VersionedDocset[]): VersionedDocset[] {
+  const best = new Map<string, VersionedDocset>();
+  for (const d of docsets) {
+    const prev = best.get(d.id);
+    if (!prev || compareVersions(d.version, prev.version) > 0) best.set(d.id, d);
+  }
+  return [...best.values()];
+}
+
 export function detectUpdates(
   current: VersionedDocset[],
   seen: Record<string, string>,
 ): { updates: VersionUpdate[]; nextSeen: Record<string, string> } {
   const nextSeen = { ...seen };
   const updates: VersionUpdate[] = [];
-  for (const d of current) {
+  // Several editions of one book can be present at once (a pinned archive next to
+  // the current release), so compare against the newest one per id — otherwise the
+  // "updated" toast would flip back and forth between editions every session.
+  for (const d of newestPerId(current)) {
     if (!d.version) continue;
     const was = nextSeen[d.id];
     if (was && was !== d.version) {
@@ -44,6 +58,11 @@ export interface CollectionVersioned {
  * Order two dotted versions numerically where possible (`1.10.0 > 1.2.0`),
  * falling back to string comparison for non-numeric segments. Missing trailing
  * segments count as 0 (`1.2 == 1.2.0`). Returns -1 / 0 / 1.
+ *
+ * Mirrored by `compareVersions` in registry/src/versions.ts (which picks the
+ * editions a registry offers) and `compare_versions` in
+ * compiler/cli/src/version.rs (which picks a packed book's primary edition).
+ * All three must order identically; their test cases are deliberately the same.
  */
 export function compareVersions(a: string, b: string): number {
   const pa = a.split(".");

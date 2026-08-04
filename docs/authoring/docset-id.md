@@ -33,5 +33,8 @@ The id namespaces every page — `docsetId:pageId` — which is what lets many b
 merge into one collection without colliding. It's the prefix in
 [cross-book links](links) and cross-book [related](frontmatter-related) entries,
 the id recorded in a published site's `docsets.json`, and the host in the address bar
-(`khb://my-docs/welcome.htm`). Versioned editions of one book use **distinct ids**
-that share a [collection](docset-collection).
+(`khb://my-docs/welcome.htm`). Versions of one book **keep the same id** and differ
+in [version](docset-version); the viewer shows one edition at a time, so nothing
+collides — and a link to `my-docs:page` reaches whichever edition the reader picked.
+Translations of one book need distinct ids sharing a [collection](docset-collection),
+since they are loaded side by side.

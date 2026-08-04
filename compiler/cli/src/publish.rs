@@ -3,6 +3,7 @@
 //! A distribution is: the built viewer + a `docsets/` folder + a `docsets.json`
 //! manifest the viewer loads on start + a `config.json` describing the profile.
 
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::Write;
@@ -13,7 +14,9 @@ use flate2::{write::GzEncoder, Compression};
 use khb_core::{build, Attachments, Docset};
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
+use crate::version::compare_versions;
+
+#[derive(Serialize, Deserialize, Debug)]
 struct ManifestEntry {
     /// Path under the dist root. A trailing `.gz` means the file is gzip-compressed
     /// and the viewer decompresses it after fetch (works for `.khb`/`.khba`/`.khbp`).
@@ -44,6 +47,29 @@ struct ManifestEntry {
     /// byte range can't then mix with a fresh one into a malformed SQLite image
     /// (the failure that blanks a re-deployed streamed preview) — while an
     /// *unchanged* book keeps its key, and its cache, across deploys.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    hash: String,
+    /// Older editions of this same book — same docset id, a different `version` —
+    /// offered in the viewer's version switcher. The entry itself is the current
+    /// edition, so it never repeats here. Empty for a single-edition book, which
+    /// is what every manifest written before this field looked like.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    versions: Vec<ManifestEdition>,
+}
+
+/// One archived edition. Its display metadata is its own: a book can be retitled
+/// (or moved to another collection) between releases, and the switcher must name
+/// each edition as it was published.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+struct ManifestEdition {
+    version: String,
+    file: String,
+    title: String,
+    language: String,
+    #[serde(default)]
+    collection: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    attachments: Vec<String>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     hash: String,
 }
@@ -218,11 +244,15 @@ pub fn pack(opts: &PackOptions) -> Result<()> {
     fs::create_dir_all(&docsets_dir)?;
     let mut manifest = Manifest::default();
     let stream = stream_flags(&opts.stream, &opts.docsets)?;
+    let mut built = Vec::new();
     for (docset, stream) in opts.docsets.iter().zip(stream) {
-        manifest
-            .docsets
-            .push(add_docset(docset, &docsets_dir, opts.compact, stream)?);
+        built.push(add_docset(docset, &docsets_dir, opts.compact, stream)?);
     }
+    // Several editions of one book fold into a single entry (the highest version
+    // leads, the rest become its `versions`), so the viewer offers them in its
+    // version switcher instead of merging them as separate books.
+    let (docsets, primaries) = fold_editions(built)?;
+    manifest.docsets = docsets;
     if let Some(path) = &opts.folders {
         manifest.folders = read_folders(path, &manifest.docsets)?;
     }
@@ -239,7 +269,11 @@ pub fn pack(opts: &PackOptions) -> Result<()> {
         },
     )?;
     if opts.llms {
-        write_llms(&opts.out, &opts.docsets, opts.base_url.as_deref())?;
+        // Only the current edition of each book is exported: an archive holds the
+        // same pages at older revisions, and listing them all would duplicate every
+        // page in llms.txt and every `<loc>` in the sitemap.
+        let exported: Vec<PathBuf> = primaries.iter().map(|i| opts.docsets[*i].clone()).collect();
+        write_llms(&opts.out, &exported, opts.base_url.as_deref())?;
         // Only now, with the export actually on disk, wire the discovery hooks into
         // index.html — so a non-llms (or dev) build never advertises files it lacks.
         inject_llms_hooks(&opts.out, opts.base_url.is_some())?;
@@ -252,6 +286,84 @@ pub fn pack(opts: &PackOptions) -> Result<()> {
         opts.out.display()
     );
     Ok(())
+}
+
+/// The archived form of an entry: everything the switcher needs to name and open
+/// that edition. The transport preference (`streaming`) is a property of the whole
+/// entry, so it isn't carried per edition — the viewer inherits the entry's and
+/// still vetoes a `.gz` edition, which can't answer Range reads.
+fn demote(entry: &ManifestEntry) -> ManifestEdition {
+    ManifestEdition {
+        version: entry.version.clone(),
+        file: entry.file.clone(),
+        title: entry.title.clone(),
+        language: entry.language.clone(),
+        collection: entry.collection.clone(),
+        attachments: entry.attachments.clone(),
+        hash: entry.hash.clone(),
+    }
+}
+
+/// Merge one freshly-built entry into the entry already holding that docset id.
+///
+/// A book is identified by `(id, version)`: the same version replaces that edition
+/// wherever it sits, a newer one takes the lead and demotes the current edition,
+/// and an older one joins the archive. Editions stay ordered newest-first.
+fn merge_edition(existing: &mut ManifestEntry, incoming: ManifestEntry) {
+    if existing.version == incoming.version {
+        let archive = std::mem::take(&mut existing.versions);
+        *existing = incoming;
+        existing.versions = archive;
+    } else if let Some(slot) = existing
+        .versions
+        .iter_mut()
+        .find(|v| v.version == incoming.version)
+    {
+        *slot = demote(&incoming);
+    } else if compare_versions(&incoming.version, &existing.version) == Ordering::Greater {
+        let demoted = demote(existing);
+        let archive = std::mem::take(&mut existing.versions);
+        *existing = incoming;
+        existing.versions = archive;
+        existing.versions.push(demoted);
+    } else {
+        existing.versions.push(demote(&incoming));
+    }
+    existing
+        .versions
+        .sort_by(|a, b| compare_versions(&b.version, &a.version));
+}
+
+/// Fold freshly-built entries so each docset id appears once, its highest version
+/// leading. Returns the folded entries plus, for each, the index of the input that
+/// became its current edition (the one the llms.txt export covers).
+fn fold_editions(built: Vec<ManifestEntry>) -> Result<(Vec<ManifestEntry>, Vec<usize>)> {
+    let mut entries: Vec<ManifestEntry> = Vec::new();
+    let mut primaries: Vec<usize> = Vec::new();
+    for (index, entry) in built.into_iter().enumerate() {
+        let Some(slot) = entries.iter().position(|e| e.id == entry.id) else {
+            entries.push(entry);
+            primaries.push(index);
+            continue;
+        };
+        let existing = &mut entries[slot];
+        if existing.version == entry.version
+            || existing.versions.iter().any(|v| v.version == entry.version)
+        {
+            bail!(
+                "two packed docsets share the id `{}` at version `{}` — \
+                 editions of one book must differ in `version`",
+                entry.id,
+                entry.version
+            );
+        }
+        let takes_lead = compare_versions(&entry.version, &existing.version) == Ordering::Greater;
+        merge_edition(existing, entry);
+        if takes_lead {
+            primaries[slot] = index;
+        }
+    }
+    Ok((entries, primaries))
 }
 
 /// The inert marker comments the viewer template carries; `pack` swaps them for the
@@ -473,8 +585,13 @@ pub fn patch(
     let stream = stream_flags(stream, docsets)?;
     for (docset, stream) in docsets.iter().zip(stream) {
         let entry = add_docset(docset, &docsets_dir, compact, stream)?;
-        manifest.docsets.retain(|e| e.id != entry.id); // replace same id
-        manifest.docsets.push(entry);
+        // Identity is `(id, version)`: the same edition is replaced in place, a new
+        // version of a book already in the manifest joins its entry (taking the lead
+        // when it is the highest), and an unknown id is appended.
+        match manifest.docsets.iter_mut().find(|e| e.id == entry.id) {
+            Some(existing) => merge_edition(existing, entry),
+            None => manifest.docsets.push(entry),
+        }
     }
     write_json(&manifest_path, &manifest)?;
     println!(
@@ -565,6 +682,8 @@ fn add_docset(
         attachments,
         streaming: stream,
         hash: content_hash(&shipped),
+        // A freshly-built entry is one edition; folding archives in is the caller's job.
+        versions: Vec::new(),
     })
 }
 
@@ -733,28 +852,42 @@ mod tests {
         assert!(validate_folders(&ok, &known(&["khb"])).is_ok());
     }
 
+    /// A freshly-built entry, as `add_docset` would return it.
+    fn entry(id: &str, version: &str) -> ManifestEntry {
+        ManifestEntry {
+            file: format!("docsets/{id}-{version}.khb"),
+            id: id.into(),
+            title: format!("{id} {version}"),
+            language: "en".into(),
+            collection: "product".into(),
+            version: version.into(),
+            attachments: Vec::new(),
+            streaming: false,
+            hash: format!("hash-{version}"),
+            versions: Vec::new(),
+        }
+    }
+
+    /// `[current, ...archived]` versions of one entry, for readable assertions.
+    fn editions(e: &ManifestEntry) -> Vec<String> {
+        let mut out = vec![e.version.clone()];
+        out.extend(e.versions.iter().map(|v| v.version.clone()));
+        out
+    }
+
     #[test]
     fn patch_manifest_read_modify_write_preserves_folders() {
-        // `patch` deserializes the whole manifest, replaces entries by id, and
-        // re-serializes — folders must survive that round untouched.
+        // `patch` deserializes the whole manifest, merges entries, and re-serializes
+        // — folders must survive that round untouched.
         let src = format!(
             r#"{{ "docsets": [ {{ "file": "docsets/a.khb", "id": "a",
                                  "title": "A", "language": "en" }} ],
                  "folders": {FOLDERS_JSON} }}"#
         );
         let mut manifest: Manifest = serde_json::from_str(&src).unwrap();
-        manifest.docsets.retain(|e| e.id != "a");
-        manifest.docsets.push(ManifestEntry {
-            file: "docsets/a.khb".into(),
-            id: "a".into(),
-            title: "A v2".into(),
-            language: "en".into(),
-            collection: String::new(),
-            version: String::new(),
-            attachments: Vec::new(),
-            streaming: false,
-            hash: String::new(),
-        });
+        let mut replacement = entry("a", "");
+        replacement.title = "A v2".into();
+        merge_edition(&mut manifest.docsets[0], replacement);
         let json = serde_json::to_value(&manifest).unwrap();
         assert_eq!(json["docsets"][0]["title"], "A v2");
         assert_eq!(json["folders"][0]["id"], "tools");
@@ -762,6 +895,85 @@ mod tests {
             json["folders"][0]["children"][1]["children"][0]["collection"],
             "oldapp"
         );
+    }
+
+    #[test]
+    fn patch_replaces_the_same_edition_in_place() {
+        let mut current = entry("a", "2.0.0");
+        merge_edition(&mut current, entry("a", "1.0.0"));
+        let mut rebuilt = entry("a", "1.0.0");
+        rebuilt.hash = "rebuilt".into();
+        merge_edition(&mut current, rebuilt);
+        assert_eq!(editions(&current), ["2.0.0", "1.0.0"]);
+        assert_eq!(current.versions[0].hash, "rebuilt");
+    }
+
+    #[test]
+    fn patch_promotes_a_newer_edition_and_archives_the_old_one() {
+        let mut current = entry("a", "1.0.0");
+        merge_edition(&mut current, entry("a", "2.0.0"));
+        assert_eq!(editions(&current), ["2.0.0", "1.0.0"]);
+        assert_eq!(current.file, "docsets/a-2.0.0.khb");
+        assert_eq!(current.hash, "hash-2.0.0");
+        // The archived edition keeps the metadata it was published with.
+        assert_eq!(current.versions[0].title, "a 1.0.0");
+        assert_eq!(current.versions[0].file, "docsets/a-1.0.0.khb");
+    }
+
+    #[test]
+    fn patch_archives_an_older_edition_without_disturbing_the_tip() {
+        let mut current = entry("a", "2.0.0");
+        merge_edition(&mut current, entry("a", "1.9.0"));
+        merge_edition(&mut current, entry("a", "1.10.0"));
+        // Newest-first, numerically: 1.10 outranks 1.9.
+        assert_eq!(editions(&current), ["2.0.0", "1.10.0", "1.9.0"]);
+        assert_eq!(current.file, "docsets/a-2.0.0.khb");
+    }
+
+    #[test]
+    fn pack_folds_editions_of_one_book_into_a_single_entry() {
+        let (entries, primaries) = fold_editions(vec![
+            entry("a", "1.0.0"),
+            entry("b", "3.0.0"),
+            entry("a", "2.0.0"),
+            entry("a", "1.5.0"),
+        ])
+        .unwrap();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(editions(&entries[0]), ["2.0.0", "1.5.0", "1.0.0"]);
+        assert_eq!(editions(&entries[1]), ["3.0.0"]);
+        // The llms.txt export covers the *current* edition of each book: input 2
+        // (a 2.0.0) and input 1 (b 3.0.0).
+        assert_eq!(primaries, [2, 1]);
+    }
+
+    #[test]
+    fn pack_rejects_two_inputs_with_the_same_id_and_version() {
+        let err = fold_editions(vec![entry("a", "1.0.0"), entry("a", "1.0.0")]).unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("share the id `a` at version `1.0.0`"));
+        // Also when the duplicate collides with an already-archived edition.
+        let err = fold_editions(vec![
+            entry("a", "1.0.0"),
+            entry("a", "2.0.0"),
+            entry("a", "1.0.0"),
+        ])
+        .unwrap_err();
+        assert!(err.to_string().contains("`1.0.0`"));
+    }
+
+    #[test]
+    fn folded_editions_serialize_only_when_present() {
+        let (entries, _) = fold_editions(vec![entry("a", "1.0.0")]).unwrap();
+        let json = serde_json::to_value(&entries[0]).unwrap();
+        assert!(json.get("versions").is_none());
+
+        let (entries, _) = fold_editions(vec![entry("a", "1.0.0"), entry("a", "2.0.0")]).unwrap();
+        let json = serde_json::to_value(&entries[0]).unwrap();
+        assert_eq!(json["versions"][0]["version"], "1.0.0");
+        assert_eq!(json["versions"][0]["title"], "a 1.0.0");
+        assert_eq!(json["versions"][0]["collection"], "product");
     }
 
     #[test]

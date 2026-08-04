@@ -5,6 +5,29 @@
  * unit-testable without a DOM.
  */
 
+/**
+ * One *older* edition of the entry's book: same docset id, a different `version`.
+ * Both producers write it — the registry worker from its `latest.json` archive, and
+ * `khb pack`/`patch` when several editions of one id are packed. The current edition
+ * is the entry itself, so `versions` never repeats it.
+ *
+ * The display metadata is carried per edition (rather than inherited from the entry)
+ * because a book may have been retitled — or moved to another collection — between
+ * releases, and the switcher must name each edition as it was published.
+ */
+export interface ManifestEdition {
+  version: string;
+  /** Path under the dist root, like the entry's `file`. */
+  file: string;
+  title: string;
+  language: string;
+  collection: string;
+  hash?: string;
+  attachments?: string[];
+  /** ISO timestamp, informational (the registry records it; nothing renders it yet). */
+  publishedAt?: string;
+}
+
 export interface ManifestEntry {
   /** Path under the dist root; a trailing `.gz` marks a gzip-compressed file. */
   file: string;
@@ -15,6 +38,10 @@ export interface ManifestEntry {
   collection?: string;
   /** Content version (`meta.version`); may be absent. */
   version?: string;
+  /** Older editions of this same book, offered in the viewer's version switcher.
+   *  Absent/empty ⇒ the book ships as a single edition (every manifest before this
+   *  field existed). */
+  versions?: ManifestEdition[];
   /** Sidecar `.khba` attachment packs (paths relative to the dist root). */
   attachments?: string[];
   /** Opt-in page-level streaming: open this docset over HTTP `Range` instead of
@@ -52,6 +79,82 @@ export interface Manifest {
   folders?: FolderNode[];
 }
 
+/**
+ * One edition of one book, flattened out of a manifest entry: everything needed to
+ * *describe* it (the version switcher, the Manage matrix) without touching the
+ * network. Turning it into a loadable source is a separate, lazy step — see
+ * `variants.ts` — so a book with ten archived editions costs no more at start-up
+ * than a book with one.
+ */
+export interface EditionDescriptor {
+  id: string;
+  collection: string;
+  language: string;
+  version: string;
+  title: string;
+  file: string;
+  hash?: string;
+  attachments: string[];
+  /** The entry's transport preference; `streamEligible` still vetoes per edition. */
+  streaming: boolean;
+}
+
+const isEdition = (value: unknown): value is ManifestEdition => {
+  if (!value || typeof value !== "object") return false;
+  const e = value as Partial<ManifestEdition>;
+  return (
+    typeof e.version === "string" &&
+    e.version !== "" &&
+    typeof e.file === "string" &&
+    e.file !== "" &&
+    typeof e.title === "string" &&
+    typeof e.language === "string" &&
+    typeof e.collection === "string"
+  );
+};
+
+/**
+ * A manifest entry's editions, current first: the entry itself, then each older
+ * edition it lists. Malformed editions are dropped with a warning rather than
+ * failing the boot (same tolerance as the `folders` tree), as is one repeating the
+ * current version — the viewer must never offer the same version twice.
+ */
+export function expandEditions(entry: ManifestEntry): EditionDescriptor[] {
+  const current: EditionDescriptor = {
+    id: entry.id,
+    collection: entry.collection ?? entry.id,
+    language: entry.language,
+    version: entry.version ?? "",
+    title: entry.title,
+    file: entry.file,
+    ...(entry.hash ? { hash: entry.hash } : {}),
+    attachments: entry.attachments ?? [],
+    streaming: entry.streaming === true,
+  };
+  const seen = new Set([current.version]);
+  const editions: EditionDescriptor[] = [current];
+  for (const value of entry.versions ?? []) {
+    if (!isEdition(value)) {
+      console.warn("docsets.json: ignoring invalid `versions` entry", value);
+      continue;
+    }
+    if (seen.has(value.version)) continue;
+    seen.add(value.version);
+    editions.push({
+      id: entry.id,
+      collection: value.collection,
+      language: value.language,
+      version: value.version,
+      title: value.title,
+      file: value.file,
+      ...(value.hash ? { hash: value.hash } : {}),
+      attachments: value.attachments ?? [],
+      streaming: entry.streaming === true,
+    });
+  }
+  return editions;
+}
+
 /** Resolve a manifest-relative path (`docsets/foo.khb`) against the site base. */
 export function resolveManifestUrl(file: string, base: string): string {
   return new URL(file, base).href;
@@ -64,7 +167,7 @@ export function resolveManifestUrl(file: string, base: string): string {
  * forces the whole-fetch path (where gzip is fine: decompressed after fetch).
  */
 export function streamEligible(
-  entry: ManifestEntry,
+  entry: { file: string; streaming?: boolean; attachments?: string[] },
   extraPacks: string[] = [],
 ): boolean {
   const gz = (f: string): boolean => f.endsWith(".gz");

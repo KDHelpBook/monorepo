@@ -20,14 +20,20 @@ patched 1 docset(s) into publish/
 ```
 ~~~
 
-## Add or replace, by id
+## Add or replace, by id and version
 
-Each patched book is matched against the manifest by its **docset id** (read from
-the file, not the file name):
+Each patched book is matched against the manifest by its **docset id and
+`version`** (both read from the file, not the file name):
 
-- an entry with the **same id** is replaced — the new file, metadata, and
-  attachment packs take its place;
+- the **same id and version** replaces that edition in place — the new file,
+  metadata, and attachment packs take its place, wherever it sits;
+- a **new version of a known id** joins that book's entry: a higher version
+  becomes the current edition and pushes the previous one into its
+  [archive](versioning), a lower one just joins the archive;
 - a **new id** is appended to the manifest.
+
+So patching in an old release adds a version to the switcher instead of replacing
+the current book, and re-patching a rebuilt book of the same version updates it.
 
 Like `pack`, `patch` picks up sibling attachment packs (`foo.khba`,
 `foo.<tag>.khba`) next to each `.khb` and records them in the entry's

@@ -7,7 +7,6 @@ import {
   DocsetLoadError,
   fetchDocsetBytes,
   rangeSupported,
-  type DocsetSource,
 } from "./data/collection";
 import { type SearchHit, type TocNode } from "./data/docset";
 import {
@@ -16,6 +15,7 @@ import {
   allDocsets,
   blobKey,
   deleteDocset,
+  docsetKey,
   getBlob,
   getRemotes,
   importKhbm,
@@ -55,10 +55,18 @@ import {
 import { languagesByCollection, pickLanguages } from "./data/langselect";
 import {
   resolveManifestUrl,
-  streamEligible,
   type FolderNode,
   type Manifest,
 } from "./data/manifest";
+import {
+  bundledVariants,
+  eagerVariant,
+  openSources,
+  type BookOrigin,
+  type DocVariant,
+  type EditionEffects,
+  type PrefetchItem,
+} from "./data/variants";
 import {
   compareVersions,
   detectUpdates,
@@ -501,7 +509,11 @@ async function bootstrap(): Promise<void> {
   // Range instead — even in a locked build, which never reaches the remotes
   // path above. Same negotiation as a remote: the host must honour Range and a
   // cheap streamed peek must succeed, else fall back to the whole fetch.
-  const bundled: DocVariant[] = [];
+  //
+  // Each entry may offer several editions (`versions[]`); building them is free —
+  // the negotiation above runs lazily, in `resolve()`, for the edition actually
+  // chosen. See data/variants.ts.
+  //
   // Prefetch-to-cache ("keep streamed books offline"): a per-device toggle with a
   // config default. When on, a streamed book that we've already downloaded whole
   // opens straight from IndexedDB; otherwise it streams now and is prefetched to
@@ -512,67 +524,33 @@ async function bootstrap(): Promise<void> {
   const prefetchOn =
     !config.prefetchLocked && loadPrefetch(config.prefetch ?? false);
   const prefetch = new Map<string, PrefetchItem>(); // streamed book id → how to cache it
-  const validBlobKeys = new Set<string>(); // current keys, to prune stale ones
-  for (const d of manifest.docsets) {
-    const packs = [...(d.attachments ?? []), ...extraOf(d.id)];
-    let source: DocsetSource | null = null;
+  const effects: EditionEffects = {
     // The manifest `file` is dist-relative — resolve it (and the packs) against
     // the site base so the Range probe and the streaming engine get real URLs.
-    // The content hash (`d.hash`) keys both the HTTP cache and the prefetch cache,
-    // so a rebuilt (same-named) book gets a fresh URL while an unchanged one hits
+    // The content hash keys both the HTTP cache and the prefetch cache, so a
+    // rebuilt (same-named) book gets a fresh URL while an unchanged one hits
     // cache; and a Range read never mixes a stale range into a malformed image.
-    const url = stampDocset(resolveManifestUrl(d.file, document.baseURI), d.hash);
-    const packUrls = packs.map((p) => fresh(resolveManifestUrl(p, document.baseURI)));
-    const eligible = streamEligible(d, extraOf(d.id));
-    // Cache-first: open the whole `.khb` from IndexedDB when we prefetched it.
-    if (eligible && d.hash) {
-      const key = blobKey(url, d.hash);
-      validBlobKeys.add(key);
-      if (prefetchOn) {
-        const cached = await getBlob(key);
-        if (cached)
-          source = {
-            bytes: cached.bytes,
-            attachments: cached.packs.map((bytes) => ({ bytes })),
-          };
-      }
-    }
-    const fromCache = source != null; // opened whole from the prefetch cache
-    if (!source && eligible && (await rangeSupported(url))) {
-      try {
-        const { StreamingDocset } = await import("./data/streaming-docset");
-        await StreamingDocset.peek(url); // validates engine + host end-to-end
-        source = { url, mode: "streaming", attachments: packUrls };
-        // Remember how to prefetch this streamed book whole in the background.
-        if (d.hash) prefetch.set(d.id, { url, hash: d.hash, packUrls });
-      } catch (e) {
-        // Same fallback as remotes: whole fetch, with the reason logged.
-        console.warn("khb: streaming open failed, fetching whole", e);
-      }
-    }
-    bundled.push({
-      id: d.id,
-      collection: d.collection ?? d.id,
-      language: d.language,
-      version: d.version ?? "",
-      title: d.title,
-      source: source ?? {
-        // Same content-keyed cache-busting on the whole-fetch fallback; packs
-        // carry no per-content hash in the manifest, so they stay on the build stamp.
-        file: stampDocset(d.file, d.hash),
-        // A `.gz` suffix (on the docset or a pack) decompresses on fetch.
-        attachments: packs.map((file) => ({ file: fresh(file) })),
-      },
-      // `streaming` reflects the live transport: a cached (bytes) source is whole,
-      // not streamed, so only a real streaming source counts.
-      origin: {
-        kind: "bundled",
-        streaming: !!source && "mode" in source && source.mode === "streaming",
-        offline: fromCache,
-        packs,
-      },
-    });
-  }
+    docsetUrl: (file, hash) =>
+      stampDocset(resolveManifestUrl(file, document.baseURI), hash),
+    packUrl: (file) => fresh(resolveManifestUrl(file, document.baseURI)),
+    filePath: (file, hash) => stampDocset(file, hash),
+    blobKey,
+    extraPacks: extraOf,
+    prefetchOn,
+    getBlob,
+    rangeSupported,
+    peek: async (url) => {
+      const { StreamingDocset } = await import("./data/streaming-docset");
+      await StreamingDocset.peek(url); // validates engine + host end-to-end
+    },
+    prefetchable: (id, item) => prefetch.set(id, item),
+  };
+  // `blobKeys` covers *every* listed edition, so pruning keeps the cached copy of
+  // an edition the reader has pinned but isn't loading right now.
+  const { variants: bundled, blobKeys: validBlobKeys } = bundledVariants(
+    manifest.docsets,
+    effects,
+  );
 
   // Every available docset as a language "variant" of its collection, each paired
   // with a ready-to-load source descriptor. We then pick one language per
@@ -580,55 +558,63 @@ async function bootstrap(): Promise<void> {
   // another language stays visible instead of vanishing on a language switch.
   const variants: DocVariant[] = [
     ...bundled,
-    ...uploadedAll.map((d) => ({
-      id: d.id,
-      collection: d.collection ?? d.id,
-      language: d.language,
-      version: d.version ?? "",
-      title: d.title,
-      source: {
-        bytes: d.bytes,
-        attachments: [
-          ...(d.attachments ?? []).map((bytes) => ({ bytes })),
-          // Extra packs are URLs even for an uploaded (bytes) docset — fetched whole.
-          ...extraOf(d.id).map((file) => ({ file })),
-        ],
-      } as DocsetSource,
-      origin: {
-        kind: "uploaded",
-        removeKey: d.id,
-        packs: [
-          ...(d.attachments ?? []).map((_, i) => `pack ${i + 1}`),
-          ...extraOf(d.id),
-        ],
-      } as BookOrigin,
-    })),
-    ...remotes.map((r) => ({
-      id: r.id,
-      collection: r.collection,
-      language: r.language,
-      version: r.version,
-      title: r.title,
-      source: (r.streaming
-        ? {
-            url: r.url,
-            mode: "streaming" as const,
-            attachments: [...(r.attachments ?? []), ...extraOf(r.id)],
-          }
-        : {
-            bytes: r.bytes!,
-            // Whole-fetch docset can still pair with remote packs (fetched whole).
-            attachments: [...(r.attachments ?? []), ...extraOf(r.id)].map(
-              (file) => ({ file }),
-            ),
-          }) as DocsetSource,
-      origin: {
-        kind: "remote",
-        removeKey: r.url,
-        streaming: r.streaming,
-        packs: [...(r.attachments ?? []), ...extraOf(r.id)],
-      } as BookOrigin,
-    })),
+    ...uploadedAll.map((d) =>
+      eagerVariant(
+        {
+          id: d.id,
+          collection: d.collection ?? d.id,
+          language: d.language,
+          version: d.version ?? "",
+          title: d.title,
+          origin: {
+            kind: "uploaded",
+            removeKey: docsetKey(d),
+            packs: [
+              ...(d.attachments ?? []).map((_, i) => `pack ${i + 1}`),
+              ...extraOf(d.id),
+            ],
+          },
+        },
+        {
+          bytes: d.bytes,
+          attachments: [
+            ...(d.attachments ?? []).map((bytes) => ({ bytes })),
+            // Extra packs are URLs even for an uploaded (bytes) docset — fetched whole.
+            ...extraOf(d.id).map((file) => ({ file })),
+          ],
+        },
+      ),
+    ),
+    ...remotes.map((r) =>
+      eagerVariant(
+        {
+          id: r.id,
+          collection: r.collection,
+          language: r.language,
+          version: r.version,
+          title: r.title,
+          origin: {
+            kind: "remote",
+            removeKey: r.url,
+            streaming: r.streaming,
+            packs: [...(r.attachments ?? []), ...extraOf(r.id)],
+          },
+        },
+        r.streaming
+          ? {
+              url: r.url,
+              mode: "streaming" as const,
+              attachments: [...(r.attachments ?? []), ...extraOf(r.id)],
+            }
+          : {
+              bytes: r.bytes!,
+              // Whole-fetch docset can still pair with remote packs (fetched whole).
+              attachments: [...(r.attachments ?? []), ...extraOf(r.id)].map(
+                (file) => ({ file }),
+              ),
+            },
+      ),
+    ),
   ];
 
   const available = [...new Set(variants.map((v) => v.language))];
@@ -637,10 +623,13 @@ async function bootstrap(): Promise<void> {
   document.documentElement.lang = lang;
   applyStatic(lang);
 
-  const { sources, books, titles, langInfo, versionInfo } = resolveVariants(
+  const { books, titles, langInfo, versionInfo } = resolveVariants(
     variants,
     lang,
   );
+  // Only now — for the editions actually chosen — is the transport negotiated
+  // (Range probe / prefetch-cache lookup / streamed peek).
+  const sources = await openSources(books);
   if (config.pwa) registerServiceWorker(strings(lang));
   else unregisterServiceWorker();
   // A bad book is skipped, not fatal: collect per-source failures (paired with the
@@ -671,6 +660,7 @@ async function bootstrap(): Promise<void> {
         versionInfo,
         updates,
         variants,
+        books,
         sanitizeFolders(manifest.folders),
         failed,
         { on: prefetchOn, items: prefetch, validKeys: validBlobKeys },
@@ -692,6 +682,7 @@ async function bootstrap(): Promise<void> {
     versionInfo,
     updates,
     variants,
+    books,
     sanitizeFolders(manifest.folders),
     failed,
     { on: prefetchOn, items: prefetch, validKeys: validBlobKeys },
@@ -700,46 +691,12 @@ async function bootstrap(): Promise<void> {
   if (failed.length) showLoadWarnings(failed.map((f) => f.error), strings(lang));
 }
 
-/** How to prefetch one streamed book whole (for the offline cache). */
-interface PrefetchItem {
-  url: string;
-  hash: string;
-  packUrls: string[];
-}
-
 /** The prefetch-to-cache plan handed to start(): the toggle state, the streamed
  *  books that can be prefetched, and the set of currently-valid cache keys. */
 interface PrefetchPlan {
   on: boolean;
   items: Map<string, PrefetchItem>;
   validKeys: Set<string>;
-}
-
-/** Where a book came from + its packs — for the Manage docsets page. */
-interface BookOrigin {
-  kind: "bundled" | "uploaded" | "remote";
-  /** Docset id (uploaded) or URL (remote) to remove by; absent ⇒ not removable. */
-  removeKey?: string;
-  /** Page-level streaming: the remote's transport preference, or — for a
-   *  bundled book — the transport actually negotiated at load. */
-  streaming?: boolean;
-  /** Served whole from the prefetch cache (IndexedDB) — set when a book opens
-   *  from cache, or a streamed book is hot-swapped to its cached copy. Shown as
-   *  "· offline" instead of "· streaming". Mutated live on hot-swap. */
-  offline?: boolean;
-  /** Attachment packs: `.khba` paths/URLs (bundled/remote) or generic labels. */
-  packs: string[];
-}
-
-/** One language/version edition of a product, with a ready-to-load source. */
-interface DocVariant {
-  id: string;
-  collection: string;
-  language: string;
-  version: string;
-  title: string;
-  source: DocsetSource;
-  origin: BookOrigin;
 }
 
 /** A chosen edition that failed to load — kept so it stays visible (sidebar,
@@ -767,9 +724,9 @@ function resolveVariants(
   variants: DocVariant[],
   uiLang: string,
 ): {
-  sources: DocsetSource[];
-  /** The chosen editions, index-aligned with `sources` — to name a book (progress
-   *  panel) or map a load failure back to its full metadata. */
+  /** The chosen editions — the load order, and what names a book (progress panel)
+   *  or maps a load failure back to its full metadata. Their sources are opened
+   *  separately (`openSources`), so an edition nobody picked costs nothing. */
   books: DocVariant[];
   /** Book titles, index-aligned with `sources` — for the download progress panel. */
   titles: string[];
@@ -809,7 +766,6 @@ function resolveVariants(
       chosen: chosenByCol.get(collection)?.version ?? versions[0]!,
     }));
   return {
-    sources: shown.map((v) => v.source),
     books: shown,
     titles: shown.map((v) => v.title),
     langInfo,
@@ -951,16 +907,24 @@ function start(
   versionInfo: CollectionVersionInfo[],
   updates: { title: string; from: string; to: string }[],
   variants: DocVariant[],
+  shown: DocVariant[],
   folders: FolderNode[],
   failed: FailedBook[],
   prefetchPlan: PrefetchPlan,
 ): void {
   const s: Strings = strings(lang);
+  // The editions currently shown (one per collection, out of `variants`). Editions
+  // of one book share a docset id, so "which one is loaded" is a question about
+  // `key`, not `id` — Manage marks the active edition from this set, and the About
+  // page and the hot-swap read a book's live transport off it. Refreshed in place
+  // by the version/language rebuild below.
+  let shownBooks = shown;
+  let shownKeys = new Set(shownBooks.map((v) => v.key));
   // Books that failed to load — kept visible (sidebar / About / Manage) marked as
   // failed. Mutable: the in-place version/language rebuild refreshes it.
   let failedBooks = failed;
-  const failedById = (): Map<string, DocsetLoadError> =>
-    new Map(failedBooks.map((f) => [f.variant.id, f.error]));
+  const failedByKey = (): Map<string, DocsetLoadError> =>
+    new Map(failedBooks.map((f) => [f.variant.key, f.error]));
   // The collection is loaded and the UI is about to render — drop the cold-start
   // download panel so the frame/TOC show through.
   hideLoading();
@@ -1154,9 +1118,10 @@ function start(
     collection = collection.withDocset(id, replacement);
     streamedIds.delete(id);
     previous?.close(); // free the streamed wa-sqlite handle
-    // Flip the transport shown in About / Manage (both render on demand from
-    // `variants`): this book is now served whole from cache, not streamed.
-    const v = variants.find((x) => x.id === id && x.origin.streaming);
+    // Flip the transport shown in About / Manage (both render on demand from the
+    // variants): this book is now served whole from cache, not streamed. Match on
+    // the *loaded* edition — other editions of the same id keep their own state.
+    const v = shownBooks.find((x) => x.id === id && x.origin.streaming);
     if (v) {
       v.origin.streaming = false;
       v.origin.offline = true;
@@ -1486,10 +1451,13 @@ function start(
         collection.books().map((b) => [b.id, b.collection]),
       );
       const r = resolveVariants(variants, lang);
+      // The newly chosen editions negotiate their transport now — an edition the
+      // reader has never picked has still never touched the network.
+      const nextSources = await openSources(r.books);
       // Switching version/language: a book that fails to load is skipped, not
       // fatal. If the whole new set is unloadable, keep the current collection.
       const rebuildFailed: FailedBook[] = [];
-      const next = await Collection.load(r.sources, lang, {
+      const next = await Collection.load(nextSources, lang, {
         labels: r.titles,
         onError: (e, i) => {
           const variant = r.books[i];
@@ -1506,6 +1474,8 @@ function start(
       collection = next;
       prev.close();
       failedBooks = rebuildFailed;
+      shownBooks = r.books;
+      shownKeys = new Set(shownBooks.map((v) => v.key));
       if (rebuildErrors.length) showLoadWarnings(rebuildErrors, s);
       langInfo = r.langInfo;
       versionInfo = r.versionInfo;
@@ -2777,7 +2747,7 @@ function start(
     // "· streaming" (page-by-page), matched from the chosen editions (same markers
     // the Manage page shows).
     const transport = (id: string, language: string): string => {
-      const v = variants.find((x) => x.id === id && x.language === language);
+      const v = shownBooks.find((x) => x.id === id && x.language === language);
       if (v?.origin.offline) return ` ${esc(s.offlineBadge)}`;
       if (v?.origin.streaming) return ` ${esc(s.streamingBadge)}`;
       return "";
@@ -2966,8 +2936,12 @@ function start(
     // Show every edition (variant) grouped by product, the loaded ones marked
     // active — so a multi-version × multi-language product shows its whole matrix,
     // and a click on any edition makes it the shown one (live).
-    const activeIds = new Set(collection.books().map((b) => b.id));
-    const failedErrs = failedById(); // chosen editions that failed to load
+    // "Active" is per *edition*, not per docset id: editions of one book share an
+    // id, so an id-keyed test would light up every version of a product at once.
+    const loadedIds = new Set(collection.books().map((b) => b.id));
+    const isActive = (v: DocVariant): boolean =>
+      shownKeys.has(v.key) && loadedIds.has(v.id);
+    const failedErrs = failedByKey(); // chosen editions that failed to load
     const hasVer = new Set(versionInfo.map((v) => v.collection));
     const hasLang = new Set(langInfo.map((l) => l.collection));
     const families = collection.families();
@@ -3000,7 +2974,7 @@ function start(
               : "";
           const rows = eds
             .map((v) => {
-              const active = activeIds.has(v.id);
+              const active = isActive(v);
               const o = v.origin;
               const remove = o.removeKey
                 ? `<button class="mg-remove" ${o.kind === "uploaded" ? `data-remove-id="${esc(o.removeKey)}"` : `data-remove-url="${esc(o.removeKey)}"`}>${esc(s.remove)}</button>`
@@ -3017,7 +2991,7 @@ function start(
                 : "";
               // A chosen edition that failed to load: mark it (reason on hover);
               // clicking still re-runs rebuild(), i.e. retries the load.
-              const failErr = failedErrs.get(v.id);
+              const failErr = failedErrs.get(v.key);
               const failBadge = failErr
                 ? `<span class="mg-failed" title="${esc(formatLoadError(failErr, s).reason)}">${esc(s.bookFailed)}</span>`
                 : "";
@@ -3088,9 +3062,11 @@ function start(
     // Removing a docset changes the loaded set → a full reload re-gathers sources.
     content.querySelectorAll<HTMLElement>(".mg-remove").forEach((btn) =>
       btn.addEventListener("click", () => {
-        const id = btn.getAttribute("data-remove-id");
+        // Uploaded books are removed by storage key (`id@version`), so removing
+        // one edition leaves the others in place.
+        const key = btn.getAttribute("data-remove-id");
         const url = btn.getAttribute("data-remove-url");
-        if (id) void deleteDocset(id).then(() => location.reload());
+        if (key) void deleteDocset(key).then(() => location.reload());
         else if (url) {
           removeRemote(url);
           location.reload();
