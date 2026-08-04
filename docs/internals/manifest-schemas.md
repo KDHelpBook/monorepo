@@ -42,6 +42,39 @@ to the dist root.
 | `attachments` | no (omitted when empty) | sidecar `.khba` pack paths (each optionally `.gz`), opened alongside the docset |
 | `streaming` | no (default `false`) | opt-in page-level streaming: open this docset (and its packs) over HTTP `Range`, falling back to a whole fetch when the host can't `Range` |
 | `hash` | no | stable content identity used to version the URL and offline-cache entry; `khb pack` hashes the shipped bytes, while the registry uses the R2 ETag |
+| `versions` | no (omitted when empty) | **older editions of this same book** — see below |
+
+### `versions` — older editions (optional)
+
+An entry describes the **current** edition of a book; `versions` lists the older
+ones, which the viewer offers in its [version switcher](khb-publishing:versioning).
+Every edition of a book shares its docset id and differs in `version`, so only one
+is ever loaded at a time.
+
+```json [docsets.json (fragment)]
+{ "file": "docsets/docs-2.1.0.khb", "id": "my-docs", "title": "My Docs",
+  "language": "en", "collection": "my-product", "version": "2.1.0",
+  "versions": [
+    { "version": "2.0.3", "file": "docsets/docs-2.0.3.khb", "title": "My Docs",
+      "language": "en", "collection": "my-product", "hash": "8be4a7484bc6dc9b" }
+  ] }
+```
+
+| Field | Required | Meaning |
+|-------|----------|---------|
+| `version` | yes | the edition's `meta.version`; must differ from the entry's and from its siblings' |
+| `file` | yes | path to that edition's `.khb`, exactly like the entry's `file` |
+| `title` | yes | the title **this** edition was published with — a book may have been retitled since |
+| `language` | yes | that edition's content language |
+| `collection` | yes | that edition's product family |
+| `attachments` | no | that edition's sidecar packs |
+| `hash` | no | that edition's content identity |
+| `publishedAt` | no | ISO timestamp, informational (the registry records it; the viewer doesn't render it) |
+
+The entry's `streaming` flag covers the whole book: an edition is streamed under
+the same rule as the current one, and a `.gz` edition falls back to a whole fetch
+on its own. Describing an edition costs nothing — the viewer negotiates transport
+only for the edition it actually loads — so a long archive doesn't slow the start-up.
 
 Besides `docsets`, the manifest may carry one optional top-level field:
 

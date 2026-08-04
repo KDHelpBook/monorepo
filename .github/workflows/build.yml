@@ -184,11 +184,10 @@ jobs:
             ID=$(sed -n 's/^id = "\(.*\)"$/\1/p' "$T" | head -n1)
             if [[ -n "$TAG" ]]; then
               VER="${TAG#v}"
-              # Suffix the docset id with the version (build-time only, never
-              # committed): archived books need unique ids to coexist with the
-              # current one in the viewer's version switcher (sample-sdk pattern).
-              sed -i "s/^id = \"${ID}\"$/id = \"${ID}-v${VER}\"/" "$T"
-              grep -q "^id = \"${ID}-v${VER}\"$" "$T"
+              # The archive asset keeps the book's own id and carries the version
+              # in its *file name* only: `khb patch` identifies an edition by
+              # (id, version), so an archive merges into the current book's entry
+              # instead of replacing it.
               "$BIN" compile "$DIR" -o "out/${ID}-v${VER}.khb" --allow-extensions
             else
               "$BIN" compile "$DIR" -o "out/${ID}.khb" --allow-extensions

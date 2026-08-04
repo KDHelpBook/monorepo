@@ -34,3 +34,23 @@ by an engine deployment, so rolling back the Worker does not discard books.
 Configuration format changes are versioned by the top-level `schema` field.
 Run `npm run validate` with the new package before deployment and do not change
 `schema` until the release notes require it.
+
+## Pointer format 2 (offering older versions)
+
+Each docset's `latest.json` now records display metadata — title, language,
+collection — on **every** edition, not only the current one, so the viewer's
+version switcher can name an edition as it was published rather than as the book
+is called today. Pointers written this way carry `"schema": 2`.
+
+This is a one-way format change with no backfill, and it is deliberately quiet:
+
+- nothing is deleted or rewritten on deployment, and every published file stays
+  reachable at `/d/<id>/<version>/<file>`;
+- the **current** edition is unaffected — a registry that offers only the current
+  edition (the default `site.versions`) behaves exactly as before;
+- editions published by an older engine carry no metadata of their own, so
+  `docsets.json` leaves them out of the version switcher. The next publish of a
+  docset moves the superseded edition down with its metadata intact, so a docset's
+  history starts filling in from its next release.
+
+There is nothing to run: publish once per docset and the archive builds itself.

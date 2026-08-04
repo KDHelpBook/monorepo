@@ -101,9 +101,9 @@ jobs:
       # The site ships only the documentation volumes (every docs/*/ with a
       # docset.toml — authoring, publishing, internals, …); the
       # compiler/examples/* books are dev/test fixtures and stay out of it.
-      # Compiled here (not taken from the docs-khb artifact) because the
-      # release build of that artifact carries version-suffixed ids — those
-      # are the archive assets, not the current books.
+      # Compiled here (not taken from the docs-khb artifact) because that
+      # artifact's release build is the tagged edition — an archive asset, not
+      # the current book.
       #
       # The current books are published as version "latest" (workspace-only
       # sed, never committed): non-numeric strings sort above numeric versions
@@ -145,9 +145,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           # Every release carries one <id>-vX.Y.Z.khb per documentation volume
-          # (versioned id and version; volume ids follow the khb-* convention).
-          # The site keeps one archived book per minor series — the newest
-          # patch of each X.Y (1.1.0/1.1.1/1.1.2 → only 1.1.2) — while the
+          # (the book's own id; the version is in the file name and in the
+          # docset). `khb patch` merges each into its book's entry as an older
+          # edition. The site keeps one archived book per minor series — the
+          # newest patch of each X.Y (1.1.0/1.1.1/1.1.2 → only 1.1.2) — while the
           # current main builds are "latest", so nothing collides. Superseded
           # patches stay downloadable from Releases; they just aren't merged
           # into the site. --limit is explicit because gh defaults to a

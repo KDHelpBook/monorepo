@@ -22,18 +22,18 @@ version = "1.2.0"
 
 ## Example
 
-Two source folders, one product at two versions — distinct
-[ids](docset-id), shared [collection](docset-collection), different `version`:
+Two source folders, one book at two versions — same [id](docset-id), same
+[collection](docset-collection), different `version`:
 
 ~~~code-group
 ```toml [v2/docset.toml]
-id = "sdk-v2"
+id = "sdk"
 title = "SDK Guide"
 version = "2.0.0"
 collection = "sdk"
 ```
 ```toml [v1/docset.toml]
-id = "sdk-v1"
+id = "sdk"
 title = "SDK Guide"
 version = "1.0.0"
 collection = "sdk"

@@ -100,6 +100,19 @@ permission explicitly allow `force`. The main object's R2 ETag becomes the
 optional manifest `hash` used by the viewer's HTTP and offline caches. Older
 pointers without `hash` remain compatible.
 
+`docsets.json` offers the current edition of each docset plus whatever older
+editions `site.versions` allows (`latest` by default, or `all` / `minor`, capped
+with `keep` and overridable per docset); the viewer lists them in its version
+switcher and opens only the one a reader picks. `latest.json` is written at
+`schema: 2`, which records title, language, and collection on every edition —
+editions published by an older engine carry none and are left out of the manifest
+until re-published, though they stay downloadable under `/d/`.
+
+`/b/…` is reserved for a future server-rendered page route,
+`/b/<collection>/<version|latest>/<language>/<pageId>` — the triple the viewer
+resolves to one docset. Deep links today are the viewer's own
+`#<docsetId>:<pageId>` fragment.
+
 ## Package development
 
 ```sh

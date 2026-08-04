@@ -183,8 +183,9 @@ Each docset's `meta.version` is surfaced read-only: in *Help → About* (every l
 book with its language + version), in *Manage docsets…*, and as a tooltip on each
 product folder in the table of contents.
 
-When one product (`collection`) is loaded in **several versions** — separate docsets
-sharing a collection but differing in `version` — the viewer shows only **one** at a
+When one product (`collection`) is loaded in **several versions** — editions of one
+book (same id) listed in a manifest entry's `versions`, or separate docsets sharing a
+collection — the viewer shows only **one** at a
 time: the **latest** by default (numeric-dotted comparison, so `1.10 > 1.2`). A
 **Version** selector then appears (in the left panel when a single product is
 versioned; per product under *Manage docsets…*) to pin an older one. The choice
@@ -193,10 +194,14 @@ language within it. So the same book never appears once per version in the merge
 table of contents, and a re-fetched remote that bumps its version is announced via a
 toast (see the update notice above).
 
-The bundled **Sample SDK** demo ships as two versions (`sample-sdk-v1` /
-`sample-sdk-v2`, sources in `compiler/examples/`) so the switcher is visible in the
-reader: 2.0 shows by default and adds a *Migrating from 1.0* page that disappears
-when you select 1.0.
+The bundled **Sample SDK** demo ships as two editions of one book (id `sample-sdk`
+at versions 1.0.0 and 2.0.0; sources in `compiler/examples/sample-sdk-v1` and
+`-v2`) so the switcher is visible in the reader: 2.0 shows by default and adds a
+*Migrating from 1.0* page that disappears when you select 1.0. Because both
+editions share the id, switching keeps the reader's tabs and deep links.
+
+Only the chosen edition is opened: the others are described from the manifest and
+never touch the network until picked, so an archive costs nothing at start-up.
 
 ## Distribution profiles
 

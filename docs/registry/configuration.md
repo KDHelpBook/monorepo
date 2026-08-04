@@ -22,6 +22,9 @@ site:
       title: Products
       children:
         - collection: product
+  versions:
+    mode: minor
+    keep: 6
   config:
     externalSources: true
     pwa: false
@@ -41,7 +44,7 @@ publishers:
 | Field | Meaning |
 |---|---|
 | `schema` | Configuration format version. Version 1 requires the value `1`. |
-| `site` | Viewer manifest layout and runtime viewer configuration. |
+| `site` | Viewer manifest layout, version policy, and runtime viewer configuration. |
 | `publishers` | Repositories allowed to write named docsets. |
 
 ## Site layout
@@ -53,6 +56,42 @@ there are appended in stable storage-listing order.
 contain nested folders, docset IDs, or collection selectors. The complete
 manifest shape is documented in
 [Manifest schemas](khb-internals:manifest-schemas).
+
+## Offering older versions
+
+R2 keeps every published edition for ever, but `docsets.json` offers only the
+current one unless `site.versions` says otherwise. What it offers appears in the
+viewer's **Version** selector; readers pin an edition per product and the choice
+persists on their device.
+
+```yaml
+site:
+  versions:
+    mode: minor        # latest (default) | all | minor
+    keep: 6            # optional cap, newest first
+    docsets:
+      product-docs:    # optional per-docset override
+        mode: all
+        keep: 20
+```
+
+| `mode` | Offers |
+|---|---|
+| `latest` | nothing beyond the current edition — the default, and what every registry did before this setting existed |
+| `all` | every edition still recorded in the docset's `latest.json` |
+| `minor` | the newest patch of each minor series, so `1.4.2` hides `1.4.1` and `1.4.0` |
+
+The current edition is always listed, whatever the rule says, and `keep` caps only
+the older ones. A per-docset entry overrides the site-wide `mode`/`keep` for that
+docset; unlisted docsets follow the site rule.
+
+Two things a policy does **not** do: it never deletes anything (an edition it stops
+offering is still downloadable at `/d/<id>/<version>/<file>`), and it can't offer an
+edition published before registry engine 2 — those carry no title or language of
+their own, so the switcher couldn't name them (see [Update a registry](updates)).
+
+Changing the policy is a configuration change: it ships with the next Worker
+deployment and shows up once the shared `/docsets.json` cache expires (a minute).
 
 `site.config` becomes the viewer's `/config.json`:
 
